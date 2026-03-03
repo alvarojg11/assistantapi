@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Uncertainty Assistant</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+      :root {
+        --bg: #f3efe5;
+        --bg-alt: #e7dfcf;
+        --ink: #1f1c18;
+        --muted: #665e52;
+        --line: #c8bea9;
+        --panel: rgba(255, 252, 245, 0.92);
+        --panel-strong: #fffaf0;
+        --brand: #0e6b5b;
+        --brand-2: #d17a2f;
+        --brand-3: #234a8a;
+        --danger: #aa3e2a;
+        --shadow: 0 14px 38px rgba(28, 24, 19, 0.11);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(1100px 500px at 10% -10%, rgba(35, 74, 138, 0.10), transparent 65%),
+          radial-gradient(900px 500px at 95% 5%, rgba(14, 107, 91, 0.10), transparent 60%),
+          linear-gradient(180deg, var(--bg) 0%, #efe8d8 100%);
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.24;
+        background-image:
+          linear-gradient(90deg, rgba(102, 94, 82, 0.08) 1px, transparent 1px),
+          linear-gradient(rgba(102, 94, 82, 0.06) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(circle at center, black 35%, transparent 100%);
+      }
+
+      .shell {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .mast {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .hero, .status-card, .chat-card, .side-card {
+        background: var(--panel);
+        border: 1px solid rgba(200, 190, 169, 0.8);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(8px);
+      }
+
+      .hero {
+        padding: 18px 18px 16px;
+        position: relative;
+        overflow: hidden;
+      }
+      .hero::after {
+        content: "";
+        position: absolute;
+        right: -40px;
+        top: -26px;
+        width: 180px;
+        height: 180px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 30% 30%, rgba(14, 107, 91, 0.22), rgba(14, 107, 91, 0) 70%);
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .eyebrow .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--brand), #58b8a7);
+        box-shadow: 0 0 0 4px rgba(14, 107, 91, 0.12);
+      }
+      h1 {
+        margin: 8px 0 6px;
+        line-height: 1.02;
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(1.7rem, 2.8vw, 2.5rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+        max-width: 60ch;
+      }
+
+      .status-card {
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .metric {
+        background: rgba(255, 255, 255, 0.56);
+        border: 1px solid rgba(200, 190, 169, 0.75);
+        border-radius: 14px;
+        padding: 10px;
+      }
+      .metric .label {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .metric .value {
+        margin-top: 6px;
+        font-weight: 600;
+        font-size: 14px;
+        word-break: break-word;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+        gap: 16px;
+      }
+
+      .chat-card {
+        padding: 14px;
+        display: grid;
+        grid-template-rows: auto minmax(280px, 1fr) auto auto;
+        min-height: 68vh;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .toolbar .title {
+        font-weight: 600;
+        font-size: 15px;
+      }
+      .toolbar .sub {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      select, input[type="text"], textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--ink);
+        padding: 10px 12px;
+        font: inherit;
+      }
+      select {
+        width: auto;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .checkbox {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 9px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.65);
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .system-note {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(35, 74, 138, 0.05), rgba(35, 74, 138, 0.02));
+        border: 1px solid rgba(35, 74, 138, 0.15);
+        color: #334364;
+        font-size: 13px;
+      }
+
+      .messages {
+        overflow: auto;
+        padding-right: 4px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .msg {
+        max-width: 90%;
+        border-radius: 14px;
+        padding: 12px 13px;
+        border: 1px solid transparent;
+        animation: fadeUp 180ms ease-out both;
+      }
+      .msg.assistant {
+        justify-self: start;
+        background: rgba(255, 255, 255, 0.88);
+        border-color: rgba(200, 190, 169, 0.9);
+      }
+      .msg.user {
+        justify-self: end;
+        background: linear-gradient(180deg, rgba(14, 107, 91, 0.96), rgba(10, 92, 77, 0.96));
+        color: #f6fff9;
+        border-color: rgba(14, 107, 91, 0.55);
+      }
+      .msg .role {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.7;
+        margin-bottom: 4px;
+      }
+      .msg .text {
+        white-space: pre-wrap;
+        line-height: 1.35;
+      }
+
+      .options {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .option-section {
+        flex-basis: 100%;
+        margin-top: 4px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(14, 107, 91, 0.22);
+        background: rgba(14, 107, 91, 0.06);
+        color: #0d5f51;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
+      }
+      .chip:hover {
+        transform: translateY(-1px);
+        background: rgba(14, 107, 91, 0.10);
+        border-color: rgba(14, 107, 91, 0.35);
+      }
+      .chip.secondary {
+        color: var(--muted);
+        background: rgba(102, 94, 82, 0.05);
+        border-color: rgba(102, 94, 82, 0.18);
+      }
+      .chip.used {
+        color: #6b5235;
+        background: rgba(209, 122, 47, 0.08);
+        border-color: rgba(209, 122, 47, 0.24);
+      }
+      .chip.active {
+        color: #effff8;
+        background: linear-gradient(180deg, #0f7664, #0b6555);
+        border-color: rgba(14, 107, 91, 0.7);
+      }
+      .chip.single-line {
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+
+      .composer {
+        margin-top: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      .composer textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      .composer-actions {
+        display: grid;
+        gap: 10px;
+      }
+      .composer-hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .btn-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: auto;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        min-width: 104px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.82);
+        color: var(--ink);
+        padding: 9px 12px;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      .btn:hover { transform: translateY(-1px); }
+      .btn.primary {
+        background: linear-gradient(180deg, #0f7664, #0b6555);
+        color: #effff8;
+        border-color: rgba(14, 107, 91, 0.7);
+        box-shadow: 0 6px 16px rgba(14, 107, 91, 0.2);
+      }
+      .btn.accent {
+        background: linear-gradient(180deg, #e4984d, #d57d2f);
+        color: #2a1908;
+        border-color: rgba(209, 122, 47, 0.5);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .side-card {
+        padding: 14px;
+        display: grid;
+        grid-template-rows: auto auto auto 1fr;
+        gap: 12px;
+        min-height: 68vh;
+      }
+      .side-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+      }
+      .side-title {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid rgba(35, 74, 138, 0.16);
+        background: rgba(35, 74, 138, 0.05);
+        color: #2f4368;
+      }
+      .badge.good { color: #0c5d4f; border-color: rgba(14,107,91,.2); background: rgba(14,107,91,.06); }
+      .badge.warn { color: #8b4b13; border-color: rgba(209,122,47,.25); background: rgba(209,122,47,.08); }
+      .badge.bad { color: #8f2f22; border-color: rgba(170,62,42,.25); background: rgba(170,62,42,.08); }
+
+      .panel-block {
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 14px;
+        padding: 12px;
+      }
+      .panel-block h3 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 10px;
+        font-size: 13px;
+      }
+      .kv .k { color: var(--muted); }
+      .kv .v { font-weight: 500; }
+
+      .big-result {
+        display: grid;
+        gap: 10px;
+      }
+      .big-result .prob {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(1.8rem, 5vw, 2.4rem);
+        line-height: 0.95;
+      }
+      .decision {
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(200, 190, 169, 0.8);
+        background: var(--panel-strong);
+        font-weight: 600;
+      }
+      .decision.treat { border-color: rgba(14,107,91,.35); background: rgba(14,107,91,.08); color: #0f5e51; }
+      .decision.test { border-color: rgba(209,122,47,.35); background: rgba(209,122,47,.10); color: #7c4a16; }
+      .decision.observe { border-color: rgba(35,74,138,.28); background: rgba(35,74,138,.08); color: #304b77; }
+
+      .list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+      }
+
+      .warn-list { color: #7b3a22; }
+
+      pre {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: 12px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      details summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      details[open] summary { margin-bottom: 8px; }
+
+      .muted { color: var(--muted); }
+      .hidden { display: none !important; }
+
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      @media (max-width: 1024px) {
+        .mast { grid-template-columns: 1fr; }
+        .workspace { grid-template-columns: 1fr; }
+        .chat-card, .side-card { min-height: auto; }
+      }
+      @media (max-width: 640px) {
+        .btn-row { grid-template-columns: 1fr; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="mast" aria-label="Application introduction and status">
+        <div class="hero">
+          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> ProbID Guided Interface</div>
+          <h1>Uncertainty Assistant</h1>
+          <p>
+            A conversational layer for your ProbID API. Pick a syndrome, choose a pretest context, describe the case in plain language,
+            and get a structured probability update plus recommendation.
+          </p>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Assistant workspace">
+        <main class="chat-card">
+          <div class="system-note" id="helpBanner">
+            I’m your Uncertainty Assistant. Describe a case in plain language, or choose a structured pathway from the options.
+          </div>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+
+          <div id="optionTray" class="options" aria-label="Suggested options"></div>
+
+          <form class="composer" id="composerForm">
+            <label for="userInput" class="hidden">Your message</label>
+            <textarea
+              id="userInput"
+              placeholder="Type a syndrome (e.g., 'community-acquired pneumonia') or describe the case when prompted..."
+            ></textarea>
+            <div class="composer-actions">
+              <div class="composer-hint" id="composerHint">Tip: You can click options or type naturally.</div>
+              <div class="btn-row">
+                <button type="button" class="btn" id="restartBtn">Restart</button>
+                <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
+                <button type="submit" class="btn primary" id="sendBtn">Send</button>
+              </div>
+            </div>
+          </form>
+        </main>
+
+        <aside class="side-card">
+          <div class="side-head">
+            <div class="side-title">What I Understood</div>
+            <span id="parserBadge" class="badge">parser: —</span>
+          </div>
+
+          <section class="panel-block">
+            <h3>Conversation State</h3>
+            <div class="kv">
+              <div class="k">Stage</div><div class="v" id="summaryStage">—</div>
+              <div class="k">Module</div><div class="v" id="summaryModule">—</div>
+              <div class="k">Preset</div><div class="v" id="summaryPreset">—</div>
+              <div class="k">Current section</div><div class="v" id="summaryCaseSection">—</div>
+              <div class="k">Pretest factors</div><div class="v" id="summaryFactors">—</div>
+            </div>
+          </section>
+
+          <section class="panel-block big-result" id="analysisSummary">
+            <h3>Analysis</h3>
+            <div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>
+          </section>
+
+          <section class="panel-block" id="parsedPanel">
+            <h3>Parsed Request</h3>
+            <div class="muted">Waiting for parsed output.</div>
+          </section>
+
+          <section class="panel-block" id="warningsPanel">
+            <h3>Warnings</h3>
+            <div class="muted">No warnings.</div>
+          </section>
+
+          <section class="panel-block">
+            <details>
+              <summary>Raw response</summary>
+              <pre id="rawResponse">No response yet.</pre>
+            </details>
+          </section>
+        </aside>
+      </section>
+    </div>
+
+    <script>
+      const state = {
+        assistantState: null,
+        lastResponse: null,
+        busy: false,
+        hiddenCaseOptions: new Map(),
+        showUsedCaseOptions: false,
+        caseInsertMode: "present",
+      };
+
+      const els = {
+        messages: document.getElementById("messages"),
+        optionTray: document.getElementById("optionTray"),
+        composerForm: document.getElementById("composerForm"),
+        userInput: document.getElementById("userInput"),
+        sendBtn: document.getElementById("sendBtn"),
+        restartBtn: document.getElementById("restartBtn"),
+        exampleBtn: document.getElementById("exampleBtn"),
+        composerHint: document.getElementById("composerHint"),
+        helpBanner: document.getElementById("helpBanner"),
+        summaryStage: document.getElementById("summaryStage"),
+        summaryModule: document.getElementById("summaryModule"),
+        summaryPreset: document.getElementById("summaryPreset"),
+        summaryCaseSection: document.getElementById("summaryCaseSection"),
+        summaryFactors: document.getElementById("summaryFactors"),
+        parserBadge: document.getElementById("parserBadge"),
+        analysisSummary: document.getElementById("analysisSummary"),
+        parsedPanel: document.getElementById("parsedPanel"),
+        warningsPanel: document.getElementById("warningsPanel"),
+        rawResponse: document.getElementById("rawResponse"),
+      };
+
+      function setBusy(next) {
+        state.busy = next;
+        els.sendBtn.disabled = next;
+        els.restartBtn.disabled = next;
+        els.exampleBtn.disabled = next;
+        els.userInput.disabled = next;
+        if (next) els.sendBtn.textContent = "Sending...";
+        else els.sendBtn.textContent = "Send";
+      }
+
+      function appendMessage(role, text) {
+        const node = document.createElement("div");
+        node.className = `msg ${role}`;
+        node.innerHTML = `
+          <div class="role">${role === "assistant" ? "Uncertainty Assistant" : "You"}</div>
+          <div class="text"></div>
+        `;
+        node.querySelector(".text").textContent = text;
+        els.messages.appendChild(node);
+        els.messages.scrollTop = els.messages.scrollHeight;
+      }
+
+      function clearConversationMessages() {
+        els.messages.innerHTML = "";
+      }
+
+      function renderOptions(options = []) {
+        els.optionTray.innerHTML = "";
+        if (!options.length) return;
+        const currentStage = state.assistantState?.stage || null;
+        const supportsInsertMode = ["describe_case", "confirm_case"].includes(currentStage);
+        const useSingleLineChoices = ["select_module", "select_preset", "select_endo_blood_culture_context", "confirm_case", "done"].includes(currentStage);
+        const hasCaseHelpers = options.some(
+          (opt) => typeof opt.value === "string" && opt.value.startsWith("insert_text:")
+        );
+        if (supportsInsertMode && hasCaseHelpers) {
+          const presentBtn = document.createElement("button");
+          presentBtn.type = "button";
+          presentBtn.className = `chip ${state.caseInsertMode === "present" ? "active" : "secondary"}`;
+          presentBtn.textContent = "Present";
+          presentBtn.title = "Add this finding as present.";
+          presentBtn.addEventListener("click", () => {
+            state.caseInsertMode = "present";
+            renderOptions(options);
+            els.composerHint.textContent = "Present mode selected. Click findings to add them as present.";
+          });
+          els.optionTray.appendChild(presentBtn);
+
+          const absentBtn = document.createElement("button");
+          absentBtn.type = "button";
+          absentBtn.className = `chip ${state.caseInsertMode === "absent" ? "active" : "secondary"}`;
+          absentBtn.textContent = "Absent";
+          absentBtn.title = "Add this finding as absent or negative.";
+          absentBtn.addEventListener("click", () => {
+            state.caseInsertMode = "absent";
+            renderOptions(options);
+            els.composerHint.textContent = "Absent mode selected. Click findings to add them as negative.";
+          });
+          els.optionTray.appendChild(absentBtn);
+        }
+        function helperChipLabel(opt, isHiddenCaseOption) {
+          if (typeof opt.value !== "string" || !opt.value.startsWith("insert_text:")) {
+            return opt.label;
+          }
+          if (isHiddenCaseOption) {
+            return `Used: ${opt.label}`;
+          }
+          if (state.caseInsertMode === "absent") {
+            return `Mark absent: ${opt.label}`;
+          }
+          return `Add: ${opt.label}`;
+        }
+        let pendingSection = null;
+        for (const opt of options) {
+          if (typeof opt.value === "string" && opt.value.startsWith("section:")) {
+            const label = document.createElement("div");
+            label.className = "option-section";
+            label.textContent = opt.label;
+            pendingSection = label;
+            continue;
+          }
+          const isHiddenCaseOption =
+            typeof opt.value === "string" &&
+            opt.value.startsWith("insert_text:") &&
+            state.hiddenCaseOptions.has(opt.value);
+          if (isHiddenCaseOption && !state.showUsedCaseOptions) {
+            continue;
+          }
+          if (pendingSection) {
+            els.optionTray.appendChild(pendingSection);
+            pendingSection = null;
+          }
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const isPrimaryAction = opt.value === "run_assessment";
+          btn.className = isPrimaryAction ? "btn primary" : "chip";
+          if (useSingleLineChoices && !isPrimaryAction) {
+            btn.classList.add("single-line");
+          }
+          if (!isPrimaryAction && typeof opt.value === "string" && opt.value.startsWith("insert_text:")) {
+            btn.classList.add("secondary");
+          }
+          if (!isPrimaryAction && isHiddenCaseOption) {
+            btn.classList.add("used");
+          }
+          btn.textContent = helperChipLabel(opt, isHiddenCaseOption);
+          btn.title = isHiddenCaseOption
+            ? "Previously used. Click to update it in the current mode or restore it."
+            : (
+              typeof opt.value === "string" && opt.value.startsWith("insert_text:")
+                ? (state.caseInsertMode === "absent"
+                  ? "Click to mark this finding as absent or negative."
+                  : "Click to add this finding as present.")
+                : (opt.description || opt.label)
+            );
+          btn.addEventListener("click", () => {
+            if (opt.value === "continue_case_draft") {
+              const draft = els.userInput.value.trim();
+              els.userInput.value = "";
+              sendTurn({ selection: opt.value, message: draft || null });
+              return;
+            }
+            if (typeof opt.value === "string" && opt.value.startsWith("insert_text:")) {
+              if (state.hiddenCaseOptions.has(opt.value)) {
+                const previousEntry = state.hiddenCaseOptions.get(opt.value);
+                const previousText = typeof previousEntry === "string"
+                  ? previousEntry
+                  : (previousEntry?.text || "");
+                const previousMode = typeof previousEntry === "string"
+                  ? "present"
+                  : (previousEntry?.mode || "present");
+                const nextMode = state.caseInsertMode === "absent" ? "absent" : "present";
+                const presentText = opt.insertText || opt.label;
+                const absentText = opt.absentText || `No ${opt.label}`;
+                const nextText = nextMode === "absent" ? absentText : presentText;
+                if (previousMode !== nextMode) {
+                  removeSuggestedTextCandidates(
+                    [previousText, presentText, absentText].filter(Boolean)
+                  );
+                  insertSuggestedText(nextText);
+                  state.hiddenCaseOptions.set(opt.value, { text: nextText, mode: nextMode });
+                  if (nextMode === "absent") {
+                    state.caseInsertMode = "present";
+                    els.composerHint.textContent = "Finding updated to absent. Insert mode reset to Present.";
+                  } else {
+                    els.composerHint.textContent = "Finding updated to present.";
+                  }
+                  renderOptions(state.lastResponse?.options || options);
+                  els.userInput.focus();
+                  return;
+                }
+                state.hiddenCaseOptions.delete(opt.value);
+                if (!state.hiddenCaseOptions.size) {
+                  state.showUsedCaseOptions = false;
+                }
+                removeSuggestedText(previousText);
+                renderOptions(state.lastResponse?.options || []);
+                els.composerHint.textContent = "Used item restored. Click it again if you want to add it.";
+                els.userInput.focus();
+                return;
+              }
+              const nextText = state.caseInsertMode === "absent"
+                ? (opt.absentText || `No ${opt.label}`)
+                : (opt.insertText || opt.label);
+              if (insertSuggestedText(nextText)) {
+                const usedAbsentMode = state.caseInsertMode === "absent";
+                state.hiddenCaseOptions.set(opt.value, {
+                  text: nextText,
+                  mode: usedAbsentMode ? "absent" : "present",
+                });
+                if (usedAbsentMode) {
+                  state.caseInsertMode = "present";
+                  els.composerHint.textContent = "Absent finding added. Insert mode reset to Present.";
+                }
+                renderOptions(state.lastResponse?.options || options);
+              }
+              return;
+            }
+            sendTurn({ selection: opt.value, userVisibleText: opt.label });
+          });
+          els.optionTray.appendChild(btn);
+        }
+        if (supportsInsertMode && hasCaseHelpers && state.hiddenCaseOptions.size) {
+          const toggle = document.createElement("button");
+          toggle.type = "button";
+          toggle.className = "chip used";
+          toggle.textContent = state.showUsedCaseOptions ? "Hide used items" : "Show used items";
+          toggle.title = "Reveal helper items you already used so you can restore them.";
+          toggle.addEventListener("click", () => {
+            state.showUsedCaseOptions = !state.showUsedCaseOptions;
+            renderOptions(options);
+            els.composerHint.textContent = state.showUsedCaseOptions
+              ? "Click a used item to restore it."
+              : "Used items hidden. Add more or click Next.";
+          });
+          els.optionTray.appendChild(toggle);
+        }
+      }
+
+      function insertSuggestedText(text) {
+        const current = els.userInput.value.trim();
+        const next = text.trim();
+        if (!next) return false;
+        if (!current) {
+          els.userInput.value = next;
+        } else if (current.endsWith(".") || current.endsWith(";")) {
+          els.userInput.value = `${current} ${next}`;
+        } else {
+          els.userInput.value = `${current}; ${next}`;
+        }
+        els.userInput.focus();
+        els.userInput.setSelectionRange(els.userInput.value.length, els.userInput.value.length);
+        els.composerHint.textContent = state.assistantState?.stage === "confirm_case"
+          ? "Suggested detail added. Click Send to refresh the review, or add more."
+          : "Suggested detail added to the draft. Add more or click Next.";
+        return true;
+      }
+
+      function removeSuggestedText(text) {
+        const target = text.trim();
+        if (!target) return false;
+        const current = els.userInput.value;
+        const index = current.indexOf(target);
+        if (index === -1) return false;
+        let next = `${current.slice(0, index)}${current.slice(index + target.length)}`;
+        next = next
+          .replace(/\s*;\s*;\s*/g, "; ")
+          .replace(/^\s*;\s*/, "")
+          .replace(/\s*;\s*$/, "")
+          .replace(/\s{2,}/g, " ")
+          .replace(/\s+([,.;:])/g, "$1")
+          .trim();
+        els.userInput.value = next;
+        return true;
+      }
+
+      function removeSuggestedTextCandidates(candidates = []) {
+        for (const candidate of candidates) {
+          if (removeSuggestedText(candidate)) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function setTopStatus(resp) {
+        const s = resp?.state || {};
+        const sectionLabelMap = {
+          exam_vitals: "Vitals + Physical Exam",
+          lab: "Laboratory",
+          micro: "Microbiology",
+          imaging: "Radiology",
+        };
+        const currentSection = s.caseSection || null;
+        const currentSectionLabel = sectionLabelMap[currentSection] || "—";
+        els.summaryStage.textContent = s.stage || "—";
+        els.summaryModule.textContent = s.moduleId || "—";
+        els.summaryPreset.textContent = s.presetId || "—";
+        els.summaryCaseSection.textContent = currentSectionLabel;
+        const factorLabels = s.pretestFactorLabels || [];
+        els.summaryFactors.textContent = factorLabels.length ? factorLabels.join(", ") : "—";
+        els.helpBanner.textContent = currentSection
+          ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
+          : "I’m your Uncertainty Assistant. Describe a case in plain language, or choose a structured pathway from the options.";
+      }
+
+      function decisionClass(decision) {
+        if (decision === "treat") return "treat";
+        if (decision === "observe") return "observe";
+        return "test";
+      }
+
+      function renderAnalysis(resp) {
+        const textResult = resp?.analysis;
+        const analysis = textResult?.analysis;
+        const understood = textResult?.understood;
+        const references = textResult?.references || [];
+        const warnings = textResult?.warnings || [];
+
+        const parserLabel = textResult?.parser || "—";
+        const fallback = !!textResult?.parserFallbackUsed;
+        els.parserBadge.textContent = fallback ? `${parserLabel} (fallback)` : `parser: ${parserLabel}`;
+        els.parserBadge.className = `badge ${fallback ? "warn" : "good"}`;
+
+        if (analysis) {
+          const postPct = Math.round((analysis.posttestProbability || 0) * 100);
+          const treatPct = Math.round((analysis.thresholds?.treatProbability || 0) * 100);
+          const observePct = Math.round((analysis.thresholds?.observeProbability || 0) * 100);
+          const basePretestPct = Math.round(((analysis.pretest?.baseProbability) || 0) * 100);
+          const adjustedPretestPct = Math.round(((analysis.pretest?.adjustedProbability) || 0) * 100);
+          const recommendationLabel = analysis.recommendationSummary || `Suggested action: ${analysis.recommendation}`;
+          const nextSteps = (analysis.recommendedNextSteps || [])
+            .map((step) => `<li>${escapeHtml(step)}</li>`)
+            .join("");
+          const appliedFindings = (analysis.appliedFindings || [])
+            .map((item) => {
+              const stateLabel = item.state === "absent" ? "absent" : item.state === "present" ? "present" : item.state;
+              return `<li>${escapeHtml(item.label)} (${escapeHtml(stateLabel)}, LR ${Number(item.lrUsed || 1).toFixed(2)})</li>`;
+            })
+            .join("");
+          const stepwise = (analysis.stepwise || [])
+            .map((step) => {
+              const stateLabel = step.state === "absent" ? "absent" : step.state === "present" ? "present" : step.state;
+              return `<li>After ${escapeHtml(step.label)} (${escapeHtml(stateLabel)}, LR ${Number(step.lrUsed || 1).toFixed(2)}): ${Math.round((step.pAfter || 0) * 100)}%</li>`;
+            })
+            .join("");
+          const reasons = (analysis.reasons || [])
+            .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+            .join("");
+          const pretestNote = basePretestPct === adjustedPretestPct
+            ? `${basePretestPct}%`
+            : `${basePretestPct}% to ${adjustedPretestPct}% after baseline risk modifiers`;
+          els.analysisSummary.innerHTML = `
+            <h3>Analysis</h3>
+            <div class="prob">${postPct}%</div>
+            <div class="decision ${decisionClass(analysis.recommendation)}">
+              ${escapeHtml(recommendationLabel)}
+            </div>
+            <div class="kv">
+              <div class="k">Module</div><div class="v">${analysis.moduleName || "—"}</div>
+              <div class="k">Combined LR</div><div class="v">${Number(analysis.combinedLR || 1).toFixed(2)}</div>
+              <div class="k">Observe ≤</div><div class="v">${observePct}%</div>
+              <div class="k">Treat ≥</div><div class="v">${treatPct}%</div>
+              <div class="k">Confidence</div><div class="v">${Math.round((analysis.confidence || 0) * 100)}%</div>
+            </div>
+            ${analysis.explanationForUser ? `<div class="muted" style="font-size:13px;">${escapeHtml(analysis.explanationForUser)}</div>` : ""}
+            <details style="margin-top:10px;">
+              <summary>How It Was Calculated</summary>
+              <div class="kv" style="margin-top:8px;">
+                <div class="k">Pretest</div><div class="v">${escapeHtml(pretestNote)}</div>
+                <div class="k">Posttest</div><div class="v">${postPct}%</div>
+              </div>
+              ${nextSteps ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Suggested next steps</div><ul class="list">${nextSteps}</ul></div>` : ""}
+              ${appliedFindings ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Applied findings</div><ul class="list">${appliedFindings}</ul></div>` : `<div class="muted" style="margin-top:8px; font-size:12px;">No findings changed the calculation.</div>`}
+              ${stepwise ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Stepwise probability path</div><ul class="list">${stepwise}</ul></div>` : ""}
+              ${reasons ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Decision notes</div><ul class="list">${reasons}</ul></div>` : ""}
+            </details>
+          `;
+        } else {
+          els.analysisSummary.innerHTML = `<h3>Analysis</h3><div class="muted">No analysis yet or waiting for clarification.</div>`;
+        }
+
+        if (understood) {
+          const present = (understood.findingsPresent || []).map(x => `<li>${escapeHtml(x)}</li>`).join("");
+          const absent = (understood.findingsAbsent || []).map(x => `<li>${escapeHtml(x)}</li>`).join("");
+          const unknown = (understood.unknownMentions || []).map(x => `<li>${escapeHtml(x)}</li>`).join("");
+          const referenceHtml = references.length
+            ? `<ul class="list">${references.map((ref) => {
+                const citation = escapeHtml(ref.citation || "");
+                const context = escapeHtml(ref.context || "");
+                if (ref.url) {
+                  return `<li><span class="muted">${context}</span><br /><a href="${escapeHtml(ref.url)}" target="_blank" rel="noreferrer">${citation}</a></li>`;
+                }
+                return `<li><span class="muted">${context}</span><br />${citation}</li>`;
+              }).join("")}</ul>`
+            : `<div class="muted">No references available yet.</div>`;
+          els.parsedPanel.innerHTML = `
+            <h3>What I Picked Up</h3>
+            <div class="kv" style="margin-bottom:8px;">
+              <div class="k">Module</div><div class="v">${escapeHtml(understood.moduleName || understood.moduleId || "—")}</div>
+              <div class="k">Preset</div><div class="v">${escapeHtml(understood.presetLabel || understood.presetId || "—")}</div>
+            </div>
+            ${present ? `<div style="margin-bottom:6px;"><div class="muted" style="font-size:12px;">Present</div><ul class="list">${present}</ul></div>` : ""}
+            ${absent ? `<div style="margin-bottom:6px;"><div class="muted" style="font-size:12px;">Absent</div><ul class="list">${absent}</ul></div>` : ""}
+            ${unknown ? `<div><div class="muted" style="font-size:12px;">Unknown/Unmatched</div><ul class="list">${unknown}</ul></div>` : ""}
+            <details style="margin-top:8px;">
+              <summary>References</summary>
+              <div style="margin-top:8px;">${referenceHtml}</div>
+            </details>
+          `;
+        } else {
+          els.parsedPanel.innerHTML = `<h3>What I Picked Up</h3><div class="muted">Waiting for parsed output.</div>`;
+        }
+
+        if (warnings.length) {
+          els.warningsPanel.innerHTML = `
+            <h3>Warnings</h3>
+            <ul class="list warn-list">${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul>
+          `;
+        } else {
+          els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+        }
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      async function callAssistantTurn(payload) {
+        const res = await fetch("/v1/assistant/turn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`Server returned ${res.status} without JSON`);
+        }
+        if (!res.ok) {
+          throw new Error(data?.detail || `HTTP ${res.status}`);
+        }
+        return data;
+      }
+
+      async function sendTurn({ message = null, selection = null, userVisibleText = null } = {}) {
+        if (state.busy) return;
+        const currentStage = state.assistantState?.stage || null;
+        const previousModuleId = state.assistantState?.moduleId || null;
+        const previousPresetId = state.assistantState?.presetId || null;
+        const previousCaseSection = state.assistantState?.caseSection || null;
+        const messageText = message && message.trim() ? message.trim() : null;
+        const normalizedMessage = messageText ? messageText.toLowerCase() : null;
+        const restartRequested =
+          selection === "restart" ||
+          ["restart", "start over", "reset", "new case"].includes(normalizedMessage || "");
+        const quietPretestFactorSelection =
+          currentStage === "select_pretest_factors" &&
+          !!selection &&
+          !["continue_to_case", "restart"].includes(selection);
+        setBusy(true);
+        try {
+          if (!quietPretestFactorSelection && !restartRequested) {
+            if (userVisibleText) appendMessage("user", userVisibleText);
+            else if (messageText) appendMessage("user", messageText);
+          }
+
+          const payload = {
+            state: state.assistantState,
+            parserStrategy: "auto",
+            parserModel: null,
+            allowFallback: true,
+          };
+          if (selection) payload.selection = selection;
+          if (messageText) payload.message = messageText;
+
+          const resp = await callAssistantTurn(payload);
+          state.lastResponse = resp;
+          const nextState = resp.state || null;
+          if (
+            !nextState?.moduleId ||
+            nextState.stage === "select_module" ||
+            nextState.moduleId !== previousModuleId ||
+            nextState.presetId !== previousPresetId
+          ) {
+            state.hiddenCaseOptions.clear();
+            state.showUsedCaseOptions = false;
+            state.caseInsertMode = "present";
+          }
+          if (
+            nextState?.stage === "describe_case" &&
+            nextState.caseSection &&
+            nextState.caseSection !== previousCaseSection
+          ) {
+            state.caseInsertMode = "present";
+          }
+          state.assistantState = nextState;
+
+          const suppressAssistantMessage =
+            quietPretestFactorSelection &&
+            resp?.state?.stage === "select_pretest_factors";
+          if (restartRequested) {
+            clearConversationMessages();
+          }
+          if (!suppressAssistantMessage) {
+            appendMessage("assistant", resp.assistantMessage || "No message.");
+          }
+          renderOptions(resp.options || []);
+          renderAnalysis(resp);
+          setTopStatus(resp);
+          els.rawResponse.textContent = JSON.stringify(resp, null, 2);
+
+          const tips = resp.tips || [];
+          if (suppressAssistantMessage) {
+            els.composerHint.textContent = "Selection added. Add more, or click Next.";
+          } else {
+            els.composerHint.textContent = tips[0] || "Type a response or use the quick options.";
+          }
+        } catch (err) {
+          appendMessage("assistant", `I hit an error: ${err.message}`);
+          els.composerHint.textContent = "Check your server logs and try again.";
+          els.parserBadge.textContent = "parser: error";
+          els.parserBadge.className = "badge bad";
+        } finally {
+          setBusy(false);
+          els.userInput.focus();
+        }
+      }
+
+      function startConversation() {
+        clearConversationMessages();
+        els.optionTray.innerHTML = "";
+        state.assistantState = null;
+        state.lastResponse = null;
+        state.hiddenCaseOptions.clear();
+        state.showUsedCaseOptions = false;
+        state.caseInsertMode = "present";
+        els.rawResponse.textContent = "No response yet.";
+        els.analysisSummary.innerHTML = `<h3>Analysis</h3><div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>`;
+        els.parsedPanel.innerHTML = `<h3>What I Picked Up</h3><div class="muted">Waiting for parsed output.</div>`;
+        els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+        setTopStatus({ state: { stage: "select_module" } });
+        sendTurn({});
+      }
+
+      async function checkHealth() {
+        try {
+          const res = await fetch("/health");
+          if (!res.ok) throw new Error(String(res.status));
+          return true;
+        } catch {
+          els.composerHint.textContent = "Backend unavailable. Start the API server and refresh.";
+          els.parserBadge.textContent = "parser: offline";
+          els.parserBadge.className = "badge bad";
+          return false;
+        }
+      }
+
+      els.composerForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = els.userInput.value;
+        if (!text.trim()) return;
+        els.userInput.value = "";
+        sendTurn({ message: text });
+      });
+
+      els.restartBtn.addEventListener("click", () => {
+        sendTurn({ message: "restart", userVisibleText: "Restart" });
+      });
+
+      function exampleTextForCurrentState() {
+        const stage = state.assistantState?.stage || null;
+        const moduleId = state.assistantState?.moduleId || null;
+        const currentSection = state.assistantState?.caseSection || null;
+
+        if (stage === "select_endo_blood_culture_context") {
+          return "Staphylococcus aureus";
+        }
+
+        if (stage === "select_pretest_factors") {
+          if (moduleId === "endo") {
+            return "She has native valve disease and a prior episode of endocarditis.";
+          }
+          return "No additional baseline risk modifiers.";
+        }
+
+        if (stage === "describe_case") {
+          if (moduleId === "endo") {
+            if (currentSection === "exam_vitals") {
+              return "I want to assess if this patient has endocarditis with Staphylococcus aureus bacteremia. She is a 66-year-old woman with temperature 38.7 C, heart rate 112, blood pressure 108/62, a new regurgitant murmur, and no peripheral embolic stigmata on examination.";
+            }
+            if (currentSection === "lab") {
+              return "Laboratory data show CRP 220 mg/L, ESR elevated, and a normocytic anemia; renal function is near baseline.";
+            }
+            if (currentSection === "micro") {
+              return "Two separate blood culture sets grew Staphylococcus aureus, and repeat cultures remained positive beyond 48 hours.";
+            }
+            if (currentSection === "imaging") {
+              return "TTE was nondiagnostic, but TEE shows a mobile mitral valve vegetation.";
+            }
+            return "I want to assess if this patient has endocarditis with Staphylococcus aureus bacteremia. She is a 66-year-old woman with fever, a new regurgitant murmur, elevated CRP, two blood culture sets positive for Staphylococcus aureus with persistent bacteremia, and a TEE showing a mitral valve vegetation.";
+          }
+
+          if (moduleId === "active_tb") {
+            if (currentSection === "exam_vitals") {
+              return "I want to assess whether this patient needs pulmonary TB rule-out. He is a 42-year-old man from a high-incidence region with weight loss, night sweats, cough for 3 weeks, temperature 38.1 C, and oxygen saturation 95 percent on room air.";
+            }
+            if (currentSection === "lab") {
+              return "QuantiFERON is positive and HIV testing is negative.";
+            }
+            if (currentSection === "micro") {
+              return "AFB sputum smear is pending, and MTB PCR on sputum has not been sent yet.";
+            }
+            if (currentSection === "imaging") {
+              return "Chest CT is concerning for active pulmonary TB with upper lobe cavitary disease.";
+            }
+            return "I want to assess whether this patient needs pulmonary TB rule-out. He has cough for 3 weeks, weight loss, night sweats, a positive QuantiFERON, and chest CT concerning for active pulmonary TB.";
+          }
+
+          if (moduleId === "cdi") {
+            return "This is a hospitalized patient with 6 watery bowel movements in 24 hours after recent antibiotics, lower abdominal cramping, leukocytosis, and no alternative explanation for diarrhea.";
+          }
+
+          if (moduleId === "cap") {
+            return "This is an ED patient with fever, tachypnea, hypoxemia, pleuritic cough, and a chest x-ray showing lobar consolidation.";
+          }
+
+          return "This is an ED patient with fever, abnormal vital signs, and objective findings that increase concern for the selected syndrome.";
+        }
+
+        if (stage === "confirm_case") {
+          if (moduleId === "endo") {
+            return "Add persistent positive blood cultures beyond 48 hours and TEE positive for vegetation.";
+          }
+          if (moduleId === "active_tb") {
+            return "Add chest CT concerning for active pulmonary TB and chronic cough.";
+          }
+          return "Add one or two high-yield findings that would strengthen the case before running the assessment.";
+        }
+
+        if (stage === "select_preset") {
+          if (moduleId === "endo" || moduleId === "cap" || moduleId === "active_tb" || moduleId === "cdi") {
+            return "ED / inpatient";
+          }
+          return "ED";
+        }
+
+        return "I want to assess if this patient has endocarditis with Staphylococcus aureus bacteremia. She is a 66-year-old woman with native valve disease, fever, a new regurgitant murmur, two blood culture sets positive for Staphylococcus aureus with persistent bacteremia beyond 48 hours, elevated CRP, and a TEE showing a mitral valve vegetation.";
+      }
+
+      els.exampleBtn.addEventListener("click", () => {
+        els.userInput.value = exampleTextForCurrentState();
+        els.userInput.focus();
+      });
+
+      window.addEventListener("load", async () => {
+        const online = await checkHealth();
+        if (online) {
+          startConversation();
+        }
+      });
+    </script>
+  </body>
+</html>

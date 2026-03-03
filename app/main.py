@@ -1,0 +1,3003 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Dict, List
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+
+from .engine import (
+    applied_finding_summaries,
+    build_stepwise_path,
+    combined_lr,
+    confidence_from_thresholds,
+    derive_decision_thresholds,
+    estimate_harms,
+    prepare_probid_inputs,
+    recommendation_for_probability,
+    resolve_harms,
+    resolve_pretest,
+    post_test_prob,
+)
+from .pretest_factors import get_pretest_factor_tuning, resolve_pretest_factor_specs
+from .schemas import (
+    AssistantOption,
+    AssistantState,
+    AssistantTurnRequest,
+    AssistantTurnResponse,
+    AnalyzeRequest,
+    AnalyzeResponse,
+    DecisionThresholds,
+    PretestSummary,
+    ProbIDControlsInput,
+    ReferenceEntry,
+    RegisterModulesRequest,
+    RegisterModulesResponse,
+    SyndromeModule,
+    TextAnalyzeRequest,
+    TextAnalyzeResponse,
+)
+from .services.module_store import InMemoryModuleStore
+from .services.local_text_parser import LocalParserError, parse_text_with_local_model
+from .services.llm_text_parser import LLMParserError, parse_text_with_openai
+from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
+
+
+app = FastAPI(
+    title="ProbID Decision Assistant API",
+    version="0.1.0",
+    description="FastAPI scaffold for a ProbID-style likelihood-ratio + decision-threshold assistant.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+store = InMemoryModuleStore()
+APP_DIR = Path(__file__).resolve().parent
+
+ASSISTANT_MODULE_LABELS = {
+    "cap": "Community-acquired pneumonia (CAP)",
+    "vap": "Ventilator-associated pneumonia (VAP)",
+    "cdi": "Clostridioides difficile infection (CDI)",
+    "uti": "Urinary tract infection (UTI)",
+    "endo": "Infective endocarditis",
+    "active_tb": "Active tuberculosis (TB)",
+    "pjp": "Pneumocystis jirovecii pneumonia (PJP)",
+    "inv_candida": "Invasive candidiasis",
+    "inv_mold": "Invasive mold infection",
+    "pji": "Prosthetic joint infection (PJI)",
+}
+
+ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
+    "staph": {
+        "label": "Staphylococcus aureus",
+        "description": "Use the S. aureus pathway and show VIRSTA-overlap baseline modifiers.",
+        "score_id": "virsta",
+    },
+    "strep": {
+        "label": "Viridans group streptococci",
+        "description": "Use the viridans/NBHS pathway and show HANDOC-overlap baseline modifiers.",
+        "score_id": "handoc",
+    },
+    "enterococcus": {
+        "label": "Enterococcus",
+        "description": "Use the enterococcal pathway and show DENOVA-overlap baseline modifiers.",
+        "score_id": "denova",
+    },
+    "other_unknown_pending": {
+        "label": "Other / unknown / pending",
+        "description": "Skip organism-specific score-overlap factors and use general endocarditis context only.",
+        "score_id": None,
+    },
+}
+
+ENDO_ASSISTANT_SCORE_COMPONENTS = {
+    "virsta": (
+        ("virsta_emboli", "Cerebral or peripheral emboli"),
+        ("virsta_meningitis", "Meningitis"),
+        ("virsta_intracardiac_device", "Permanent intracardiac device"),
+        ("virsta_prior_endocarditis", "Prior endocarditis"),
+        ("virsta_native_valve_disease", "Native valve disease"),
+        ("virsta_ivdu", "Injection drug use"),
+        ("virsta_persistent_bacteremia_48h", "Persistent bacteremia >48 hours"),
+        ("virsta_vertebral_osteomyelitis", "Vertebral osteomyelitis"),
+        ("virsta_community_or_nhca", "Community or non-nosocomial healthcare-associated acquisition"),
+        ("virsta_severe_sepsis_shock", "Severe sepsis or septic shock"),
+        ("virsta_crp_gt_190", "CRP >190 mg/L"),
+    ),
+    "denova": (
+        ("denova_duration_7d", "Symptoms >=7 days"),
+        ("denova_embolization", "Embolization"),
+        ("denova_num_positive_2", ">=2 positive blood culture sets"),
+        ("denova_origin_unknown", "Unknown source"),
+        ("denova_valve_disease", "Known valve disease"),
+        ("denova_auscultation_murmur", "Auscultation murmur"),
+    ),
+    "handoc": (
+        ("handoc_heart_murmur_valve", "Heart murmur or valve disease"),
+        ("handoc_species_high_risk", "Higher-risk species: S. gallolyticus / mutans / sanguinis"),
+        ("handoc_species_anginosus", "S. anginosus group"),
+        ("handoc_num_positive_2", ">=2 positive blood culture sets"),
+        ("handoc_duration_7d", "Symptoms >=7 days"),
+        ("handoc_only_one_species", "Only one species in blood cultures"),
+        ("handoc_community_acquired", "Community-acquired bacteremia"),
+    ),
+}
+
+ENDO_ASSISTANT_EXCLUSIVE_SCORE_GROUPS = (
+    {"handoc_species_high_risk", "handoc_species_anginosus"},
+)
+
+ENDO_ASSISTANT_SCORE_ITEM_IDS = {
+    "endo_virsta_high",
+    "endo_virsta_na",
+    "endo_denova_high",
+    "endo_denova_na",
+    "endo_handoc_high",
+    "endo_handoc_na",
+}
+
+ENDO_ASSISTANT_SCORE_TEXT_ALIASES: Dict[str, Dict[str, tuple[str, ...]]] = {
+    "virsta": {
+        "virsta_emboli": ("emboli", "embolus", "embolic", "stroke", "janeway", "splinter hemorrhage"),
+        "virsta_meningitis": ("meningitis",),
+        "virsta_intracardiac_device": ("pacemaker", "icd", "cied", "intracardiac device"),
+        "virsta_prior_endocarditis": ("prior endocarditis", "previous endocarditis", "history of endocarditis"),
+        "virsta_native_valve_disease": ("native valve disease", "known valve disease", "valvular disease"),
+        "virsta_ivdu": ("ivdu", "injection drug use", "injects drugs", "intravenous drug use"),
+        "virsta_persistent_bacteremia_48h": ("persistent bacteremia", "persistent positive blood cultures", "positive blood cultures for more than 48 hours"),
+        "virsta_vertebral_osteomyelitis": ("vertebral osteomyelitis",),
+        "virsta_community_or_nhca": ("community acquired", "community-acquired", "healthcare associated", "non nosocomial"),
+        "virsta_severe_sepsis_shock": ("severe sepsis", "septic shock"),
+        "virsta_crp_gt_190": ("crp >190", "crp greater than 190", "crp 200", "crp 190"),
+    },
+    "denova": {
+        "denova_duration_7d": ("7 days", "seven days", "one week", "1 week"),
+        "denova_embolization": ("embolization", "emboli", "embolic"),
+        "denova_num_positive_2": ("2 positive blood culture sets", "two positive blood culture sets", ">=2 positive blood culture sets"),
+        "denova_origin_unknown": ("unknown source", "unclear source", "source unknown"),
+        "denova_valve_disease": ("valve disease", "known valve disease", "valvular disease"),
+        "denova_auscultation_murmur": ("murmur", "heart murmur", "new heart murmur"),
+    },
+    "handoc": {
+        "handoc_heart_murmur_valve": ("murmur", "heart murmur", "valve disease", "valvular disease"),
+        "handoc_species_high_risk": ("gallolyticus", "bovis", "mutans", "sanguinis"),
+        "handoc_species_anginosus": ("anginosus",),
+        "handoc_num_positive_2": ("2 positive blood culture sets", "two positive blood culture sets", ">=2 positive blood culture sets"),
+        "handoc_duration_7d": ("7 days", "seven days", "one week", "1 week"),
+        "handoc_only_one_species": ("one species", "single species", "only one species", "monomicrobial"),
+        "handoc_community_acquired": ("community acquired", "community-acquired"),
+    },
+}
+
+ENDO_CASE_SECTION_ORDER = ("exam_vitals", "lab", "micro", "imaging")
+ENDO_CASE_SECTION_LABELS = {
+    "exam_vitals": "vital signs and physical exam",
+    "lab": "laboratory findings",
+    "micro": "microbiology",
+    "imaging": "radiology and advanced imaging",
+}
+
+ACTIVE_TB_WHO_SYMPTOM_HELPERS = (
+    ("tb_sym_any_cough", "Cough (WHO symptom)", "WHO TB symptom: cough", "No WHO TB symptoms"),
+    ("tb_sym_any_fever", "Fever (WHO symptom)", "WHO TB symptom: fever", "No WHO TB symptoms"),
+    ("tb_sym_any_night_sweats", "Night sweats (WHO symptom)", "WHO TB symptom: night sweats", "No WHO TB symptoms"),
+    ("tb_sym_any_weight_loss", "Weight loss (WHO symptom)", "WHO TB symptom: weight loss", "No WHO TB symptoms"),
+)
+
+ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
+    "cap": {
+        "cap_cxr_consolidation": (
+            "CXR with lobar or multilobar consolidation",
+            "CXR without consolidation",
+        ),
+        "cap_cxr_not_done": (
+            "CXR not done",
+            "CXR completed",
+        ),
+        "cap_rvp_pos": (
+            "Respiratory viral panel positive",
+            "Respiratory viral panel negative",
+        ),
+        "cap_rvp_na": (
+            "Respiratory viral panel not done",
+            "Respiratory viral panel completed",
+        ),
+        "cap_active_malignancy": (
+            "Active malignancy present",
+            "No active malignancy",
+        ),
+    },
+    "vap": {
+        "vap_cxr_infiltrate": (
+            "Chest radiograph with new or progressive infiltrate",
+            "Chest radiograph without new or progressive infiltrate",
+        ),
+        "vap_cxr_na": (
+            "VAP CXR not done",
+            "VAP CXR completed",
+        ),
+        "vap_leukocytosis": (
+            "WBC at least 12 for VAP",
+            "WBC below 12 for VAP",
+        ),
+        "vap_hypoxemia_pf240": (
+            "PaO2/FiO2 at or below 240",
+            "PaO2/FiO2 above 240",
+        ),
+        "vap_cpis_gt6": (
+            "CPIS greater than 6",
+            "CPIS 6 or lower",
+        ),
+        "vap_cpis_na": (
+            "CPIS not used",
+            "CPIS completed",
+        ),
+        "vap_resp_micro_na": (
+            "Respiratory sampling not done",
+            "Respiratory sampling completed",
+        ),
+        "vap_pct_elevated": (
+            "Procalcitonin elevated for VAP",
+            "Procalcitonin not elevated for VAP",
+        ),
+        "vap_pct_na": (
+            "Procalcitonin not done for VAP",
+            "Procalcitonin completed for VAP",
+        ),
+    },
+    "cdi": {
+        "cdi_freq": (
+            "At least 3 unformed stools in 24 hours",
+            "Fewer than 3 unformed stools in 24 hours",
+        ),
+        "cdi_watery": (
+            "Watery diarrhea present",
+            "No watery diarrhea",
+        ),
+        "cdi_test_na": (
+            "Stool testing not done",
+            "Stool testing completed",
+        ),
+        "cdi_naat_neg": (
+            "C diff NAAT negative",
+            "C diff NAAT not negative",
+        ),
+        "cdi_naat_pos_tox_pos": (
+            "C diff NAAT positive and toxin positive",
+            "C diff NAAT/toxin not both positive",
+        ),
+        "cdi_naat_pos_tox_neg": (
+            "C diff NAAT positive and toxin negative",
+            "C diff NAAT/toxin pattern not NAAT positive toxin negative",
+        ),
+        "cdi_naat_pos_tox_na": (
+            "C diff NAAT positive and toxin not sent",
+            "C diff NAAT pattern not NAAT positive with toxin not sent",
+        ),
+    },
+    "uti": {
+        "uti_vaginitis": (
+            "Vaginal discharge or irritation present",
+            "No vaginal discharge or irritation",
+        ),
+        "uti_obstruction": (
+            "Urinary obstruction or anatomic abnormality present",
+            "No urinary obstruction or anatomic abnormality",
+        ),
+        "ua_pyuria_pos": (
+            "Pyuria present on microscopy",
+            "No pyuria on microscopy",
+        ),
+        "ua_le_pos": (
+            "Urine leukocyte esterase positive",
+            "Urine leukocyte esterase negative",
+        ),
+        "ua_nit_pos": (
+            "Urine nitrite positive",
+            "Urine nitrite negative",
+        ),
+        "ua_bact_pos": (
+            "Bacteriuria present on microscopy",
+            "No bacteriuria on microscopy",
+        ),
+        "uti_cx_pos": (
+            "Urine culture above 100000 CFU",
+            "Urine culture below 100000 CFU",
+        ),
+    },
+    "active_tb": {
+        "tb_contact": (
+            "Close/household TB exposure",
+            "No close/household TB exposure",
+        ),
+        "tb_sym_any": (
+            "WHO TB symptom screen positive (cough, fever, night sweats, or weight loss)",
+            "No WHO TB symptoms",
+        ),
+        "tb_sym_cough_2w": (
+            "Cough for more than 2 weeks",
+            "Cough for less than 2 weeks",
+        ),
+        "tb_sym_na": (
+            "TB symptom screen not done",
+            "TB symptom screen completed",
+        ),
+        "tb_qft": (
+            "QuantiFERON positive",
+            "QuantiFERON negative",
+        ),
+        "tb_tst": (
+            "Tuberculin skin test positive",
+            "Tuberculin skin test negative",
+        ),
+        "tb_immune_na": (
+            "QFT/TST not done",
+            "QFT/TST completed",
+        ),
+        "tb_mtbpcr_sputum": (
+            "MTB PCR positive on sputum",
+            "MTB PCR negative on sputum",
+        ),
+        "tb_mtbpcr_bal": (
+            "MTB PCR positive on BAL",
+            "MTB PCR negative on BAL",
+        ),
+        "tb_afb_smear_sputum": (
+            "AFB smear positive on sputum",
+            "AFB smear negative on sputum",
+        ),
+        "tb_culture_sputum": (
+            "Mycobacterial culture positive from sputum",
+            "Mycobacterial culture negative from sputum",
+        ),
+        "tb_culture_bal": (
+            "Mycobacterial culture positive from BAL",
+            "Mycobacterial culture negative from BAL",
+        ),
+        "tb_cxr_suggestive": (
+            "CXR suggestive of active pulmonary TB",
+            "CXR not suggestive of active pulmonary TB",
+        ),
+        "tb_cxr_na": (
+            "CXR not done",
+            "CXR completed",
+        ),
+        "tb_ct_suggestive": (
+            "Chest CT suggestive of active pulmonary TB",
+            "Chest CT not suggestive of active pulmonary TB",
+        ),
+        "tb_ct_na": (
+            "Chest CT not done",
+            "Chest CT completed",
+        ),
+    },
+    "pjp": {
+        "pjp_host_no_ppx": (
+            "Lack of TMP-SMX prophylaxis despite indication",
+            "Receiving TMP-SMX prophylaxis when indicated",
+        ),
+        "pjp_host_heme_hsct": (
+            "Hematologic malignancy or stem-cell transplant",
+            "No hematologic malignancy or stem-cell transplant",
+        ),
+        "pjp_bdg_serum": (
+            "Serum beta-D-glucan positive",
+            "Serum beta-D-glucan negative",
+        ),
+        "pjp_bdg_na": (
+            "Serum BDG not done",
+            "Serum BDG completed",
+        ),
+        "pjp_ldh_high": (
+            "Serum LDH elevated",
+            "Serum LDH not elevated",
+        ),
+        "pjp_pcr_bal": (
+            "PJP PCR positive on BAL",
+            "PJP PCR negative on BAL",
+        ),
+        "pjp_pcr_induced_sputum": (
+            "PJP PCR positive on induced sputum",
+            "PJP PCR negative on induced sputum",
+        ),
+        "pjp_pcr_upper_airway": (
+            "PJP PCR positive on upper airway sample",
+            "PJP PCR negative on upper airway sample",
+        ),
+        "pjp_pcr_na": (
+            "Respiratory PJP PCR not done",
+            "Respiratory PJP PCR completed",
+        ),
+        "pjp_dfa": (
+            "PJP DFA/IFA positive",
+            "PJP DFA/IFA negative",
+        ),
+        "pjp_dfa_na": (
+            "PJP DFA/IFA not done",
+            "PJP DFA/IFA completed",
+        ),
+        "pjp_cxr_typical": (
+            "CXR typical of PJP",
+            "CXR not typical of PJP",
+        ),
+        "pjp_ct_typical": (
+            "CT typical of PJP",
+            "CT not typical of PJP",
+        ),
+        "pjp_imaging_na": (
+            "Chest imaging not done",
+            "Chest imaging completed",
+        ),
+    },
+    "inv_candida": {
+        "icand_host_dialysis": (
+            "On dialysis or renal replacement therapy",
+            "Not on dialysis or renal replacement therapy",
+        ),
+        "icand_component_multifocal_colonization": (
+            "Multifocal Candida colonization present",
+            "No multifocal Candida colonization",
+        ),
+        "icand_component_severe_sepsis": (
+            "Severe sepsis or septic shock",
+            "No severe sepsis or septic shock",
+        ),
+        "icand_bdg_serum": (
+            "Serum beta-D-glucan positive",
+            "Serum beta-D-glucan negative",
+        ),
+        "icand_bdg_na": (
+            "Serum BDG not done",
+            "Serum BDG completed",
+        ),
+        "icand_mannan_antimannan": (
+            "Mannan/anti-mannan assay positive",
+            "Mannan/anti-mannan assay negative",
+        ),
+        "icand_mannan_na": (
+            "Mannan/anti-mannan testing not done",
+            "Mannan/anti-mannan testing completed",
+        ),
+        "icand_t2candida": (
+            "T2Candida positive",
+            "T2Candida negative",
+        ),
+        "icand_t2_na": (
+            "T2Candida not done",
+            "T2Candida completed",
+        ),
+        "icand_pcr_blood": (
+            "Candida PCR positive from blood",
+            "Candida PCR negative from blood",
+        ),
+        "icand_pcr_na": (
+            "Candida PCR not done",
+            "Candida PCR completed",
+        ),
+        "icand_culture_positive": (
+            "Blood or sterile-site culture positive for Candida",
+            "Blood or sterile-site culture negative for Candida",
+        ),
+        "icand_culture_na": (
+            "Candida culture strategy not done",
+            "Candida culture strategy completed",
+        ),
+    },
+    "inv_mold": {
+        "imi_host_neutropenia_hsct": (
+            "Profound neutropenia or recent allogeneic HSCT",
+            "No profound neutropenia or recent allogeneic HSCT",
+        ),
+        "imi_host_hematologic_malignancy": (
+            "Active hematologic malignancy",
+            "No active hematologic malignancy",
+        ),
+        "imi_fever_refractory": (
+            "Refractory fever despite broad-spectrum antibacterials",
+            "No refractory fever despite broad-spectrum antibacterials",
+        ),
+        "imi_ct_halo_sign": (
+            "Chest CT halo sign present",
+            "No chest CT halo sign",
+        ),
+        "imi_ct_na": (
+            "Chest CT not done",
+            "Chest CT completed",
+        ),
+        "imi_serum_gm_odi10": (
+            "Serum galactomannan positive",
+            "Serum galactomannan negative",
+        ),
+        "imi_bal_gm_odi10": (
+            "BAL galactomannan positive",
+            "BAL galactomannan negative",
+        ),
+        "imi_gm_na": (
+            "Galactomannan testing not done",
+            "Galactomannan testing completed",
+        ),
+        "imi_serum_bdg": (
+            "Serum beta-D-glucan positive",
+            "Serum beta-D-glucan negative",
+        ),
+        "imi_bdg_na": (
+            "Serum BDG not done",
+            "Serum BDG completed",
+        ),
+        "imi_aspergillus_lfd": (
+            "Aspergillus LFD/LFA positive",
+            "Aspergillus LFD/LFA negative",
+        ),
+        "imi_lfd_na": (
+            "Aspergillus LFD/LFA not done",
+            "Aspergillus LFD/LFA completed",
+        ),
+        "imi_aspergillus_pcr_bal": (
+            "Aspergillus PCR positive from BAL",
+            "Aspergillus PCR negative from BAL",
+        ),
+        "imi_aspergillus_pcr_na": (
+            "Aspergillus PCR not done",
+            "Aspergillus PCR completed",
+        ),
+        "imi_mucorales_pcr_bal": (
+            "Mucorales PCR positive from BAL",
+            "Mucorales PCR negative from BAL",
+        ),
+        "imi_mucorales_pcr_blood": (
+            "Mucorales PCR positive from blood",
+            "Mucorales PCR negative from blood",
+        ),
+        "imi_mucorales_pcr_na": (
+            "Mucorales PCR not done",
+            "Mucorales PCR completed",
+        ),
+    },
+    "pji": {
+        "pji_crp": (
+            "CRP elevated",
+            "CRP not elevated",
+        ),
+        "pji_esr": (
+            "ESR elevated",
+            "ESR not elevated",
+        ),
+        "pji_alpha_defensin_elisa": (
+            "Synovial alpha-defensin ELISA positive",
+            "Synovial alpha-defensin ELISA negative",
+        ),
+        "pji_alpha_defensin_lateral_flow": (
+            "Synovial alpha-defensin lateral flow positive",
+            "Synovial alpha-defensin lateral flow negative",
+        ),
+        "pji_leukocyte_esterase": (
+            "Synovial leukocyte esterase positive",
+            "Synovial leukocyte esterase negative",
+        ),
+        "pji_synovial_marker_na": (
+            "Synovial biomarker testing not done",
+            "Synovial biomarker testing completed",
+        ),
+        "pji_synovial_fluid_culture": (
+            "Synovial fluid culture positive",
+            "Synovial fluid culture negative",
+        ),
+        "pji_intraop_tissue_culture": (
+            "Intraoperative tissue culture positive",
+            "Intraoperative tissue culture negative",
+        ),
+        "pji_sonication_culture": (
+            "Sonication fluid culture positive",
+            "Sonication fluid culture negative",
+        ),
+        "pji_culture_na": (
+            "PJI culture strategy not done",
+            "PJI culture strategy completed",
+        ),
+        "pji_synovial_pcr": (
+            "Synovial PCR positive",
+            "Synovial PCR negative",
+        ),
+        "pji_pcr_na": (
+            "Synovial PCR not done",
+            "Synovial PCR completed",
+        ),
+        "pji_xray_supportive": (
+            "Plain radiograph supportive of infection",
+            "Plain radiograph not supportive of infection",
+        ),
+        "pji_imaging_na": (
+            "PJI imaging not done",
+            "PJI imaging completed",
+        ),
+    },
+}
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.get("/assistant")
+def assistant_web() -> FileResponse:
+    return FileResponse(APP_DIR / "static" / "assistant.html")
+
+
+@app.get("/v1/modules")
+def list_modules() -> dict:
+    return {"modules": store.list_summaries()}
+
+
+@app.get("/v1/modules/{module_id}", response_model=SyndromeModule)
+def get_module(module_id: str) -> SyndromeModule:
+    module = store.get(module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail=f"Module '{module_id}' not found")
+    return module
+
+
+@app.post("/v1/modules/register", response_model=RegisterModulesResponse)
+def register_modules(payload: RegisterModulesRequest) -> RegisterModulesResponse:
+    ids = store.upsert_many(payload.modules)
+    return RegisterModulesResponse(registered=len(ids), ids=ids)
+
+
+def _resolve_module(req: AnalyzeRequest) -> SyndromeModule:
+    if req.module is not None:
+        return req.module
+    if not req.module_id:
+        raise HTTPException(status_code=400, detail="Provide either `moduleId` or inline `module`")
+    module = store.get(req.module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail=f"Module '{req.module_id}' not found")
+    return module
+
+
+def _reference_citation(short: str | None, year: int | None, fallback: str | None = None) -> str | None:
+    if short and year:
+        return f"{short} ({year})"
+    if short:
+        return short
+    return fallback
+
+
+def _collect_reference_entries(
+    *,
+    module: SyndromeModule,
+    parsed_request: AnalyzeRequest | None,
+    selected_pretest_factor_ids: List[str] | None = None,
+) -> List[ReferenceEntry]:
+    if parsed_request is None:
+        return []
+
+    entries: List[ReferenceEntry] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def add_entry(context: str, citation: str | None, url: str | None = None) -> None:
+        if not citation:
+            return
+        key = (context, citation, url or "")
+        if key in seen:
+            return
+        seen.add(key)
+        entries.append(ReferenceEntry(context=context, citation=citation, url=url))
+
+    preset = next((p for p in module.pretest_presets if p.id == parsed_request.preset_id), None)
+    if preset is not None:
+        add_entry(
+            f"Preset: {preset.label}",
+            _reference_citation(
+                preset.source.short if preset.source else None,
+                preset.source.year if preset.source else None,
+                preset.notes,
+            ),
+            preset.source.url if preset.source else None,
+        )
+
+    items_by_id = {item.id: item for item in module.items}
+    for finding_id in parsed_request.findings:
+        item = items_by_id.get(finding_id)
+        if item is None:
+            continue
+        add_entry(
+            f"Finding: {item.label}",
+            _reference_citation(
+                item.source.short if item.source else None,
+                item.source.year if item.source else None,
+                item.notes,
+            ),
+            item.source.url if item.source else None,
+        )
+
+    if selected_pretest_factor_ids:
+        specs_by_id = {spec.id: spec for spec in resolve_pretest_factor_specs(module)}
+        for factor_id in selected_pretest_factor_ids:
+            spec = specs_by_id.get(factor_id)
+            if spec is None:
+                continue
+            add_entry(f"Baseline factor: {spec.label}", spec.source_note, spec.source_url)
+
+    return entries
+
+
+def _sync_text_result_references(
+    *,
+    text_result: TextAnalyzeResponse,
+    module: SyndromeModule | None = None,
+    selected_pretest_factor_ids: List[str] | None = None,
+) -> None:
+    parsed_request = text_result.parsed_request
+    if parsed_request is None:
+        text_result.references = []
+        return
+
+    resolved_module = module or parsed_request.module or store.get(parsed_request.module_id or "")
+    if resolved_module is None:
+        text_result.references = []
+        return
+
+    text_result.references = _collect_reference_entries(
+        module=resolved_module,
+        parsed_request=parsed_request,
+        selected_pretest_factor_ids=selected_pretest_factor_ids,
+    )
+
+
+def _build_reasons(
+    *,
+    module: SyndromeModule,
+    base_pretest: float,
+    adjusted_pretest: float,
+    combined_lr_value: float,
+    thresholds: DecisionThresholds,
+    recommendation: str,
+    applied_findings,
+    prep_notes: List[str] | None = None,
+) -> List[str]:
+    reasons: List[str] = []
+
+    if abs(adjusted_pretest - base_pretest) > 0.001:
+        reasons.append(
+            f"Pretest probability was adjusted from {base_pretest:.1%} to {adjusted_pretest:.1%} using odds multiplier."
+        )
+    else:
+        reasons.append(f"Pretest probability starts at {adjusted_pretest:.1%} from the selected preset or override.")
+
+    if applied_findings:
+        top = applied_findings[:3]
+        parts = [f"{f.label} ({f.state}, LR {f.lr_used:.2f})" for f in top]
+        reasons.append("Strongest applied findings: " + ", ".join(parts) + ".")
+    else:
+        reasons.append("No diagnostic findings were applied, so post-test probability equals pretest probability.")
+
+    reasons.append(
+        f"Combined LR = {combined_lr_value:.2f}; thresholds: observe <= {thresholds.observe_probability:.1%}, treat >= {thresholds.treat_probability:.1%}."
+    )
+    if prep_notes:
+        reasons.extend(prep_notes)
+    reasons.append(f"Recommended action: {recommendation} for {module.name}.")
+    return reasons
+
+
+def _build_risk_flags(*, posttest_probability: float, thresholds: DecisionThresholds, applied_count: int) -> List[str]:
+    flags: List[str] = []
+    if applied_count == 0:
+        flags.append("no_findings_selected")
+    if applied_count == 1:
+        flags.append("low_evidence_count")
+
+    near_observe = abs(posttest_probability - thresholds.observe_probability) <= 0.03
+    near_treat = abs(posttest_probability - thresholds.treat_probability) <= 0.03
+    if near_observe or near_treat:
+        flags.append("near_decision_threshold")
+
+    if posttest_probability >= 0.5:
+        flags.append("high_posttest_probability")
+    if posttest_probability <= 0.05:
+        flags.append("low_posttest_probability")
+    return flags
+
+
+def _build_recommendation_summary(
+    *,
+    module: SyndromeModule,
+    recommendation: str,
+    prep_findings: dict[str, str],
+    preset_id: str | None = None,
+) -> tuple[str | None, List[str]]:
+    if module.id == "cdi":
+        cdi_result_ids = {
+            "cdi_naat_neg",
+            "cdi_naat_pos_tox_pos",
+            "cdi_naat_pos_tox_neg",
+            "cdi_naat_pos_tox_na",
+        }
+        testing_done = any(item_id in prep_findings for item_id in cdi_result_ids)
+        explicit_not_done = prep_findings.get("cdi_test_na") == "present"
+        no_micro_selected = not testing_done and not explicit_not_done
+        testing_pending = explicit_not_done or no_micro_selected
+        positive_result = any(prep_findings.get(item_id) == "present" for item_id in cdi_result_ids if item_id != "cdi_naat_neg")
+        negative_result = prep_findings.get("cdi_naat_neg") == "present"
+        diarrhea_burden = prep_findings.get("cdi_freq") == "present"
+        watery_diarrhea = prep_findings.get("cdi_watery") == "present"
+        next_steps: List[str] = []
+
+        if recommendation == "observe":
+            if negative_result:
+                summary = (
+                    "C. difficile probability is below the testing threshold, and the negative stool result makes active C. difficile infection less likely. Repeat testing is usually not necessary unless the clinical picture changes substantially."
+                )
+                return summary, next_steps
+
+            early_community_onset_context = preset_id == "ed_inpt_early"
+            if early_community_onset_context and testing_pending and (diarrhea_burden or watery_diarrhea):
+                summary = (
+                    "C. difficile probability is still below the formal testing threshold, but in this ED or early-admission context stool C. difficile testing can be considered if the patient has unexplained clinically significant diarrhea."
+                )
+                summary += (
+                    " Because presentations in the first 72 hours are often treated as community-onset rather than hospital-onset, reassess competing explanations and test if concern remains."
+                )
+            else:
+                summary = (
+                    "C. difficile probability is below the current testing threshold, so immediate stool C. difficile testing is usually not necessary based on the current data."
+                )
+                if testing_pending and (diarrhea_burden or watery_diarrhea):
+                    summary += (
+                        " If unexplained diarrhea persists, especially with at least 3 unformed stools in 24 hours, reassess and send stool testing if concern increases."
+                    )
+            return summary, next_steps
+
+        if recommendation == "test":
+            if testing_pending:
+                summary = (
+                    "C. difficile probability is high enough that stool C. difficile testing should be sent now if the patient has unexplained unformed diarrhea."
+                )
+                next_steps.append("Send stool C. difficile testing using the local NAAT/PCR plus toxin algorithm.")
+                next_steps.append("Avoid testing formed stool or patients without clinically significant unexplained diarrhea.")
+                return summary, next_steps
+
+            if positive_result:
+                summary = (
+                    "The current stool result increases concern for C. difficile, but the overall probability remains in an intermediate range. Interpret the test in the clinical context before committing to treatment or dismissing alternative explanations."
+                )
+                next_steps.append("Correlate the stool result with diarrhea burden and any competing explanations for symptoms.")
+                return summary, next_steps
+
+            summary = (
+                "C. difficile probability remains in an intermediate range despite the available stool testing. Reassess the clinical context and alternative causes before repeating testing or escalating treatment."
+            )
+            next_steps.append("Avoid repeat stool testing unless the clinical picture changes meaningfully.")
+            return summary, next_steps
+
+        if recommendation == "treat":
+            summary = (
+                "C. difficile probability is high enough that C. difficile-directed treatment is justified based on the current risk-benefit balance."
+            )
+            if testing_pending:
+                next_steps.append("If feasible, send stool C. difficile testing while treatment decisions are being made.")
+            return summary, next_steps
+
+        return None, []
+
+    if module.id == "active_tb":
+        tb_micro_ids = {
+            "tb_mtbpcr_sputum",
+            "tb_mtbpcr_bal",
+            "tb_afb_smear_sputum",
+            "tb_culture_sputum",
+            "tb_culture_bal",
+        }
+        tb_pcr_ids = {"tb_mtbpcr_sputum", "tb_mtbpcr_bal"}
+        tb_culture_ids = {"tb_culture_sputum", "tb_culture_bal"}
+        any_tb_micro_done = any(item_id in prep_findings for item_id in tb_micro_ids)
+        tb_pcr_done = any(item_id in prep_findings for item_id in tb_pcr_ids)
+        tb_afb_done = "tb_afb_smear_sputum" in prep_findings
+        tb_culture_done = any(item_id in prep_findings for item_id in tb_culture_ids)
+        immune_positive = any(prep_findings.get(item_id) == "present" for item_id in {"tb_qft", "tb_tst"})
+        next_steps: List[str] = []
+
+        if recommendation == "observe":
+            summary = (
+                "Active TB probability is below the observation threshold, so routine airborne isolation and immediate pulmonary TB rule-out are usually not necessary based on the current data."
+            )
+            if immune_positive:
+                summary += (
+                    " A positive QuantiFERON or tuberculin skin test makes latent TB infection more likely than active pulmonary TB; refer for latent TB evaluation and treatment if clinically appropriate once active TB is not otherwise suspected."
+                )
+                next_steps.append(
+                    "If active TB is not otherwise suspected, refer for latent TB infection evaluation/treatment."
+                )
+            return summary, next_steps
+
+        if recommendation == "test":
+            if not any_tb_micro_done:
+                summary = (
+                    "Active TB probability is above the observation threshold, so this patient should be ruled out for pulmonary TB. Use airborne isolation and obtain respiratory TB testing."
+                )
+                next_steps.append("Use airborne isolation while the pulmonary TB rule-out is in progress.")
+            else:
+                summary = (
+                    "Active TB probability remains above the observation threshold, so continue pulmonary TB rule-out and airborne isolation until adequate respiratory TB testing is complete or active TB is excluded."
+                )
+            if not tb_pcr_done:
+                next_steps.append("Obtain MTB PCR/Xpert on a respiratory sample if it has not been sent yet.")
+            if not tb_afb_done:
+                next_steps.append("Obtain AFB sputum smear testing (with serial sputum samples per local protocol).")
+            if not tb_culture_done:
+                next_steps.append("Send mycobacterial culture from a respiratory sample if available.")
+            return summary, next_steps
+
+        if recommendation == "treat":
+            if not any_tb_micro_done:
+                summary = (
+                    "Active TB is sufficiently likely that this patient should be ruled out for pulmonary TB immediately. Airborne isolation and TB-directed evaluation or empiric management are justified while confirmatory respiratory testing is completed."
+                )
+            else:
+                summary = (
+                    "Active TB is sufficiently likely that airborne isolation and TB-directed evaluation or empiric management are justified while confirmatory respiratory testing is completed."
+                )
+            next_steps.append("Maintain airborne isolation while confirmatory testing is pending.")
+            if not tb_pcr_done:
+                next_steps.append("Obtain MTB PCR/Xpert on a respiratory sample if it has not been sent yet.")
+            if not tb_afb_done:
+                next_steps.append("Obtain AFB sputum smear testing (with serial sputum samples per local protocol).")
+            if not tb_culture_done:
+                next_steps.append("Send mycobacterial culture from a respiratory sample if available.")
+            return summary, next_steps
+
+        return None, []
+
+    if module.id != "endo":
+        return None, []
+
+    tee_done = prep_findings.get("endo_tee", "unknown") != "unknown"
+    pet_done = prep_findings.get("endo_pet", "unknown") != "unknown"
+    advanced_imaging_done = tee_done or pet_done
+    next_steps: List[str] = []
+
+    if recommendation == "observe":
+        summary = "Endocarditis probability is below the observation threshold, so treating this as complicated bacteremia is reasonable."
+        if not advanced_imaging_done:
+            summary += " TEE is probably not necessary unless new features increase concern for endocarditis."
+        return summary, next_steps
+
+    if recommendation == "test":
+        summary = "Endocarditis probability remains in an intermediate range, so further diagnostic testing is appropriate before escalating to full endocarditis-directed treatment."
+        if not tee_done:
+            next_steps.append("Consider TEE if it has not been performed yet.")
+        if not pet_done:
+            next_steps.append("Consider FDG PET/CT if prosthetic valve/device infection remains a concern and it has not been performed yet.")
+        return summary, next_steps
+
+    if recommendation == "treat":
+        summary = (
+            "Endocarditis probability is high enough that endocarditis-directed treatment is justified based on the current risk-benefit balance."
+        )
+        return summary, next_steps
+
+    return None, []
+
+
+@app.post("/v1/analyze", response_model=AnalyzeResponse)
+def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
+    return _analyze_internal(req)
+
+
+def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
+    module = _resolve_module(req)
+    prep = prepare_probid_inputs(module, req)
+
+    base_pretest, adjusted_pretest, preset_id = resolve_pretest(
+        module,
+        req,
+        odds_multiplier=prep.effective_pretest_odds_multiplier,
+    )
+    combined_lr_value = combined_lr(module.items, prep.analysis_findings)
+    posttest_probability = post_test_prob(adjusted_pretest, combined_lr_value)
+
+    harms = resolve_harms(module, req, states_override=prep.harm_findings)
+    thresholds = derive_decision_thresholds(harms)
+    recommendation = recommendation_for_probability(posttest_probability, thresholds)
+    confidence = confidence_from_thresholds(posttest_probability, thresholds)
+
+    applied_findings = applied_finding_summaries(module, prep.analysis_findings)
+    stepwise = build_stepwise_path(
+        pretest_probability=adjusted_pretest,
+        module=module,
+        findings=prep.analysis_findings,
+        ordered_ids=req.ordered_finding_ids,
+    )
+
+    reasons = _build_reasons(
+        module=module,
+        base_pretest=base_pretest,
+        adjusted_pretest=adjusted_pretest,
+        combined_lr_value=combined_lr_value,
+        thresholds=thresholds,
+        recommendation=recommendation,
+        applied_findings=applied_findings,
+        prep_notes=prep.notes,
+    )
+    if req.harms is None and module.default_harms is None:
+        harm_estimate = estimate_harms(module.id, prep.harm_findings)
+        if harm_estimate.rationale:
+            reasons.append("Harm model: " + " ".join(harm_estimate.rationale))
+    risk_flags = _build_risk_flags(
+        posttest_probability=posttest_probability,
+        thresholds=thresholds,
+        applied_count=len(applied_findings),
+    )
+    recommendation_summary, recommended_next_steps = _build_recommendation_summary(
+        module=module,
+        recommendation=recommendation,
+        prep_findings=prep.analysis_findings,
+        preset_id=preset_id,
+    )
+
+    explanation = None
+    if req.include_explanation:
+        if recommendation_summary:
+            explanation = (
+                f"For {module.name}, the estimated probability is {posttest_probability:.1%}. "
+                f"{recommendation_summary}"
+            )
+        else:
+            explanation = (
+                f"For {module.name}, the estimated probability is {posttest_probability:.1%}. "
+                f"This is {('above' if recommendation == 'treat' else 'below' if recommendation == 'observe' else 'between')} "
+                f"the configured decision thresholds, so the suggested action is '{recommendation}'."
+            )
+
+    return AnalyzeResponse(
+        moduleId=module.id,
+        moduleName=module.name,
+        pretest=PretestSummary(baseProbability=base_pretest, adjustedProbability=adjusted_pretest, presetId=preset_id),
+        combinedLR=combined_lr_value,
+        posttestProbability=posttest_probability,
+        thresholds=thresholds,
+        recommendation=recommendation,  # type: ignore[arg-type]
+        recommendationSummary=recommendation_summary,
+        recommendedNextSteps=recommended_next_steps,
+        confidence=confidence,
+        appliedFindings=applied_findings,
+        stepwise=stepwise,
+        reasons=reasons,
+        riskFlags=risk_flags,
+        explanationForUser=explanation,
+    )
+
+
+@app.post("/v1/analyze-text", response_model=TextAnalyzeResponse)
+def analyze_text(req: TextAnalyzeRequest) -> TextAnalyzeResponse:
+    warnings: List[str] = []
+    parser_fallback_used = False
+
+    parsed = None
+    if req.parser_strategy == "rule":
+        parsed = parse_text_to_request(
+            store=store,
+            text=req.text,
+            module_hint=req.module_hint,
+            preset_hint=req.preset_hint,
+            include_explanation=req.include_explanation,
+        )
+    elif req.parser_strategy == "local":
+        try:
+            parsed = parse_text_with_local_model(
+                store=store,
+                text=req.text,
+                module_hint=req.module_hint,
+                preset_hint=req.preset_hint,
+                include_explanation=req.include_explanation,
+            )
+        except LocalParserError as exc:
+            if not req.allow_fallback:
+                raise HTTPException(status_code=422, detail=f"Local parser failed: {exc}")
+            parsed = parse_text_to_request(
+                store=store,
+                text=req.text,
+                module_hint=req.module_hint,
+                preset_hint=req.preset_hint,
+                include_explanation=req.include_explanation,
+            )
+            parser_fallback_used = True
+            warnings.append(f"Local parser unavailable/failed, used rule parser fallback: {exc}")
+    elif req.parser_strategy == "openai":
+        try:
+            parsed = parse_text_with_openai(
+                store=store,
+                text=req.text,
+                module_hint=req.module_hint,
+                preset_hint=req.preset_hint,
+                include_explanation=req.include_explanation,
+                parser_model=req.parser_model,
+            )
+        except LLMParserError as exc:
+            if not req.allow_fallback:
+                raise HTTPException(status_code=502, detail=f"OpenAI parser failed: {exc}")
+            parsed = parse_text_to_request(
+                store=store,
+                text=req.text,
+                module_hint=req.module_hint,
+                preset_hint=req.preset_hint,
+                include_explanation=req.include_explanation,
+            )
+            parser_fallback_used = True
+            warnings.append(f"OpenAI parser unavailable/failed, used rule parser fallback: {exc}")
+    else:  # auto
+        local_err: str | None = None
+        openai_err: str | None = None
+        openai_available = bool((os.getenv("OPENAI_API_KEY") or "").strip())
+
+        if openai_available:
+            try:
+                parsed = parse_text_with_openai(
+                    store=store,
+                    text=req.text,
+                    module_hint=req.module_hint,
+                    preset_hint=req.preset_hint,
+                    include_explanation=req.include_explanation,
+                    parser_model=req.parser_model,
+                )
+            except LLMParserError as exc:
+                openai_err = str(exc)
+
+        if parsed is None:
+            try:
+                parsed = parse_text_with_local_model(
+                    store=store,
+                    text=req.text,
+                    module_hint=req.module_hint,
+                    preset_hint=req.preset_hint,
+                    include_explanation=req.include_explanation,
+                )
+            except LocalParserError as exc:
+                local_err = str(exc)
+
+        if parsed is None:
+            if not req.allow_fallback:
+                detail_parts = []
+                if openai_err:
+                    detail_parts.append(f"OpenAI parser failed: {openai_err}")
+                if local_err:
+                    detail_parts.append(f"Local parser failed: {local_err}")
+                raise HTTPException(status_code=502, detail="; ".join(detail_parts) or "No parser available")
+            parsed = parse_text_to_request(
+                store=store,
+                text=req.text,
+                module_hint=req.module_hint,
+                preset_hint=req.preset_hint,
+                include_explanation=req.include_explanation,
+            )
+            parser_fallback_used = True
+            if openai_err:
+                warnings.append(f"OpenAI parser unavailable/failed: {openai_err}")
+            if local_err:
+                warnings.append(f"Local parser unavailable/failed: {local_err}")
+            warnings.append("Used rule parser fallback.")
+        elif openai_err:
+            warnings.append(f"OpenAI parser unavailable/failed, used local parser: {openai_err}")
+
+    if parsed is None:
+        raise HTTPException(status_code=500, detail="Text parser failed to produce a result.")
+
+    analysis: AnalyzeResponse | None = None
+    if req.run_analyze and parsed.parsed_request is not None:
+        try:
+            analysis = _analyze_internal(parsed.parsed_request)
+        except HTTPException as exc:
+            warnings.append(f"Parsed request could not be analyzed yet: {exc.detail}")
+            parsed.requires_confirmation = True
+
+    response = TextAnalyzeResponse(
+        parser=parsed.parser_name,
+        text=req.text,
+        parserFallbackUsed=parser_fallback_used,
+        parsedRequest=parsed.parsed_request,
+        understood=parsed.understood,
+        warnings=[*warnings, *parsed.warnings],
+        requiresConfirmation=parsed.requires_confirmation,
+        analysis=analysis,
+    )
+    _sync_text_result_references(text_result=response)
+    return response
+
+
+def _assistant_module_options() -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    for summary in store.list_summaries():
+        module = store.get(summary.id)
+        options.append(
+            AssistantOption(
+                value=summary.id,
+                label=_assistant_module_label(module) if module else summary.name,
+                description=(module.description[:120] + "...") if module and module.description and len(module.description) > 120 else (module.description if module else None),
+            )
+        )
+    return options
+
+
+def _assistant_module_label(module: SyndromeModule) -> str:
+    return ASSISTANT_MODULE_LABELS.get(module.id, module.name)
+
+
+def _assistant_review_options() -> List[AssistantOption]:
+    return [
+        AssistantOption(value="run_assessment", label="Run assessment"),
+        AssistantOption(value="add_more_details", label="Add more details"),
+        AssistantOption(value="restart", label="Start over"),
+    ]
+
+
+def _assistant_review_options_for_case(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    items_by_id = {item.id: item for item in module.items}
+    score_options = _assistant_missing_endo_score_options(state)
+    missing_item_specs = _top_missing_item_specs(
+        module,
+        text_result.parsed_request,
+        limit=3,
+        state=state,
+    )
+    if score_options:
+        options.append(
+            AssistantOption(
+                value="section:score_review",
+                label=f"{(_assistant_selected_endo_score_id(state) or 'Score').upper()} Components To Confirm",
+            )
+        )
+        options.extend(score_options)
+    if missing_item_specs:
+        if score_options:
+            options.append(AssistantOption(value="section:missing_findings", label="Important Missing Findings"))
+    for item_id, label in missing_item_specs:
+        item = items_by_id.get(item_id)
+        if item is None:
+            continue
+        present_text, absent_text = _assistant_case_item_text(item, module)
+        options.append(
+            AssistantOption(
+                value=f"insert_text:{item_id}",
+                label=label,
+                description="Use Present or Absent, then click to add this clarification to the draft.",
+                insertText=present_text,
+                absentText=absent_text,
+            )
+        )
+    options.extend(_assistant_review_options())
+    return options
+
+
+def _assistant_endo_blood_culture_options() -> List[AssistantOption]:
+    return [
+        AssistantOption(
+            value=value,
+            label=entry["label"],
+            description=entry["description"],
+        )
+        for value, entry in ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES.items()
+    ]
+
+
+def _assistant_selected_endo_score_id(state: AssistantState | None) -> str | None:
+    if state is None or state.module_id != "endo":
+        return None
+    context = state.endo_blood_culture_context
+    if not context:
+        return None
+    choice = ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES.get(context)
+    if choice is None:
+        return None
+    score_id = choice.get("score_id")
+    return str(score_id) if score_id else None
+
+
+def _assistant_merge_endo_score_factor_ids(state: AssistantState, factor_ids: List[str]) -> None:
+    if state.module_id != "endo" or not factor_ids:
+        return
+    current = list(state.endo_score_factor_ids)
+    for factor_id in factor_ids:
+        if factor_id in current:
+            continue
+        for exclusive_group in ENDO_ASSISTANT_EXCLUSIVE_SCORE_GROUPS:
+            if factor_id in exclusive_group:
+                current = [item for item in current if item not in exclusive_group]
+        current.append(factor_id)
+    state.endo_score_factor_ids = current
+
+
+def _assistant_endo_score_component_entries(state: AssistantState | None) -> List[tuple[str, str]]:
+    score_id = _assistant_selected_endo_score_id(state)
+    if not score_id:
+        return []
+    return list(ENDO_ASSISTANT_SCORE_COMPONENTS.get(score_id, ()))
+
+
+def _assistant_missing_endo_score_options(state: AssistantState | None) -> List[AssistantOption]:
+    if state is None or state.module_id != "endo":
+        return []
+    selected = set(state.endo_score_factor_ids)
+    score_name = _assistant_selected_endo_score_id(state)
+    if not score_name:
+        return []
+    options: List[AssistantOption] = []
+    for score_factor_id, label in _assistant_endo_score_component_entries(state):
+        if score_factor_id in selected:
+            continue
+        options.append(
+            AssistantOption(
+                value=f"add_score:{score_factor_id}",
+                label=label,
+                description=f"Click if this {score_name.upper()} component applies.",
+            )
+        )
+    return options
+
+
+def _assistant_infer_endo_score_factor_ids_from_text(state: AssistantState, text: str) -> List[str]:
+    if state.module_id != "endo":
+        return []
+    score_id = _assistant_selected_endo_score_id(state)
+    if not score_id:
+        return []
+    text_norm = _normalize_choice(text)
+    if not text_norm:
+        return []
+    inferred: List[str] = []
+    for score_factor_id, aliases in ENDO_ASSISTANT_SCORE_TEXT_ALIASES.get(score_id, {}).items():
+        if any(alias in text_norm for alias in aliases):
+            inferred.append(score_factor_id)
+    return inferred
+
+
+def _assistant_pretest_factor_entries(
+    module: SyndromeModule,
+    state: AssistantState | None = None,
+) -> List[tuple[str, str, float]]:
+    specs = resolve_pretest_factor_specs(module)
+    if module.id == "endo":
+        specs = [spec for spec in specs if spec.context_group != "score_overlap"]
+    return [(spec.id, spec.label, spec.weight) for spec in specs]
+
+
+def _module_supports_pretest_factors(module: SyndromeModule | None, state: AssistantState | None = None) -> bool:
+    if not module:
+        return False
+    return bool(_assistant_pretest_factor_entries(module, state) or _assistant_endo_score_component_entries(state))
+
+
+def _pretest_factor_label(module: SyndromeModule, factor_id: str) -> str:
+    spec = next((entry for entry in resolve_pretest_factor_specs(module) if entry.id == factor_id), None)
+    if spec is not None:
+        return spec.label
+    return factor_id.replace("_", " ").title()
+
+
+def _assistant_pretest_factor_options(
+    module: SyndromeModule,
+    selected_ids: List[str],
+    state: AssistantState | None = None,
+) -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    selected_set = set(selected_ids)
+    available_ids = {factor_id for factor_id, _, _ in _assistant_pretest_factor_entries(module, state)}
+    if available_ids:
+        if module.id == "endo":
+            options.append(AssistantOption(value="section:baseline", label="Baseline Modifiers"))
+        for spec in resolve_pretest_factor_specs(module):
+            if spec.id in selected_set or spec.id not in available_ids:
+                continue
+            factor_label = "Baseline host/context factor" if module.id == "endo" else "Baseline risk factor"
+            options.append(
+                AssistantOption(
+                    value=spec.id,
+                    label=spec.label,
+                    description=f"{factor_label} (OR-like weight {spec.weight:.2f}). Source: {spec.source_note}",
+                )
+            )
+    score_selected_set = set(state.endo_score_factor_ids if state is not None else [])
+    score_entries = _assistant_endo_score_component_entries(state)
+    if score_entries:
+        score_name = (_assistant_selected_endo_score_id(state) or "").upper()
+        options.append(AssistantOption(value="section:score", label=f"{score_name} Components"))
+        for score_factor_id, label in score_entries:
+            if score_factor_id in score_selected_set:
+                continue
+            options.append(
+                AssistantOption(
+                    value=score_factor_id,
+                    label=label,
+                    description=f"Used to auto-calculate the {score_name} score.",
+                )
+            )
+    options.extend(
+        [
+            AssistantOption(value="continue_to_case", label="Next"),
+            AssistantOption(value="restart", label="Start over"),
+        ]
+    )
+    return options
+
+
+def _assistant_selected_factor_labels(module: SyndromeModule, selected_ids: List[str]) -> List[str]:
+    return [_pretest_factor_label(module, factor_id) for factor_id in selected_ids]
+
+
+def _sync_pretest_factor_labels(state: AssistantState, module: SyndromeModule | None) -> None:
+    state.pretest_factor_labels = _assistant_selected_factor_labels(module, state.pretest_factor_ids) if module else []
+
+
+def _assistant_pretest_factor_prompt(
+    module: SyndromeModule,
+    selected_ids: List[str],
+    state: AssistantState | None = None,
+) -> str:
+    if module.id == "endo":
+        context = state.endo_blood_culture_context if state is not None else None
+        choice = ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES.get(context or "")
+        context_label = choice["label"] if choice else "this blood-culture context"
+        score_selected = len(state.endo_score_factor_ids) if state is not None else 0
+        if selected_ids or score_selected:
+            return (
+                "Add more baseline modifiers or score components, or continue to the case details that will update the probability of "
+                f"{_assistant_module_label(module)}."
+            )
+        return (
+            "Before we describe the case, let’s capture baseline modifiers and the relevant score components for "
+            f"{_assistant_module_label(module)} in {context_label}. Add any that apply, then click Next when you’re ready."
+        )
+    if selected_ids:
+        return "Add more risk factors or continue to tests that have been shown to affect the probability of this syndrome."
+    return (
+        f"Before we describe the case, let’s capture baseline factors that can raise the pretest probability for "
+        f"{_assistant_module_label(module)}. Add any that apply, then click Next when you’re ready."
+    )
+
+
+def _assistant_preset_options(module: SyndromeModule) -> List[AssistantOption]:
+    label_map = {
+        "Emergency department": "Emergency Dept",
+        "Primary care": "Primary Care",
+        "ICU, mechanically ventilated >48 hours": "ICU >48h",
+        "ICU, mechanically ventilated ≥5 days": "ICU >=5 days",
+    }
+    return [
+        AssistantOption(
+            value=p.id,
+            label=label_map.get(p.label, p.label),
+            description=f"Pretest {round(p.p * 100)}%",
+        )
+        for p in module.pretest_presets
+    ]
+
+
+def _select_endo_blood_culture_context_from_turn(req: AssistantTurnRequest) -> str | None:
+    selection = (req.selection or "").strip()
+    if selection in ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES:
+        return selection
+
+    message = _normalize_choice(req.message)
+    if not message:
+        return None
+
+    keyword_map = {
+        "staph": {"staph", "staphylococcus", "staph aureus", "staphylococcus aureus", "s aureus", "saureus", "sab"},
+        "strep": {"strep", "streptococcus", "viridans", "viridans group", "vgs", "nbhs", "s gallolyticus"},
+        "enterococcus": {"enterococcus", "enterococcal", "e faecalis", "enterococcus faecalis", "efaecalis"},
+        "other_unknown_pending": {"other", "unknown", "pending", "not sure", "not yet", "no cultures"},
+    }
+    for context_id, keywords in keyword_map.items():
+        if message == context_id:
+            return context_id
+        if any(keyword in message for keyword in keywords):
+            return context_id
+    return None
+
+
+def _select_endo_score_component_from_turn(state: AssistantState, req: AssistantTurnRequest) -> str | None:
+    valid_ids = {score_factor_id for score_factor_id, _ in _assistant_endo_score_component_entries(state)}
+    selection = (req.selection or "").strip()
+    if selection in valid_ids:
+        return selection
+
+    message = _normalize_choice(req.message)
+    if not message:
+        return None
+
+    for score_factor_id, label in _assistant_endo_score_component_entries(state):
+        label_normalized = label.lower()
+        if message == score_factor_id.lower() or message == label_normalized or message in label_normalized or label_normalized in message:
+            return score_factor_id
+    return None
+
+
+def _assistant_initial_state(req: AssistantTurnRequest) -> AssistantState:
+    if req.state is not None:
+        state = req.state
+    else:
+        state = AssistantState()
+    if req.parser_strategy is not None:
+        state.parser_strategy = req.parser_strategy
+    if req.parser_model is not None:
+        state.parser_model = req.parser_model.strip() or None
+    if req.allow_fallback is not None:
+        state.allow_fallback = req.allow_fallback
+    _sync_pretest_factor_labels(state, store.get(state.module_id or ""))
+    return state
+
+
+def _normalize_choice(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _append_case_text(existing: str | None, addition: str | None) -> str:
+    current = (existing or "").strip()
+    extra = (addition or "").strip()
+    if not current:
+        return extra
+    if not extra:
+        return current
+    return f"{current}\n{extra}"
+
+
+def _assistant_probid_controls(state: AssistantState) -> ProbIDControlsInput | None:
+    if not state.module_id:
+        return None
+    if state.module_id == "vap":
+        if not state.pretest_factor_ids:
+            return None
+        return ProbIDControlsInput(
+            vapRiskModifiers={
+                "enabled": True,
+                "selectedIds": state.pretest_factor_ids,
+            }
+        )
+    if state.module_id == "endo":
+        selected_score_id = _assistant_selected_endo_score_id(state)
+        endo_scores = None
+        if selected_score_id == "virsta":
+            selected = set(state.endo_score_factor_ids)
+            endo_scores = {
+                "virsta": {
+                    "enabled": True,
+                    "emboli": "virsta_emboli" in selected,
+                    "meningitis": "virsta_meningitis" in selected,
+                    "intracardiacDevice": "virsta_intracardiac_device" in selected,
+                    "priorEndocarditis": "virsta_prior_endocarditis" in selected,
+                    "nativeValveDisease": "virsta_native_valve_disease" in selected,
+                    "ivdu": "virsta_ivdu" in selected,
+                    "persistentBacteremia48h": "virsta_persistent_bacteremia_48h" in selected,
+                    "vertebralOsteomyelitis": "virsta_vertebral_osteomyelitis" in selected,
+                    "acquisition": "community_or_nhca" if "virsta_community_or_nhca" in selected else "nosocomial",
+                    "severeSepsisShock": "virsta_severe_sepsis_shock" in selected,
+                    "crpGt190": "virsta_crp_gt_190" in selected,
+                }
+            }
+        elif selected_score_id == "denova":
+            selected = set(state.endo_score_factor_ids)
+            endo_scores = {
+                "denova": {
+                    "enabled": True,
+                    "duration7d": "denova_duration_7d" in selected,
+                    "embolization": "denova_embolization" in selected,
+                    "numPositive2": "denova_num_positive_2" in selected,
+                    "originUnknown": "denova_origin_unknown" in selected,
+                    "valveDisease": "denova_valve_disease" in selected,
+                    "auscultationMurmur": "denova_auscultation_murmur" in selected,
+                }
+            }
+        elif selected_score_id == "handoc":
+            selected = set(state.endo_score_factor_ids)
+            species = "unspecified_other"
+            if "handoc_species_high_risk" in selected:
+                species = "s_gallolyticus_bovis_group"
+            elif "handoc_species_anginosus" in selected:
+                species = "s_anginosus_group"
+            endo_scores = {
+                "handoc": {
+                    "enabled": True,
+                    "heartMurmurValve": "handoc_heart_murmur_valve" in selected,
+                    "species": species,
+                    "numPositive2": "handoc_num_positive_2" in selected,
+                    "duration7d": "handoc_duration_7d" in selected,
+                    "onlyOneSpecies": "handoc_only_one_species" in selected,
+                    "communityAcquired": "handoc_community_acquired" in selected,
+                }
+            }
+        if not state.pretest_factor_ids and endo_scores is None:
+            return None
+        payload = {}
+        if state.pretest_factor_ids:
+            payload["endoRiskModifiers"] = {
+                "enabled": True,
+                "selectedIds": state.pretest_factor_ids,
+            }
+        if endo_scores is not None:
+            payload["endoScores"] = endo_scores
+        return ProbIDControlsInput(**payload)
+    return None
+
+
+def _apply_pretest_factors_to_parsed_request(
+    *,
+    module: SyndromeModule,
+    state: AssistantState,
+    parsed_request: AnalyzeRequest | None,
+) -> None:
+    if parsed_request is None:
+        return
+
+    if module.id in {"vap", "endo"}:
+        parsed_request.probid_controls = _assistant_probid_controls(state)
+        return
+
+    if not state.pretest_factor_ids:
+        return
+
+    pretest_factor_specs = {spec.id: spec for spec in resolve_pretest_factor_specs(module)}
+    selected_ids = [factor_id for factor_id in state.pretest_factor_ids if factor_id in pretest_factor_specs]
+    if not selected_ids:
+        return
+
+    raw_multiplier = 1.0
+    for factor_id in selected_ids:
+        raw_multiplier *= pretest_factor_specs[factor_id].weight
+    tuning = get_pretest_factor_tuning(module.id)
+    applied_multiplier = min(
+        max(pow(raw_multiplier, tuning.shrink_exponent), 1.0),
+        tuning.max_multiplier,
+    )
+    parsed_request.pretest_odds_multiplier *= applied_multiplier
+
+    selected_set = set(selected_ids)
+    parsed_request.findings = {
+        factor_id: state_value
+        for factor_id, state_value in parsed_request.findings.items()
+        if factor_id not in selected_set
+    }
+    parsed_request.ordered_finding_ids = [
+        factor_id for factor_id in parsed_request.ordered_finding_ids if factor_id not in selected_set
+    ]
+
+
+def _is_ready_to_assess(req: AssistantTurnRequest) -> bool:
+    if (req.selection or "").strip() == "run_assessment":
+        return True
+    normalized = _normalize_choice(req.message)
+    return normalized in {
+        "yes",
+        "yes run it",
+        "run it",
+        "analyze",
+        "analyse",
+        "looks good",
+        "thats it",
+        "that's it",
+        "nothing else",
+        "no",
+        "nope",
+    }
+
+
+def _top_missing_tests(
+    module: SyndromeModule,
+    parsed_request: AnalyzeRequest | None,
+    limit: int = 3,
+    *,
+    state: AssistantState | None = None,
+) -> List[str]:
+    return [label for _, label in _top_missing_item_specs(module, parsed_request, limit=limit, state=state)]
+
+
+ASSISTANT_MISSING_PRIORITY_BY_MODULE: Dict[str, List[str]] = {
+    "cap": [
+        "cap_cxr_consolidation",
+        "cap_wbc_ge15",
+        "cap_procal_high",
+        "cap_rvp_pos",
+    ],
+    "vap": [
+        "vap_cxr_infiltrate",
+        "vap_bal_qcx",
+        "vap_eta_qcx",
+        "vap_psb_qcx",
+        "vap_leukocytosis",
+        "vap_hypoxemia_pf240",
+        "vap_pct_elevated",
+    ],
+    "cdi": [
+        "cdi_naat_pos_tox_pos",
+        "cdi_naat_pos_tox_neg",
+        "cdi_naat_pos_tox_na",
+        "cdi_naat_neg",
+        "cdi_wbc15",
+        "cdi_cr",
+    ],
+    "uti": [
+        "ua_pyuria_pos",
+        "ua_le_pos",
+        "ua_nit_pos",
+        "ua_bact_pos",
+        "uti_cx_pos",
+    ],
+    "active_tb": [
+        "tb_cxr_suggestive",
+        "tb_ct_suggestive",
+        "tb_mtbpcr_sputum",
+        "tb_afb_smear_sputum",
+        "tb_culture_sputum",
+        "tb_mtbpcr_bal",
+        "tb_culture_bal",
+    ],
+    "pjp": [
+        "pjp_ct_typical",
+        "pjp_cxr_typical",
+        "pjp_pcr_bal",
+        "pjp_dfa",
+        "pjp_bdg_serum",
+        "pjp_ldh_high",
+    ],
+    "inv_candida": [
+        "icand_culture_positive",
+        "icand_t2candida",
+        "icand_bdg_serum",
+        "icand_mannan_antimannan",
+        "icand_pcr_blood",
+    ],
+    "inv_mold": [
+        "imi_ct_halo_sign",
+        "imi_serum_gm_odi10",
+        "imi_bal_gm_odi10",
+        "imi_aspergillus_pcr_bal",
+        "imi_serum_bdg",
+        "imi_mucorales_pcr_bal",
+        "imi_mucorales_pcr_blood",
+    ],
+    "pji": [
+        "pji_crp",
+        "pji_esr",
+        "pji_synovial_fluid_culture",
+        "pji_alpha_defensin_elisa",
+        "pji_alpha_defensin_lateral_flow",
+        "pji_xray_supportive",
+        "pji_synovial_pcr",
+    ],
+}
+
+
+def _assistant_missing_priority_ids(
+    module: SyndromeModule,
+    state: AssistantState | None = None,
+) -> List[str]:
+    if module.id != "endo":
+        return ASSISTANT_MISSING_PRIORITY_BY_MODULE.get(module.id, [])
+
+    context = state.endo_blood_culture_context if state is not None else None
+    if context == "staph":
+        micro_priority = [
+            "endo_bcx_saureus_multi",
+            "endo_bcx_major_persistent",
+            "endo_bcx_pos_not_major",
+            "endo_bcx_negative",
+        ]
+    elif context == "strep":
+        micro_priority = [
+            "endo_bcx_nbhs_multi",
+            "endo_bcx_pos_not_major",
+            "endo_bcx_negative",
+        ]
+    elif context == "enterococcus":
+        micro_priority = [
+            "endo_bcx_efaecalis_multi",
+            "endo_bcx_pos_not_major",
+            "endo_bcx_negative",
+        ]
+    else:
+        micro_priority = [
+            "endo_bcx_major_typical",
+            "endo_bcx_major_persistent",
+            "endo_bcx_pos_not_major",
+            "endo_bcx_negative",
+            "endo_coxiella_major",
+        ]
+
+    return [
+        *micro_priority,
+        "endo_tte",
+        "endo_tee",
+        "endo_pet",
+        "endo_esr_crp",
+        "endo_anemia",
+    ]
+
+
+def _top_missing_item_specs(
+    module: SyndromeModule,
+    parsed_request: AnalyzeRequest | None,
+    limit: int = 3,
+    *,
+    state: AssistantState | None = None,
+) -> List[tuple[str, str]]:
+    seen_ids = set((parsed_request.findings or {}).keys()) if parsed_request is not None else set()
+    seen_groups: set[str] = set()
+    ranked: List[tuple[float, str, str, str | None]] = []
+    items_by_id = {item.id: item for item in module.items}
+    suggestions: List[tuple[str, str]] = []
+    conflicting_ids = _assistant_conflicting_missing_ids(module, parsed_request)
+
+    for item_id in _assistant_missing_priority_ids(module, state):
+        item = items_by_id.get(item_id)
+        if item is None or item.id in seen_ids or item.id in conflicting_ids:
+            continue
+        if item.category not in {"lab", "imaging", "micro"}:
+            continue
+        if not _assistant_case_item_allowed(module, item, state):
+            continue
+        if item.group and item.group in seen_groups:
+            continue
+        suggestions.append((item.id, item.label))
+        if item.group:
+            seen_groups.add(item.group)
+        if len(suggestions) >= limit:
+            return suggestions
+
+    for item in module.items:
+        if item.id in seen_ids or item.id in conflicting_ids:
+            continue
+        if item.category not in {"lab", "imaging", "micro"}:
+            continue
+        if not _assistant_case_item_allowed(module, item, state):
+            continue
+
+        strength = 1.0
+        if item.lr_pos is not None and item.lr_pos > 0:
+            strength = max(strength, item.lr_pos if item.lr_pos >= 1 else (1 / item.lr_pos))
+        if item.lr_neg is not None and item.lr_neg > 0:
+            strength = max(strength, (1 / item.lr_neg) if item.lr_neg < 1 else item.lr_neg)
+        if strength <= 1.1:
+            continue
+        ranked.append((strength, item.id, item.label, item.group))
+
+    ranked.sort(key=lambda value: value[0], reverse=True)
+
+    for _, item_id, label, group in ranked:
+        if group and group in seen_groups:
+            continue
+        if any(existing_id == item_id for existing_id, _ in suggestions):
+            continue
+        suggestions.append((item_id, label))
+        if group:
+            seen_groups.add(group)
+        if len(suggestions) >= limit:
+            break
+    return suggestions
+
+
+def _assistant_conflicting_missing_ids(
+    module: SyndromeModule,
+    parsed_request: AnalyzeRequest | None,
+) -> set[str]:
+    if parsed_request is None or not parsed_request.findings:
+        return set()
+
+    present_ids = {
+        item_id
+        for item_id, state in parsed_request.findings.items()
+        if state == "present"
+    }
+    if not present_ids:
+        return set()
+
+    conflicts: set[str] = set()
+
+    if module.id == "endo":
+        endo_major_positive_ids = {
+            "endo_bcx_major_typical",
+            "endo_bcx_major_persistent",
+            "endo_bcx_saureus_multi",
+            "endo_bcx_efaecalis_multi",
+            "endo_bcx_nbhs_multi",
+            "endo_coxiella_major",
+        }
+        endo_nonmajor_or_negative_ids = {
+            "endo_bcx_pos_not_major",
+            "endo_bcx_negative",
+            "endo_micro_na",
+        }
+        if present_ids & endo_major_positive_ids:
+            conflicts.update(endo_nonmajor_or_negative_ids)
+        if "endo_bcx_pos_not_major" in present_ids:
+            conflicts.update((endo_major_positive_ids | {"endo_bcx_negative", "endo_micro_na"}) - {"endo_bcx_pos_not_major"})
+        if "endo_bcx_negative" in present_ids:
+            conflicts.update(endo_major_positive_ids | {"endo_bcx_pos_not_major", "endo_micro_na"})
+
+    if module.id == "cdi":
+        cdi_test_ids = {
+            "cdi_naat_pos_tox_pos",
+            "cdi_naat_pos_tox_neg",
+            "cdi_naat_pos_tox_na",
+            "cdi_naat_neg",
+            "cdi_test_na",
+        }
+        chosen_cdi_test_ids = present_ids & cdi_test_ids
+        if chosen_cdi_test_ids:
+            conflicts.update(cdi_test_ids - chosen_cdi_test_ids)
+
+    return conflicts
+
+
+def _lr_strength(item) -> float:
+    strength = 1.0
+    if item.lr_pos is not None and item.lr_pos > 0:
+        strength = max(strength, item.lr_pos if item.lr_pos >= 1 else (1 / item.lr_pos))
+    if item.lr_neg is not None and item.lr_neg > 0:
+        strength = max(strength, (1 / item.lr_neg) if item.lr_neg < 1 else item.lr_neg)
+    return strength
+
+
+def _assistant_case_item_text(item, module: SyndromeModule | None = None) -> tuple[str, str]:
+    alias_groups = COMMON_FINDING_ALIASES.get(item.id, {})
+    explicit_present = [phrase for phrase in alias_groups.get("present", []) if phrase and phrase.strip()]
+    explicit_absent = [phrase for phrase in alias_groups.get("absent", []) if phrase and phrase.strip()]
+    if explicit_present:
+        present_text = explicit_present[0]
+        absent_text = explicit_absent[0] if explicit_absent else f"No {present_text}"
+        return present_text, absent_text
+    if module is not None:
+        module_overrides = ASSISTANT_CASE_TEXT_OVERRIDES.get(module.id, {})
+        override = module_overrides.get(item.id)
+        if override is not None:
+            return override
+    return item.label, f"No {item.label}"
+
+
+def _assistant_case_item_by_id(module: SyndromeModule, item_id: str):
+    return next((item for item in module.items if item.id == item_id), None)
+
+
+def _assistant_case_item_allowed(module: SyndromeModule, item, state: AssistantState | None = None) -> bool:
+    label_lower = item.label.lower()
+    if "not done" in label_lower or "unknown" in label_lower:
+        return False
+    if module.id == "endo":
+        if item.id in ENDO_ASSISTANT_SCORE_ITEM_IDS:
+            return False
+        if item.category == "micro":
+            context = state.endo_blood_culture_context if state is not None else None
+            allowed_micro_ids = {
+                "staph": {
+                    "endo_bcx_saureus_multi",
+                    "endo_bcx_major_persistent",
+                    "endo_bcx_pos_not_major",
+                    "endo_bcx_negative",
+                },
+                "strep": {"endo_bcx_nbhs_multi", "endo_bcx_pos_not_major", "endo_bcx_negative"},
+                "enterococcus": {"endo_bcx_efaecalis_multi", "endo_bcx_pos_not_major", "endo_bcx_negative"},
+                "other_unknown_pending": {
+                    "endo_bcx_major_typical",
+                    "endo_bcx_major_persistent",
+                    "endo_bcx_pos_not_major",
+                    "endo_bcx_negative",
+                    "endo_coxiella_major",
+                },
+            }
+            allowed = allowed_micro_ids.get(context or "", set())
+            if allowed and item.id not in allowed:
+                return False
+    return True
+
+
+def _assistant_case_sections_for_module(module: SyndromeModule, state: AssistantState | None = None) -> List[str]:
+    sections: List[str] = []
+    for section in ENDO_CASE_SECTION_ORDER:
+        if _assistant_case_prompt_options(module, state, section_override=section):
+            sections.append(section)
+    return sections
+
+
+def _assistant_next_case_section(module: SyndromeModule, current: str | None, state: AssistantState | None = None) -> str | None:
+    sections = _assistant_case_sections_for_module(module, state)
+    if not sections:
+        return None
+    if current not in sections:
+        return sections[0]
+    idx = sections.index(current)
+    if idx + 1 >= len(sections):
+        return None
+    return sections[idx + 1]
+
+
+def _assistant_case_section_prompt(module: SyndromeModule, section: str | None) -> tuple[str, List[str]]:
+    if section == "exam_vitals":
+        return (
+            "Start with vital signs and physical examination findings. Add what is present or absent, then click Next to move to laboratory findings.",
+            [
+                "This section is for symptoms, exam findings, and bedside clinical features.",
+                "When you are done with this section, click Next to move forward.",
+            ],
+        )
+    if section == "lab":
+        if module.id == "endo":
+            return (
+                "Now add laboratory findings. The organism-specific score is already handled separately, so only enter non-score lab findings here.",
+                [
+                    "Use this section for non-score labs such as ESR/CRP or anemia.",
+                    "Click Next when you are ready to move to microbiology.",
+                ],
+            )
+        return (
+            "Now add laboratory findings. Then click Next to move to microbiology.",
+            [
+                "Use this section for laboratory findings relevant to this syndrome.",
+                "Click Next when you are ready to move to microbiology.",
+            ],
+        )
+    if section == "micro":
+        if module.id == "endo":
+            return (
+                "Now add microbiology findings for the selected organism pathway. Then click Next to move to radiology.",
+                [
+                    "Use the filtered microbiology options for blood-culture pattern and related microbiology.",
+                    "Click Next when you are ready to move to radiology.",
+                ],
+            )
+        return (
+            "Now add microbiology findings. Then click Next to move to radiology.",
+            [
+                "Use this section for culture, PCR, antigen, or other microbiology data.",
+                "Click Next when you are ready to move to radiology.",
+            ],
+        )
+    if section == "imaging":
+        return (
+            "Now add radiology and advanced imaging findings. After this section, I will review the full case before running the assessment.",
+            [
+                    "Use this section for imaging, TTE/TEE/PET-CT where applicable, and other radiology results.",
+                    "Click Next when you are ready for the review screen.",
+                ],
+        )
+    return (
+        "Describe the case in plain language.",
+        ["Add details, then continue."],
+    )
+
+
+def _assistant_case_prompt_options(
+    module: SyndromeModule,
+    state: AssistantState | None = None,
+    *,
+    section_override: str | None = None,
+) -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    if section_override:
+        if section_override == "exam_vitals":
+            group_specs = [("Symptoms", {"symptom"}), ("Vital Signs", {"vital"}), ("Physical Exam", {"exam"})]
+        elif section_override == "lab":
+            group_specs = [("Laboratory Tests", {"lab"})]
+        elif section_override == "micro":
+            group_specs = [("Microbiology", {"micro"})]
+        elif section_override == "imaging":
+            group_specs = [("Radiology", {"imaging"})]
+        else:
+            group_specs = []
+    else:
+        group_specs = [
+            ("Symptoms", {"symptom"}),
+            ("Vital Signs", {"vital"}),
+            ("Physical Exam", {"exam"}),
+            ("Laboratory Tests", {"lab"}),
+            ("Microbiology", {"micro"}),
+            ("Radiology", {"imaging"}),
+        ]
+
+    for group_label, categories in group_specs:
+        candidates = []
+        for item in module.items:
+            if item.category not in categories:
+                continue
+            if not _assistant_case_item_allowed(module, item, state):
+                continue
+            candidates.append(item)
+        candidates.sort(key=lambda item: (-_lr_strength(item), item.label))
+        if not candidates:
+            continue
+        options.append(
+            AssistantOption(
+                value=f"section:{group_label}",
+                label=group_label,
+                description=None,
+            )
+        )
+        if module.id == "active_tb" and group_label == "Symptoms":
+            for helper_id, helper_label, insert_text, absent_text in ACTIVE_TB_WHO_SYMPTOM_HELPERS:
+                options.append(
+                    AssistantOption(
+                        value=f"insert_text:{helper_id}",
+                        label=helper_label,
+                        description="WHO TB symptom shortcut. Click to add this symptom to the draft.",
+                        insertText=insert_text,
+                        absentText=absent_text,
+                    )
+                )
+        for item in candidates:
+            present_text, absent_text = _assistant_case_item_text(item, module)
+            options.append(
+                AssistantOption(
+                    value=f"insert_text:{item.id}",
+                    label=item.label,
+                    description="Click to add this to your draft.",
+                    insertText=present_text,
+                    absentText=absent_text,
+                )
+            )
+    options.append(
+        AssistantOption(
+            value="continue_case_draft",
+            label="Next",
+            description="Send your drafted case details.",
+        )
+    )
+    return options
+
+
+def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeResponse, state: AssistantState) -> str:
+    understood = text_result.understood
+    placeholder_tokens = {"none", "none.", "no", "n/a", "na"}
+
+    def _join_readable(items: List[str]) -> str:
+        if not items:
+            return ""
+        if len(items) == 1:
+            return items[0]
+        if len(items) == 2:
+            return f"{items[0]} and {items[1]}"
+        return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+    present_findings = [
+        finding for finding in understood.findings_present if finding and finding.strip().lower() not in placeholder_tokens
+    ]
+    absent_findings = [
+        finding for finding in understood.findings_absent if finding and finding.strip().lower() not in placeholder_tokens
+    ]
+    present_summary = _join_readable(present_findings) if present_findings else "no clear supporting findings yet"
+    summary = f"For {_assistant_module_label(module)}, I currently have: {present_summary}."
+    if absent_findings:
+        summary = (
+            f"For {_assistant_module_label(module)}, I currently have: {present_summary}. "
+            f"I also noted: {_join_readable(absent_findings)} as absent or negative."
+        )
+
+    missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
+    if missing_suggestions:
+        summary += " Useful next details to confirm are " + _join_readable(missing_suggestions) + "."
+    score_name = _assistant_selected_endo_score_id(state)
+    if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state):
+        summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before running the assessment."
+
+    if text_result.requires_confirmation:
+        summary += " If anything looks off, adjust it or add more details. If this looks right, run the assessment."
+    else:
+        summary += " If this looks right, run the assessment. Otherwise, add more details."
+    return summary
+
+
+def _assistant_parse_case_text(module: SyndromeModule, state: AssistantState) -> TextAnalyzeResponse:
+    text_result = analyze_text(
+        TextAnalyzeRequest(
+            text=state.case_text or "",
+            moduleHint=state.module_id,
+            presetHint=state.preset_id,
+            parserStrategy=state.parser_strategy,
+            parserModel=state.parser_model,
+            allowFallback=state.allow_fallback,
+            runAnalyze=False,
+            includeExplanation=True,
+        )
+    )
+    _apply_pretest_factors_to_parsed_request(module=module, state=state, parsed_request=text_result.parsed_request)
+    _sync_text_result_references(
+        text_result=text_result,
+        module=module,
+        selected_pretest_factor_ids=state.pretest_factor_ids,
+    )
+    return text_result
+
+
+def _assistant_infer_endo_blood_culture_context(
+    text_result: TextAnalyzeResponse,
+    message_text: str,
+) -> str:
+    findings = set((text_result.parsed_request.findings or {}).keys()) if text_result.parsed_request is not None else set()
+    if "endo_bcx_saureus_multi" in findings:
+        return "staph"
+    if "endo_bcx_nbhs_multi" in findings:
+        return "strep"
+    if "endo_bcx_efaecalis_multi" in findings:
+        return "enterococcus"
+
+    message_norm = _normalize_choice(message_text)
+    if any(token in message_norm for token in {"staphylococcus aureus", "s aureus", "staph aureus", "mrsa", "mssa"}):
+        return "staph"
+    if any(token in message_norm for token in {"viridans", "strep sanguinis", "strep mitis", "strep gordonii"}):
+        return "strep"
+    if "enterococcus" in message_norm or "e faecalis" in message_norm:
+        return "enterococcus"
+    return "other_unknown_pending"
+
+
+def _assistant_intake_case_from_text(
+    req: AssistantTurnRequest,
+    state: AssistantState,
+    *,
+    module_hint: str | None = None,
+    preset_hint: str | None = None,
+) -> AssistantTurnResponse | None:
+    message_text = (req.message or "").strip()
+    if not message_text:
+        return None
+
+    text_result = analyze_text(
+        TextAnalyzeRequest(
+            text=message_text,
+            moduleHint=module_hint,
+            presetHint=preset_hint,
+            parserStrategy=state.parser_strategy,
+            parserModel=state.parser_model,
+            allowFallback=state.allow_fallback,
+            runAnalyze=False,
+            includeExplanation=True,
+        )
+    )
+    if text_result.parsed_request is None:
+        return None
+
+    module = store.get(text_result.parsed_request.module_id or module_hint or "")
+    if module is None:
+        return None
+
+    inferred_context: str | None = None
+    inferred_score_factor_ids: List[str] = []
+    if module.id == "endo":
+        inferred_context = state.endo_blood_culture_context or _assistant_infer_endo_blood_culture_context(text_result, message_text)
+        preview_state = state.model_copy(deep=True)
+        preview_state.module_id = "endo"
+        preview_state.endo_blood_culture_context = inferred_context
+        inferred_score_factor_ids = _assistant_infer_endo_score_factor_ids_from_text(preview_state, message_text)
+
+    if not text_result.parsed_request.findings and not inferred_score_factor_ids:
+        return None
+
+    state.module_id = module.id
+    state.preset_id = text_result.parsed_request.preset_id or state.preset_id
+    state.case_text = message_text
+    state.case_section = None
+    if module.id == "endo":
+        if not state.endo_blood_culture_context:
+            state.endo_blood_culture_context = inferred_context
+        _assistant_merge_endo_score_factor_ids(state, inferred_score_factor_ids)
+    else:
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+    _sync_pretest_factor_labels(state, module)
+    _apply_pretest_factors_to_parsed_request(module=module, state=state, parsed_request=text_result.parsed_request)
+    _sync_text_result_references(
+        text_result=text_result,
+        module=module,
+        selected_pretest_factor_ids=state.pretest_factor_ids,
+    )
+    state.stage = "confirm_case"
+    return AssistantTurnResponse(
+        assistantMessage=(
+            "I parsed your case description and pre-populated the calculator inputs. "
+            + _build_case_review_message(module, text_result, state)
+        ),
+        state=state,
+        options=_assistant_review_options_for_case(module, text_result, state),
+        analysis=text_result,
+        tips=[
+            "Review what I extracted, then run the assessment or add more details.",
+            "You can still switch to the step-by-step pathway by choosing Add more details.",
+        ],
+    )
+
+
+def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
+    sel = (req.selection or "").strip()
+    if sel and store.get(sel):
+        return sel
+
+    msg = (req.message or "").strip()
+    if not msg:
+        return None
+
+    # Reuse text parser module inference for typed natural-language syndrome selection.
+    parsed = parse_text_to_request(
+        store=store,
+        text=msg,
+        include_explanation=False,
+    )
+    if parsed.understood.module_id:
+        return parsed.understood.module_id
+    return None
+
+
+def _select_preset_from_turn(module: SyndromeModule, req: AssistantTurnRequest) -> str | None:
+    candidates = {p.id: p for p in module.pretest_presets}
+    sel = (req.selection or "").strip()
+    if sel in candidates:
+        return sel
+
+    msg = _normalize_choice(req.message)
+    if not msg:
+        return None
+
+    for p in module.pretest_presets:
+        if msg == p.id.lower():
+            return p.id
+        if p.label.lower() in msg or msg in p.label.lower():
+            return p.id
+    return None
+
+
+def _select_pretest_factor_from_turn(module: SyndromeModule, req: AssistantTurnRequest) -> str | None:
+    selection = (req.selection or "").strip()
+    state = req.state
+    valid_ids = {factor_id for factor_id, _, _ in _assistant_pretest_factor_entries(module, state)}
+    if selection in valid_ids:
+        return selection
+
+    message = _normalize_choice(req.message)
+    if not message:
+        return None
+
+    for factor_id, label, _ in _assistant_pretest_factor_entries(module, state):
+        label = label.lower()
+        if message == factor_id.lower() or message == label or message in label or label in message:
+            return factor_id
+    return None
+
+
+@app.post("/v1/assistant/turn", response_model=AssistantTurnResponse)
+def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
+    state = _assistant_initial_state(req)
+    user_text = _normalize_choice(req.message or req.selection)
+    restart_requested = user_text in {"restart", "start over", "reset", "new case"}
+
+    if restart_requested:
+        state = AssistantState(
+            caseText=None,
+            endoScoreFactorIds=[],
+            caseSection=None,
+            pretestFactorIds=[],
+            pretestFactorLabels=[],
+            parserStrategy=state.parser_strategy,
+            parserModel=state.parser_model,
+            allowFallback=state.allow_fallback,
+        )
+
+    if state.stage == "select_module":
+        direct_case_response = _assistant_intake_case_from_text(req, state)
+        if direct_case_response is not None:
+            return direct_case_response
+
+        chosen_module_id = _select_module_from_turn(req)
+        if chosen_module_id:
+            state.module_id = chosen_module_id
+            state.endo_blood_culture_context = None
+            state.endo_score_factor_ids = []
+            state.case_section = None
+            module = store.get(chosen_module_id)
+            if module is None:
+                raise HTTPException(status_code=400, detail=f"Selected module '{chosen_module_id}' not found")
+            state.stage = "select_preset"
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Great, we’ll work on {_assistant_module_label(module)}. "
+                    "Which setting/pretest context fits this case best?"
+                ),
+                state=state,
+                options=_assistant_preset_options(module),
+                tips=[
+                    "You can click an option or type something like 'ED', 'ICU', or the preset name.",
+                    "Type 'restart' anytime to start over.",
+                ],
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage=(
+                "I’m your Uncertainty Assistant. You can describe a case in plain language, or choose a structured pathway from the options. Which syndrome would you like to approach today?"
+            ),
+            state=state,
+            options=_assistant_module_options(),
+            tips=[
+                "I’ll translate what you tell me into calculator inputs, show what I understood, and suggest important missing findings.",
+            ],
+        )
+
+    if state.stage == "select_preset":
+        if not state.module_id:
+            state.stage = "select_module"
+            return AssistantTurnResponse(
+                assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
+                state=state,
+                options=_assistant_module_options(),
+            )
+
+        module = store.get(state.module_id)
+        if module is None:
+            raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
+
+        direct_case_response = _assistant_intake_case_from_text(
+            req,
+            state,
+            module_hint=state.module_id,
+            preset_hint=state.preset_id,
+        )
+        if direct_case_response is not None:
+            return direct_case_response
+
+        chosen_preset_id = _select_preset_from_turn(module, req)
+        if chosen_preset_id:
+            state.preset_id = chosen_preset_id
+            state.endo_blood_culture_context = None
+            state.endo_score_factor_ids = []
+            state.case_section = None
+            state.pretest_factor_ids = []
+            state.pretest_factor_labels = []
+            state.case_text = None
+            preset = next((p for p in module.pretest_presets if p.id == chosen_preset_id), None)
+            if module.id == "endo":
+                state.stage = "select_endo_blood_culture_context"
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        f"Perfect. I’ll use {_assistant_module_label(module)} with {preset.label if preset else chosen_preset_id}. "
+                        "Before we continue, which blood-culture track best matches what you want to assess?"
+                    ),
+                    state=state,
+                    options=_assistant_endo_blood_culture_options(),
+                    tips=[
+                        "Choose Staphylococcus aureus, viridans-group streptococci, Enterococcus, or other/unknown/pending.",
+                        "This lets me show the most relevant organism-specific pretest modifiers next.",
+                    ],
+                )
+
+            if _module_supports_pretest_factors(module, state):
+                state.stage = "select_pretest_factors"
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        f"Perfect. I’ll use {_assistant_module_label(module)} with {preset.label if preset else chosen_preset_id}. "
+                        + _assistant_pretest_factor_prompt(module, state.pretest_factor_ids, state)
+                    ),
+                    state=state,
+                    options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
+                    tips=[
+                        "These are optional baseline risk modifiers that can increase the pretest probability.",
+                        "Select any that apply, then continue to the case description.",
+                    ],
+                )
+
+            state.stage = "describe_case"
+            state.case_section = _assistant_next_case_section(module, None, state)
+            prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Perfect. I’ll use {_assistant_module_label(module)} with {preset.label if preset else chosen_preset_id}. "
+                    + prompt
+                ),
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                tips=tips,
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage="Which setting/pretest context fits this case best?",
+            state=state,
+            options=_assistant_preset_options(module),
+            tips=["Choose one of the preset contexts or type a short phrase like 'ED' or 'ICU'."],
+        )
+
+    if state.stage == "select_endo_blood_culture_context":
+        if state.module_id != "endo":
+            state.stage = "select_preset"
+            module = store.get(state.module_id or "")
+            if module is None:
+                state.stage = "select_module"
+                return AssistantTurnResponse(
+                    assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
+                    state=state,
+                    options=_assistant_module_options(),
+                )
+            return AssistantTurnResponse(
+                assistantMessage="Which setting/pretest context fits this case best?",
+                state=state,
+                options=_assistant_preset_options(module),
+            )
+
+        module = store.get(state.module_id)
+        if module is None:
+            raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
+
+        direct_case_response = _assistant_intake_case_from_text(
+            req,
+            state,
+            module_hint=state.module_id,
+            preset_hint=state.preset_id,
+        )
+        if direct_case_response is not None:
+            return direct_case_response
+
+        chosen_context = _select_endo_blood_culture_context_from_turn(req)
+        if chosen_context:
+            state.endo_blood_culture_context = chosen_context
+            state.endo_score_factor_ids = []
+            state.case_section = None
+            state.pretest_factor_ids = []
+            _sync_pretest_factor_labels(state, module)
+            choice = ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES[chosen_context]
+            context_label = choice["label"]
+            if _module_supports_pretest_factors(module, state):
+                state.stage = "select_pretest_factors"
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        f"Understood. We’ll use the {context_label} blood-culture pathway. "
+                        + _assistant_pretest_factor_prompt(module, state.pretest_factor_ids, state)
+                    ),
+                    state=state,
+                    options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
+                    tips=[
+                        "These are optional baseline host/context modifiers before the diagnostic findings.",
+                        "Pick any that apply, then continue to the case details.",
+                    ],
+                )
+
+            state.stage = "describe_case"
+            state.case_section = _assistant_next_case_section(module, None, state)
+            prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Understood. We’ll use the {context_label} blood-culture pathway. "
+                    + prompt
+                ),
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                tips=tips,
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage=(
+                "Before we continue, which blood-culture track best matches what you want to assess for endocarditis?"
+            ),
+            state=state,
+            options=_assistant_endo_blood_culture_options(),
+            tips=[
+                "Choose Staphylococcus aureus, viridans-group streptococci, Enterococcus, or other/unknown/pending.",
+                "If cultures are pending or not one of those groups, choose other/unknown/pending.",
+            ],
+        )
+
+    if state.stage == "select_pretest_factors":
+        if not state.module_id:
+            state.stage = "select_module"
+            return AssistantTurnResponse(
+                assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
+                state=state,
+                options=_assistant_module_options(),
+            )
+
+        module = store.get(state.module_id)
+        if module is None:
+            raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
+
+        selection = (req.selection or "").strip()
+        user_choice = _normalize_choice(req.message)
+
+        direct_case_response = _assistant_intake_case_from_text(
+            req,
+            state,
+            module_hint=state.module_id,
+            preset_hint=state.preset_id,
+        )
+        if direct_case_response is not None:
+            return direct_case_response
+
+        if selection == "skip_factors" or user_choice in {"skip", "none", "none apply", "no factors"}:
+            state.pretest_factor_ids = []
+            state.endo_score_factor_ids = []
+            _sync_pretest_factor_labels(state, module)
+            state.stage = "describe_case"
+            state.case_section = _assistant_next_case_section(module, None, state)
+            skip_message = "Understood. We’ll skip the baseline pretest modifiers. "
+            if module.id == "endo":
+                skip_message = "Understood. We’ll skip the baseline modifiers and leave the organism-specific score at its default starting state. "
+            prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    skip_message
+                    + prompt
+                ),
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                tips=tips,
+            )
+
+        if selection == "continue_to_case" or user_choice in {"continue", "next", "done", "thats all", "that's all"}:
+            state.stage = "describe_case"
+            state.case_section = _assistant_next_case_section(module, None, state)
+            prefix = ""
+            if state.pretest_factor_labels:
+                prefix = "I’ll carry forward your selected pretest-risk factors. "
+            if module.id == "endo" and _assistant_selected_endo_score_id(state):
+                prefix += f"I’ll auto-calculate {_assistant_selected_endo_score_id(state).upper()} from the score components you selected. "
+            prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    prefix
+                    + prompt
+                ),
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                tips=tips,
+            )
+
+        selected_factor_id = _select_pretest_factor_from_turn(module, req)
+        if selected_factor_id:
+            if selected_factor_id in state.pretest_factor_ids:
+                state.pretest_factor_ids = [item for item in state.pretest_factor_ids if item != selected_factor_id]
+                action = "Okay, removed"
+            else:
+                state.pretest_factor_ids.append(selected_factor_id)
+                action = "Great! Added"
+            _sync_pretest_factor_labels(state, module)
+            label = _pretest_factor_label(module, selected_factor_id)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"{action} pretest-risk factor: {label}. "
+                    + _assistant_pretest_factor_prompt(module, state.pretest_factor_ids, state)
+                ),
+                state=state,
+                options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
+                tips=[
+                    "Click another factor to add or remove it.",
+                    "When you’re done, continue to the case description.",
+                ],
+            )
+
+        selected_score_factor_id = _select_endo_score_component_from_turn(state, req) if module.id == "endo" else None
+        if selected_score_factor_id:
+            if selected_score_factor_id in state.endo_score_factor_ids:
+                state.endo_score_factor_ids = [item for item in state.endo_score_factor_ids if item != selected_score_factor_id]
+                action = "Okay, removed"
+            else:
+                for exclusive_group in ENDO_ASSISTANT_EXCLUSIVE_SCORE_GROUPS:
+                    if selected_score_factor_id in exclusive_group:
+                        state.endo_score_factor_ids = [item for item in state.endo_score_factor_ids if item not in exclusive_group]
+                state.endo_score_factor_ids.append(selected_score_factor_id)
+                action = "Great! Added"
+            label = next(
+                (entry_label for entry_id, entry_label in _assistant_endo_score_component_entries(state) if entry_id == selected_score_factor_id),
+                selected_score_factor_id.replace("_", " "),
+            )
+            score_name = (_assistant_selected_endo_score_id(state) or "score").upper()
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"{action} {score_name} component: {label}. "
+                    + _assistant_pretest_factor_prompt(module, state.pretest_factor_ids, state)
+                ),
+                state=state,
+                options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
+                tips=[
+                    "Add any other baseline modifiers or score components that apply.",
+                    "When you’re done, continue to the case description.",
+                ],
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage=_assistant_pretest_factor_prompt(module, state.pretest_factor_ids, state),
+            state=state,
+            options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
+            tips=[
+                "Click any factor or score component that applies, then continue.",
+                "Click Next when you’re ready to move on.",
+            ],
+        )
+
+    if state.stage == "describe_case":
+        module = store.get(state.module_id or "")
+        if module is None:
+            raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
+
+        selection = (req.selection or "").strip()
+        message_text = (req.message or "").strip()
+        if not message_text and not (state.case_section and selection == "continue_case_draft"):
+            if state.case_section:
+                prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+                return AssistantTurnResponse(
+                    assistantMessage=prompt,
+                    state=state,
+                    options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                    tips=tips,
+                )
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "Describe the case in plain language. Start with vital signs, then physical examination findings, then laboratory, microbiology, and radiographic tests below. Use the Present/Absent toggle if a finding is negative."
+                ),
+                state=state,
+                options=_assistant_case_prompt_options(module, state),
+                tips=[
+                    "Use the Present/Absent toggle, then click the suggested findings below to build the case more quickly.",
+                    "You can still type the full case naturally if you prefer.",
+                ],
+            )
+
+        already_appended = False
+        if state.case_section:
+            current_section = state.case_section
+            if selection == "continue_case_draft":
+                if message_text:
+                    state.case_text = _append_case_text(state.case_text, message_text)
+                    already_appended = True
+                next_section = _assistant_next_case_section(module, current_section, state)
+                if next_section is not None:
+                    state.case_section = next_section
+                    prompt, tips = _assistant_case_section_prompt(module, next_section)
+                    return AssistantTurnResponse(
+                        assistantMessage=prompt,
+                        state=state,
+                        options=_assistant_case_prompt_options(module, state, section_override=next_section),
+                        tips=tips,
+                    )
+                if not (state.case_text or "").strip():
+                    prompt, tips = _assistant_case_section_prompt(module, current_section)
+                    return AssistantTurnResponse(
+                        assistantMessage=(
+                            "I still need at least one clinical detail before I can review the case. " + prompt
+                        ),
+                        state=state,
+                        options=_assistant_case_prompt_options(module, state, section_override=current_section),
+                        tips=tips,
+                    )
+                state.case_section = None
+            elif message_text:
+                state.case_text = _append_case_text(state.case_text, message_text)
+                already_appended = True
+                next_section = _assistant_next_case_section(module, current_section, state)
+                next_label = ENDO_CASE_SECTION_LABELS.get(next_section or "", "review")
+                current_label = ENDO_CASE_SECTION_LABELS.get(current_section, current_section.replace("_", " "))
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        f"Added that to {current_label}. Add more for this section, or click Next to continue to {next_label}."
+                    ),
+                    state=state,
+                    options=_assistant_case_prompt_options(module, state, section_override=current_section),
+                    tips=[
+                        "You can keep adding details for this section, or click Next when you are ready.",
+                        "The review screen will appear after the final imaging section.",
+                    ],
+                )
+
+        if not already_appended:
+            state.case_text = _append_case_text(state.case_text, req.message)
+        text_result = _assistant_parse_case_text(module, state)
+        if text_result.parsed_request is None:
+            state.stage = "describe_case"
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "I parsed your description, but I need confirmation before I can complete the analysis. "
+                    "Please review the parsed request and warnings."
+                ),
+                state=state,
+                options=[
+                    AssistantOption(value="restart", label="Start over"),
+                    AssistantOption(value="describe_more", label="Add more details"),
+                ],
+                analysis=text_result,
+                tips=[
+                    "Look at `parsedRequest` and `warnings` in the response.",
+                    "You can submit another describe_case turn with more detail, or restart.",
+                ],
+            )
+
+        state.stage = "confirm_case"
+        return AssistantTurnResponse(
+            assistantMessage=_build_case_review_message(module, text_result, state),
+            state=state,
+            options=_assistant_review_options_for_case(module, text_result, state),
+            analysis=text_result,
+            tips=[
+                "Review the parsed request before running the assessment.",
+                "Use the Add buttons to fill in suggested missing findings, or type another detail.",
+            ],
+        )
+
+    if state.stage == "confirm_case":
+        if not state.case_text:
+            state.stage = "describe_case"
+            return AssistantTurnResponse(
+                assistantMessage="Describe the case in plain language and I’ll translate it into ProbID inputs.",
+                state=state,
+                options=[],
+                tips=["Include syndrome details, tests, and negatives if you have them."],
+            )
+
+        module = store.get(state.module_id or "")
+        if module is None:
+            raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
+
+        selection = (req.selection or "").strip()
+        if selection.startswith("add_missing:"):
+            item_id = selection.split(":", 1)[1]
+            item = _assistant_case_item_by_id(module, item_id)
+            if item is None or not _assistant_case_item_allowed(module, item, state):
+                text_result = _assistant_parse_case_text(module, state)
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "That suggested finding is no longer available for this pathway. "
+                        + _build_case_review_message(module, text_result, state)
+                    ),
+                    state=state,
+                    options=_assistant_review_options_for_case(module, text_result, state),
+                    analysis=text_result,
+                    tips=[
+                        "Use the remaining Add buttons or type another detail.",
+                        "Run the assessment when the parsed request looks complete.",
+                    ],
+                )
+            present_text, _ = _assistant_case_item_text(item, module)
+            existing_lines = {line.strip().lower() for line in (state.case_text or "").splitlines() if line.strip()}
+            if present_text.strip().lower() not in existing_lines:
+                state.case_text = _append_case_text(state.case_text, present_text)
+            text_result = _assistant_parse_case_text(module, state)
+            return AssistantTurnResponse(
+                assistantMessage=_build_case_review_message(module, text_result, state),
+                state=state,
+                options=_assistant_review_options_for_case(module, text_result, state),
+                analysis=text_result,
+                tips=[
+                    f"I added '{item.label}' to the case and refreshed the review.",
+                    "Use the remaining Add buttons or run the assessment.",
+                ],
+            )
+
+        if selection.startswith("add_score:"):
+            score_factor_id = selection.split(":", 1)[1]
+            valid_ids = {entry_id for entry_id, _ in _assistant_endo_score_component_entries(state)}
+            if score_factor_id in valid_ids:
+                _assistant_merge_endo_score_factor_ids(state, [score_factor_id])
+            text_result = _assistant_parse_case_text(module, state)
+            score_label = next(
+                (entry_label for entry_id, entry_label in _assistant_endo_score_component_entries(state) if entry_id == score_factor_id),
+                score_factor_id.replace("_", " "),
+            )
+            return AssistantTurnResponse(
+                assistantMessage=_build_case_review_message(module, text_result, state),
+                state=state,
+                options=_assistant_review_options_for_case(module, text_result, state),
+                analysis=text_result,
+                tips=[
+                    f"I added the score component '{score_label}' and refreshed the review.",
+                    "Continue confirming score components, add findings, or run the assessment.",
+                ],
+            )
+
+        if selection == "add_more_details" and not (req.message and req.message.strip()):
+            state.stage = "describe_case"
+            state.case_section = _assistant_next_case_section(module, None, state)
+            prompt, tips = _assistant_case_section_prompt(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage="Add anything else you want me to factor in. " + prompt,
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                tips=tips,
+            )
+
+        if _is_ready_to_assess(req):
+            text_result = _assistant_parse_case_text(module, state)
+            if text_result.parsed_request is not None:
+                try:
+                    text_result.analysis = _analyze_internal(text_result.parsed_request)
+                except HTTPException as exc:
+                    text_result.warnings.append(f"Parsed request could not be analyzed yet: {exc.detail}")
+                    text_result.requires_confirmation = True
+            if text_result.analysis is None:
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "I still need clarification before I can complete the assessment. "
+                        "Please review the parsed request and add any missing details."
+                    ),
+                    state=state,
+                    options=_assistant_review_options_for_case(module, text_result, state),
+                    analysis=text_result,
+                    tips=[
+                        "Use the parsed request, warnings, and Add buttons as the checklist.",
+                        "You can add more details or restart.",
+                    ],
+                )
+
+            state.stage = "done"
+            recommendation = text_result.analysis.recommendation
+            probability = round(text_result.analysis.posttest_probability * 100)
+            recommendation_line = text_result.analysis.recommendation_summary or f"Suggested action: '{recommendation}'."
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Here’s my assessment: {text_result.analysis.module_name} estimated probability is {probability}% "
+                    f"{recommendation_line}"
+                ),
+                state=state,
+                options=[
+                    AssistantOption(value="restart", label="Start another case"),
+                ],
+                analysis=text_result,
+                tips=[
+                    "Review `understood` to confirm what I extracted from your text.",
+                    "If you want to change the case details, start another case and re-run it.",
+                ],
+            )
+
+        if req.message and req.message.strip():
+            state.case_text = _append_case_text(state.case_text, req.message)
+            if module.id == "endo":
+                _assistant_merge_endo_score_factor_ids(state, _assistant_infer_endo_score_factor_ids_from_text(state, req.message))
+            text_result = _assistant_parse_case_text(module, state)
+            return AssistantTurnResponse(
+                assistantMessage=_build_case_review_message(module, text_result, state),
+                state=state,
+                options=_assistant_review_options_for_case(module, text_result, state),
+                analysis=text_result,
+                tips=[
+                    "I updated the parsed request with your new detail.",
+                    "Use Present or Absent with the suggestion buttons, or run the assessment when the review looks complete.",
+                ],
+            )
+
+        text_result = _assistant_parse_case_text(module, state)
+        return AssistantTurnResponse(
+            assistantMessage=_build_case_review_message(module, text_result, state),
+            state=state,
+            options=_assistant_review_options_for_case(module, text_result, state),
+            analysis=text_result,
+            tips=[
+                "Run the assessment if the parsed request looks right.",
+                "Otherwise, use Present or Absent with the suggestion buttons, or add more details.",
+            ],
+        )
+
+    # done / fallback
+    if restart_requested:
+        state = AssistantState(
+            caseText=None,
+            endoScoreFactorIds=[],
+            caseSection=None,
+            parserStrategy=state.parser_strategy,
+            parserModel=state.parser_model,
+            allowFallback=state.allow_fallback,
+        )
+    else:
+        state.stage = "select_module"
+        state.module_id = None
+        state.preset_id = None
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        state.case_section = None
+        state.case_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+
+    return AssistantTurnResponse(
+        assistantMessage="Ready for another case. Which syndrome would you like to approach today?",
+        state=state,
+        options=_assistant_module_options(),
+        tips=["Type 'restart' anytime to reset the conversation."],
+    )

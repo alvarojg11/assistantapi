@@ -1,0 +1,354 @@
+[
+  {
+    "text": "Emergency department patient with shaking chills, shortness of breath, oxygen saturation 92%, and a patchy right lower lobe infiltrate on chest film.",
+    "moduleId": "cap",
+    "presetId": "ed_adult",
+    "findings": {
+      "cap_fever": "present",
+      "cap_dyspnea": "present",
+      "cap_hypox": "present",
+      "cap_cxr_consolidation": "present"
+    },
+    "orderedFindingIds": [
+      "cap_fever",
+      "cap_dyspnea",
+      "cap_hypox",
+      "cap_cxr_consolidation"
+    ],
+    "notes": "CAP example using synonyms that are not all covered by the rule parser."
+  },
+  {
+    "text": "Clinic visit for cough, pleuritic chest pain, afebrile, and a clear chest x-ray.",
+    "moduleId": "cap",
+    "presetId": "pc_adult",
+    "findings": {
+      "cap_cough": "present",
+      "cap_pleuritic": "present",
+      "cap_fever": "absent",
+      "cap_cxr_consolidation": "absent"
+    },
+    "orderedFindingIds": [
+      "cap_cough",
+      "cap_pleuritic",
+      "cap_fever",
+      "cap_cxr_consolidation"
+    ]
+  },
+  {
+    "text": "ED patient with cough, rales, tachypnea, and procalcitonin elevated.",
+    "moduleId": "cap",
+    "presetId": "ed_adult",
+    "findings": {
+      "cap_cough": "present",
+      "cap_crackles": "present",
+      "cap_rr": "present",
+      "cap_procal_high": "present"
+    },
+    "orderedFindingIds": [
+      "cap_cough",
+      "cap_crackles",
+      "cap_rr",
+      "cap_procal_high"
+    ]
+  },
+  {
+    "text": "Ventilated ICU patient for 6 days with spiking temperature, thick tracheal secretions, new left basilar opacity, and elevated procalcitonin.",
+    "moduleId": "vap",
+    "presetId": "vap_icu_ge5d",
+    "findings": {
+      "vap_fever": "present",
+      "vap_purulent_secretions": "present",
+      "vap_cxr_infiltrate": "present",
+      "vap_pct_elevated": "present"
+    },
+    "orderedFindingIds": [
+      "vap_fever",
+      "vap_purulent_secretions",
+      "vap_cxr_infiltrate",
+      "vap_pct_elevated"
+    ]
+  },
+  {
+    "text": "ICU patient ventilated 3 days with no fever, clear chest radiograph, and no meaningful respiratory sample yet.",
+    "moduleId": "vap",
+    "presetId": "vap_icu_gt48h",
+    "findings": {
+      "vap_fever": "absent",
+      "vap_cxr_infiltrate": "absent",
+      "vap_resp_micro_na": "present"
+    },
+    "orderedFindingIds": [
+      "vap_fever",
+      "vap_cxr_infiltrate",
+      "vap_resp_micro_na"
+    ]
+  },
+  {
+    "text": "Mechanically ventilated ICU patient with worsening oxygenation, leukocytosis, and BAL culture positive.",
+    "moduleId": "vap",
+    "presetId": "vap_icu_gt48h",
+    "findings": {
+      "vap_hypoxemia_pf240": "present",
+      "vap_leukocytosis": "present",
+      "vap_bal_qcx": "present"
+    },
+    "orderedFindingIds": [
+      "vap_hypoxemia_pf240",
+      "vap_leukocytosis",
+      "vap_bal_qcx"
+    ]
+  },
+  {
+    "text": "Outpatient with burning urination, urinary frequency, and urine nitrites positive.",
+    "moduleId": "uti",
+    "presetId": "uti_comm",
+    "findings": {
+      "uti_dysuria": "present",
+      "uti_freq": "present",
+      "ua_nit_pos": "present"
+    },
+    "orderedFindingIds": [
+      "uti_dysuria",
+      "uti_freq",
+      "ua_nit_pos"
+    ]
+  },
+  {
+    "text": "ED patient with flank pain, fever, CVA tenderness, pyuria, and leukocyte esterase positive.",
+    "moduleId": "uti",
+    "presetId": "uti_hc",
+    "findings": {
+      "uti_fever": "present",
+      "uti_cva": "present",
+      "ua_pyuria_pos": "present",
+      "ua_le_pos": "present"
+    },
+    "orderedFindingIds": [
+      "uti_fever",
+      "uti_cva",
+      "ua_pyuria_pos",
+      "ua_le_pos"
+    ]
+  },
+  {
+    "text": "Inpatient with watery diarrhea, abdominal cramping, recent antibiotics, and stool PCR positive but toxin negative.",
+    "moduleId": "cdi",
+    "presetId": "inpt",
+    "findings": {
+      "cdi_watery": "present",
+      "cdi_abd_pain": "present",
+      "cdi_abx": "present",
+      "cdi_naat_pos_tox_neg": "present"
+    },
+    "orderedFindingIds": [
+      "cdi_watery",
+      "cdi_abd_pain",
+      "cdi_abx",
+      "cdi_naat_pos_tox_neg"
+    ]
+  },
+  {
+    "text": "Patient with infective endocarditis concern after Staph aureus bacteremia, persistent positive blood cultures, prosthetic valve, and vegetation seen on transthoracic echo.",
+    "moduleId": "endo",
+    "presetId": "endo_low",
+    "findings": {
+      "endo_bcx_saureus_multi": "present",
+      "endo_bcx_major_persistent": "present",
+      "endo_tte": "present"
+    },
+    "orderedFindingIds": [
+      "endo_bcx_saureus_multi",
+      "endo_bcx_major_persistent",
+      "endo_tte"
+    ]
+  },
+  {
+    "text": "ED patient with fever, new murmur, and Duke major typical blood cultures for endocarditis.",
+    "moduleId": "endo",
+    "presetId": "endo_low",
+    "findings": {
+      "endo_fever": "present",
+      "endo_new_murmur": "present",
+      "endo_bcx_major_typical": "present"
+    },
+    "orderedFindingIds": [
+      "endo_fever",
+      "endo_new_murmur",
+      "endo_bcx_major_typical"
+    ]
+  },
+  {
+    "text": "Clinic patient with three weeks of cough, weight loss, positive QuantiFERON, sputum Xpert positive, and chest x-ray suggestive of pulmonary tuberculosis.",
+    "moduleId": "active_tb",
+    "presetId": "tb_low",
+    "findings": {
+      "tb_sym_cough_2w": "present",
+      "tb_qft": "present",
+      "tb_mtbpcr_sputum": "present",
+      "tb_cxr_suggestive": "present"
+    },
+    "orderedFindingIds": [
+      "tb_sym_cough_2w",
+      "tb_qft",
+      "tb_mtbpcr_sputum",
+      "tb_cxr_suggestive"
+    ]
+  },
+  {
+    "text": "Hospitalized patient with TB exposure, fever and night sweats, positive sputum AFB smear, and chest imaging concerning for active TB.",
+    "moduleId": "active_tb",
+    "presetId": "tb_intermediate",
+    "findings": {
+      "tb_contact": "present",
+      "tb_sym_any": "present",
+      "tb_afb_smear_sputum": "present",
+      "tb_cxr_suggestive": "present"
+    },
+    "orderedFindingIds": [
+      "tb_contact",
+      "tb_sym_any",
+      "tb_afb_smear_sputum",
+      "tb_cxr_suggestive"
+    ]
+  },
+  {
+    "text": "ICU patient with HIV and low CD4 count, not on TMP-SMX prophylaxis, hypoxemic, serum beta-D-glucan positive, and CT with diffuse ground-glass opacities typical for PJP.",
+    "moduleId": "pjp",
+    "presetId": "pjp_high",
+    "findings": {
+      "pjp_host_hiv_cd4_sot": "present",
+      "pjp_host_no_ppx": "present",
+      "pjp_vital_hypoxemia": "present",
+      "pjp_bdg_serum": "present",
+      "pjp_ct_typical": "present"
+    },
+    "orderedFindingIds": [
+      "pjp_host_hiv_cd4_sot",
+      "pjp_host_no_ppx",
+      "pjp_vital_hypoxemia",
+      "pjp_bdg_serum",
+      "pjp_ct_typical"
+    ]
+  },
+  {
+    "text": "Hospitalized transplant patient with fever, elevated LDH, bronchoalveolar lavage PCR positive for Pneumocystis, and chest x-ray typical for PJP.",
+    "moduleId": "pjp",
+    "presetId": "pjp_moderate",
+    "findings": {
+      "pjp_host_hiv_cd4_sot": "present",
+      "pjp_vital_fever": "present",
+      "pjp_ldh_high": "present",
+      "pjp_pcr_bal": "present",
+      "pjp_cxr_typical": "present"
+    },
+    "orderedFindingIds": [
+      "pjp_host_hiv_cd4_sot",
+      "pjp_vital_fever",
+      "pjp_ldh_high",
+      "pjp_pcr_bal",
+      "pjp_cxr_typical"
+    ]
+  },
+  {
+    "text": "ICU patient on total parenteral nutrition after recent abdominal surgery with septic shock and a positive T2Candida panel.",
+    "moduleId": "inv_candida",
+    "presetId": "icand_high",
+    "findings": {
+      "icand_component_tpn": "present",
+      "icand_component_surgery": "present",
+      "icand_component_severe_sepsis": "present",
+      "icand_t2candida": "present"
+    },
+    "orderedFindingIds": [
+      "icand_component_tpn",
+      "icand_component_surgery",
+      "icand_component_severe_sepsis",
+      "icand_t2candida"
+    ]
+  },
+  {
+    "text": "Hospitalized patient with multifocal Candida colonization, serum beta-D-glucan positive, mannan plus anti-mannan positive, and Candida PCR detected in blood.",
+    "moduleId": "inv_candida",
+    "presetId": "icand_icu_risk",
+    "findings": {
+      "icand_component_multifocal_colonization": "present",
+      "icand_bdg_serum": "present",
+      "icand_mannan_antimannan": "present",
+      "icand_pcr_blood": "present"
+    },
+    "orderedFindingIds": [
+      "icand_component_multifocal_colonization",
+      "icand_bdg_serum",
+      "icand_mannan_antimannan",
+      "icand_pcr_blood"
+    ]
+  },
+  {
+    "text": "Neutropenic leukemia patient with persistent fever despite antibiotics, chest CT halo sign, and bronchoalveolar lavage galactomannan positive.",
+    "moduleId": "inv_mold",
+    "presetId": "imi_heme_high",
+    "findings": {
+      "imi_host_neutropenia_hsct": "present",
+      "imi_host_hematologic_malignancy": "present",
+      "imi_fever_refractory": "present",
+      "imi_ct_halo_sign": "present",
+      "imi_bal_gm_odi10": "present"
+    },
+    "orderedFindingIds": [
+      "imi_host_neutropenia_hsct",
+      "imi_host_hematologic_malignancy",
+      "imi_fever_refractory",
+      "imi_ct_halo_sign",
+      "imi_bal_gm_odi10"
+    ]
+  },
+  {
+    "text": "ICU patient with severe viral pneumonia on steroids, serum galactomannan positive, and Aspergillus PCR positive from BAL.",
+    "moduleId": "inv_mold",
+    "presetId": "imi_icu_viral",
+    "findings": {
+      "imi_host_icu_viral_steroid": "present",
+      "imi_host_steroids_tcell": "present",
+      "imi_serum_gm_odi10": "present",
+      "imi_aspergillus_pcr_bal": "present"
+    },
+    "orderedFindingIds": [
+      "imi_host_icu_viral_steroid",
+      "imi_host_steroids_tcell",
+      "imi_serum_gm_odi10",
+      "imi_aspergillus_pcr_bal"
+    ]
+  },
+  {
+    "text": "ED patient with painful swollen prosthetic knee, drainage, CRP elevated, and synovial fluid culture positive.",
+    "moduleId": "pji",
+    "presetId": "pji_intermediate",
+    "findings": {
+      "pji_sym_joint_pain": "present",
+      "pji_sym_local_inflammation": "present",
+      "pji_crp": "present",
+      "pji_synovial_fluid_culture": "present"
+    },
+    "orderedFindingIds": [
+      "pji_sym_joint_pain",
+      "pji_sym_local_inflammation",
+      "pji_crp",
+      "pji_synovial_fluid_culture"
+    ]
+  },
+  {
+    "text": "Pre-revision arthroplasty workup with sinus tract to the prosthesis, ESR elevated, and alpha-defensin ELISA positive.",
+    "moduleId": "pji",
+    "presetId": "pji_high",
+    "findings": {
+      "pji_exam_sinus_tract": "present",
+      "pji_esr": "present",
+      "pji_alpha_defensin_elisa": "present"
+    },
+    "orderedFindingIds": [
+      "pji_exam_sinus_tract",
+      "pji_esr",
+      "pji_alpha_defensin_elisa"
+    ]
+  }
+]

@@ -1,0 +1,176 @@
+[
+  {
+    "text": "Emergency department visit for cough, low oxygen saturation, crackles, and lobar infiltrate on chest radiograph.",
+    "moduleId": "cap",
+    "presetId": "ed_adult",
+    "findings": {
+      "cap_cough": "present",
+      "cap_hypox": "present",
+      "cap_crackles": "present",
+      "cap_cxr_consolidation": "present"
+    },
+    "orderedFindingIds": [
+      "cap_cough",
+      "cap_hypox",
+      "cap_crackles",
+      "cap_cxr_consolidation"
+    ]
+  },
+  {
+    "text": "Ventilated ICU patient after 5 days with fever, leukocytosis, progressive infiltrate, and BAL culture growing a pathogen.",
+    "moduleId": "vap",
+    "presetId": "vap_icu_ge5d",
+    "findings": {
+      "vap_fever": "present",
+      "vap_leukocytosis": "present",
+      "vap_cxr_infiltrate": "present",
+      "vap_bal_qcx": "present"
+    },
+    "orderedFindingIds": [
+      "vap_fever",
+      "vap_leukocytosis",
+      "vap_cxr_infiltrate",
+      "vap_bal_qcx"
+    ]
+  },
+  {
+    "text": "Hospitalized patient with watery diarrhea after recent antibiotics, abdominal pain, and stool PCR positive with toxin detected.",
+    "moduleId": "cdi",
+    "presetId": "inpt",
+    "findings": {
+      "cdi_watery": "present",
+      "cdi_abx": "present",
+      "cdi_abd_pain": "present",
+      "cdi_naat_pos_tox_pos": "present"
+    },
+    "orderedFindingIds": [
+      "cdi_watery",
+      "cdi_abx",
+      "cdi_abd_pain",
+      "cdi_naat_pos_tox_pos"
+    ]
+  },
+  {
+    "text": "Emergency department patient with dysuria, urinary urgency, fever, and pyuria on urinalysis.",
+    "moduleId": "uti",
+    "presetId": "uti_hc",
+    "findings": {
+      "uti_dysuria": "present",
+      "uti_freq": "present",
+      "uti_fever": "present",
+      "ua_pyuria_pos": "present"
+    },
+    "orderedFindingIds": [
+      "uti_dysuria",
+      "uti_freq",
+      "uti_fever",
+      "ua_pyuria_pos"
+    ]
+  },
+  {
+    "text": "Inpatient with fever, a new regurgitant murmur, persistent positive blood cultures, and TEE showing vegetation.",
+    "moduleId": "endo",
+    "presetId": "endo_low",
+    "findings": {
+      "endo_fever": "present",
+      "endo_new_murmur": "present",
+      "endo_bcx_major_persistent": "present",
+      "endo_tee": "present"
+    },
+    "orderedFindingIds": [
+      "endo_fever",
+      "endo_new_murmur",
+      "endo_bcx_major_persistent",
+      "endo_tee"
+    ]
+  },
+  {
+    "text": "Outpatient with household TB exposure, cough for more than two weeks, positive sputum smear, and chest x-ray suspicious for active tuberculosis.",
+    "moduleId": "active_tb",
+    "presetId": "tb_low",
+    "findings": {
+      "tb_contact": "present",
+      "tb_sym_cough_2w": "present",
+      "tb_afb_smear_sputum": "present",
+      "tb_cxr_suggestive": "present"
+    },
+    "orderedFindingIds": [
+      "tb_contact",
+      "tb_sym_cough_2w",
+      "tb_afb_smear_sputum",
+      "tb_cxr_suggestive"
+    ]
+  },
+  {
+    "text": "Hospitalized immunocompromised patient with hypoxemia, elevated LDH, positive serum beta-D-glucan, and chest CT typical for Pneumocystis jirovecii pneumonia.",
+    "moduleId": "pjp",
+    "presetId": "pjp_moderate",
+    "findings": {
+      "pjp_vital_hypoxemia": "present",
+      "pjp_ldh_high": "present",
+      "pjp_bdg_serum": "present",
+      "pjp_ct_typical": "present"
+    },
+    "orderedFindingIds": [
+      "pjp_vital_hypoxemia",
+      "pjp_ldh_high",
+      "pjp_bdg_serum",
+      "pjp_ct_typical"
+    ]
+  },
+  {
+    "text": "ICU patient after surgery on TPN with severe sepsis, serum beta-D-glucan positive, and blood culture growing Candida.",
+    "moduleId": "inv_candida",
+    "presetId": "icand_high",
+    "findings": {
+      "icand_component_surgery": "present",
+      "icand_component_tpn": "present",
+      "icand_component_severe_sepsis": "present",
+      "icand_bdg_serum": "present",
+      "icand_culture_positive": "present"
+    },
+    "orderedFindingIds": [
+      "icand_component_surgery",
+      "icand_component_tpn",
+      "icand_component_severe_sepsis",
+      "icand_bdg_serum",
+      "icand_culture_positive"
+    ]
+  },
+  {
+    "text": "Neutropenic patient with refractory fever, halo sign on CT, serum galactomannan positive, and BAL Aspergillus PCR positive.",
+    "moduleId": "inv_mold",
+    "presetId": "imi_heme_high",
+    "findings": {
+      "imi_host_neutropenia_hsct": "present",
+      "imi_fever_refractory": "present",
+      "imi_ct_halo_sign": "present",
+      "imi_serum_gm_odi10": "present",
+      "imi_aspergillus_pcr_bal": "present"
+    },
+    "orderedFindingIds": [
+      "imi_host_neutropenia_hsct",
+      "imi_fever_refractory",
+      "imi_ct_halo_sign",
+      "imi_serum_gm_odi10",
+      "imi_aspergillus_pcr_bal"
+    ]
+  },
+  {
+    "text": "Patient being evaluated before revision arthroplasty has worsening prosthetic joint pain, erythema and drainage, elevated CRP, and a positive synovial alpha-defensin test.",
+    "moduleId": "pji",
+    "presetId": "pji_high",
+    "findings": {
+      "pji_sym_joint_pain": "present",
+      "pji_sym_local_inflammation": "present",
+      "pji_crp": "present",
+      "pji_alpha_defensin_elisa": "present"
+    },
+    "orderedFindingIds": [
+      "pji_sym_joint_pain",
+      "pji_sym_local_inflammation",
+      "pji_crp",
+      "pji_alpha_defensin_elisa"
+    ]
+  }
+]

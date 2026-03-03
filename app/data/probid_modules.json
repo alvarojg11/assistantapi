@@ -1,0 +1,3157 @@
+[
+  {
+    "id": "cap",
+    "name": "CAP",
+    "description": "Community-acquired pneumonia probability update using symptoms/vitals/exam + simplified CXR and labs. Starter LRs—replace with curated evidence.",
+    "pretestPresets": [
+      {
+        "id": "pc_adult",
+        "label": "Primary Care",
+        "p": 0.03,
+        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "ed_adult",
+        "label": "Emergency Department",
+        "p": 0.06,
+        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "cap_cough",
+        "label": "Cough",
+        "category": "symptom",
+        "lrPos": 1.2,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_purp_sputum",
+        "label": "Purulent sputum",
+        "category": "symptom",
+        "lrPos": 1.3,
+        "notes": "Often non-specific.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_pleuritic",
+        "label": "Pleuritic chest pain",
+        "category": "symptom",
+        "lrPos": 1.7,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_dyspnea",
+        "label": "Dyspnea",
+        "category": "symptom",
+        "lrPos": 1.5,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_fever",
+        "label": "Fever (≥38°C)",
+        "category": "vital",
+        "lrPos": 2,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_rr",
+        "label": "Tachypnea (RR ≥ 24)",
+        "category": "vital",
+        "lrPos": 2.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_hr",
+        "label": "Tachycardia (HR > 100)",
+        "category": "vital",
+        "lrPos": 1.5,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_hypox",
+        "label": "O2 sat < 95%",
+        "category": "vital",
+        "lrPos": 2.3,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_crackles",
+        "label": "Crackles/rales",
+        "category": "exam",
+        "lrPos": 2,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_focal",
+        "label": "Focal decreased breath sounds",
+        "category": "exam",
+        "lrPos": 2,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_cxr_consolidation",
+        "label": "CXR: lobar or multilobar consolidation/infiltrate",
+        "category": "imaging",
+        "group": "cap_cxr",
+        "lrPos": 8,
+        "lrNeg": 0.25,
+        "notes": "If CXR done, mark Present/Absent. If not done, choose “CXR not done”.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_cxr_not_done",
+        "label": "CXR not done",
+        "category": "imaging",
+        "group": "cap_cxr",
+        "notes": "Neutral (does not change probability).",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_wbc_ge15",
+        "label": "WBC ≥ 15,000",
+        "category": "lab",
+        "lrPos": 1.6,
+        "lrNeg": 0.9,
+        "notes": "Weak diagnostic modifier; more useful for severity than diagnosis in many contexts.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_procal_high",
+        "label": "Procalcitonin elevated",
+        "category": "lab",
+        "lrPos": 1.8,
+        "lrNeg": 0.7,
+        "notes": "Assay-dependent; interpret with clinical context.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_rvp_pos",
+        "label": "Respiratory viral panel positive",
+        "category": "micro",
+        "group": "cap_rvp",
+        "lrPos": 0.53,
+        "lrNeg": 1.07,
+        "notes": "Modeled as modifier of bacterial coinfection likelihood in CAP (proxy endpoint: blood-culture positivity). Derived from cohort rates (viral-positive 12.6%; blood-culture positivity 2.7% vs 5.3%), yielding LR+ ~0.53 and LR− ~1.07.",
+        "source": {
+          "short": "Klompas et al. Infect Control Hosp Epidemiol",
+          "year": 2021,
+          "url": "https://doi.org/10.1017/ice.2020.1312"
+        }
+      },
+      {
+        "id": "cap_rvp_na",
+        "label": "Respiratory viral panel not done/unknown",
+        "category": "micro",
+        "group": "cap_rvp",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Lee et al. Infect Control Hosp Epidemiol",
+          "year": 2021,
+          "url": "https://doi.org/10.1017/ice.2020.1312"
+        }
+      },
+      {
+        "id": "cap_age_ge65",
+        "label": "Age ≥ 65",
+        "category": "host",
+        "lrPos": 1.15,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_copd",
+        "label": "COPD",
+        "category": "host",
+        "lrPos": 1.15,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_hf",
+        "label": "Heart failure",
+        "category": "host",
+        "lrPos": 1.1,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_ckd",
+        "label": "Chronic kidney disease",
+        "category": "host",
+        "lrPos": 1.1,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_dm",
+        "label": "Diabetes",
+        "category": "host",
+        "lrPos": 1.05,
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_liver_disease",
+        "label": "Chronic liver disease",
+        "category": "host",
+        "lrPos": 1.1,
+        "notes": "ATS/IDSA CAP comorbidity used as a modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_alcohol_use_disorder",
+        "label": "Alcohol use disorder",
+        "category": "host",
+        "lrPos": 1.1,
+        "notes": "ATS/IDSA CAP comorbidity used as a modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_active_malignancy",
+        "label": "Active malignancy",
+        "category": "host",
+        "lrPos": 1.1,
+        "notes": "ATS/IDSA CAP comorbidity used as a modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_asplenia",
+        "label": "Asplenia",
+        "category": "host",
+        "lrPos": 1.1,
+        "notes": "ATS/IDSA CAP comorbidity used as a modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_current_smoker",
+        "label": "Current smoker",
+        "category": "host",
+        "lrPos": 1.08,
+        "notes": "ATS CAP guideline-era comorbidity/risk state modeled as a very modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      },
+      {
+        "id": "cap_malnutrition",
+        "label": "Malnutrition",
+        "category": "host",
+        "lrPos": 1.12,
+        "notes": "ATS CAP guideline-era comorbidity/risk state modeled as a modest baseline risk enricher.",
+        "source": {
+          "short": "Metlay et al. ATS/IDSA",
+          "year": 2019,
+          "url": "https://doi.org/10.1164/rccm.201908-1581ST"
+        }
+      }
+    ]
+  },
+  {
+    "id": "vap",
+    "name": "VAP",
+    "description": "Ventilator-associated pneumonia (adult ICU, mechanically ventilated >48h) diagnostic probability update using clinical features and respiratory microbiology. Core LRs are derived from a 2020 systematic review/meta-analysis using histopathology as reference standard where available.",
+    "pretestPresets": [
+      {
+        "id": "vap_icu_gt48h",
+        "label": "ICU, mechanically ventilated >48 hours",
+        "p": 0.12,
+        "notes": "Setting/time-only baseline. Select clinical, imaging, and microbiology findings separately. Calibrate to local ICU epidemiology and surveillance definitions.",
+        "source": {
+          "short": "Cook et al. Ann Intern Med",
+          "year": 1998,
+          "url": "https://doi.org/10.7326/0003-4819-129-6-199809150-00002"
+        }
+      },
+      {
+        "id": "vap_icu_ge5d",
+        "label": "ICU, mechanically ventilated >=5 days",
+        "p": 0.2,
+        "notes": "Setting/time-only baseline with longer ventilation exposure. Higher duration mainly increases cumulative VAP risk and shifts pathogen resistance risk; calibrate locally.",
+        "source": {
+          "short": "Cook et al. Ann Intern Med",
+          "year": 1998,
+          "url": "https://doi.org/10.7326/0003-4819-129-6-199809150-00002"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "vap_fever",
+        "label": "Fever (>=38 C)",
+        "category": "vital",
+        "lrPos": 1.44,
+        "lrNeg": 0.62,
+        "notes": "Weak diagnostic modifier in suspected VAP.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_purulent_secretions",
+        "label": "Purulent tracheal secretions",
+        "category": "exam",
+        "lrPos": 1.26,
+        "lrNeg": 0.59,
+        "notes": "Common but non-specific in mechanically ventilated ICU patients.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_cxr_infiltrate",
+        "label": "Chest radiograph infiltrate (new/progressive compatible opacity)",
+        "category": "imaging",
+        "group": "vap_cxr",
+        "lrPos": 1.2,
+        "lrNeg": 0.42,
+        "notes": "High sensitivity but poor specificity in the meta-analysis. If CXR done, mark Present/Absent. If not done/indeterminate, choose 'CXR not done/unknown'.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_cxr_na",
+        "label": "CXR not done/unknown",
+        "category": "imaging",
+        "group": "vap_cxr",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_leukocytosis",
+        "label": "Leukocytosis (WBC >=12 x10^9/L)",
+        "category": "lab",
+        "lrPos": 1.57,
+        "lrNeg": 0.61,
+        "notes": "Evidence synthesis used varying thresholds (commonly >=10 or >=12 x10^9/L); this module standardizes to >=12 for usability. Weak diagnostic modifier.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_hypoxemia_pf240",
+        "label": "Worsening oxygenation (PaO2/FiO2 <=240)",
+        "category": "vital",
+        "lrPos": 0.77,
+        "lrNeg": 1.95,
+        "notes": "Included because it is commonly used in bedside VAP suspicion frameworks, but evidence suggests poor diagnostic performance for microbiologically confirmed VAP. In one multicenter prospective cohort of suspected VAP, this threshold was associated with LESS microbiologic confirmation.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_cpis_gt6",
+        "label": "CPIS > 6 (use instead of individual CPIS component findings)",
+        "category": "lab",
+        "group": "vap_cpis",
+        "lrPos": 2.2,
+        "lrNeg": 0.4,
+        "notes": "Do not combine with fever/secretions/WBC/CXR component findings if using CPIS, as this will double count overlapping information.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_cpis_na",
+        "label": "CPIS not used/unknown",
+        "category": "lab",
+        "group": "vap_cpis",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_eta_qcx",
+        "label": "Endotracheal aspirate culture positive",
+        "category": "micro",
+        "group": "vap_resp_micro",
+        "lrPos": 2.36,
+        "lrNeg": 0.36,
+        "notes": "Set Present for clinically significant ETA culture growth (quantitative threshold if your lab reports it; semiquantitative positive interpreted clinically if not). Published pooled LRs are based primarily on quantitative thresholds.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_psb_qcx",
+        "label": "Protected specimen brush culture positive",
+        "category": "micro",
+        "group": "vap_resp_micro",
+        "lrPos": 2.62,
+        "lrNeg": 0.5,
+        "notes": "Set Present for clinically significant PSB culture growth. Published pooled LRs are based on quantitative thresholds (commonly >=10^3 CFU/mL).",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_bal_qcx",
+        "label": "BAL culture positive",
+        "category": "micro",
+        "group": "vap_resp_micro",
+        "lrPos": 3.48,
+        "lrNeg": 0.36,
+        "notes": "Set Present for clinically significant BAL culture growth (quantitative threshold if reported; semiquantitative positive interpreted clinically if not). Published pooled LRs are based primarily on quantitative thresholds (commonly >=10^4 CFU/mL).",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_resp_micro_na",
+        "label": "Respiratory sampling/culture not done or unknown",
+        "category": "micro",
+        "group": "vap_resp_micro",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Fernando et al. Can J Anaesth",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32306086/"
+        }
+      },
+      {
+        "id": "vap_pct_elevated",
+        "label": "Serum procalcitonin elevated (diagnostic threshold assay/study dependent)",
+        "category": "lab",
+        "group": "vap_pct",
+        "lrPos": 3.9,
+        "lrNeg": 0.4,
+        "notes": "Pooled HAP/VAP estimate from ATS/IDSA evidence review (cutoffs varied ~0.5-3.9 ng/mL). Not recommended as a sole trigger to start antibiotics.",
+        "source": {
+          "short": "Sotillo-Diaz et al. J Infect",
+          "year": 2014,
+          "url": "https://doi.org/10.1016/j.jinf.2014.06.005"
+        }
+      },
+      {
+        "id": "vap_pct_na",
+        "label": "Procalcitonin not done/unknown",
+        "category": "lab",
+        "group": "vap_pct",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Sotillo-Diaz et al. J Infect",
+          "year": 2014,
+          "url": "https://doi.org/10.1016/j.jinf.2014.06.005"
+        }
+      }
+    ]
+  },
+  {
+    "id": "cdi",
+    "name": "C. difficile",
+    "description": "C. difficile infection probability update using diarrhea features + host/exposure risk + simplified NAAT→toxin testing. Starter LRs—replace with curated evidence.",
+    "pretestPresets": [
+      {
+        "id": "outpt_low",
+        "label": "Outpatient",
+        "p": 0.005,
+        "notes": "Setting-only baseline. Select diarrhea criteria and risk factors separately below.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "ed_inpt_early",
+        "label": "ED / inpatient (first 72 hours)",
+        "p": 0.015,
+        "notes": "Intermediate setting-only baseline for community-onset or early-admission presentations before hospital-onset day 3. Select diarrhea criteria and risk factors separately below.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "inpt",
+        "label": "Inpatient after day 3",
+        "p": 0.05,
+        "notes": "Setting-only baseline. Select diarrhea criteria and risk factors separately below.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "cdi_freq",
+        "label": "≥3 unformed stools / 24h (or >1.5 L stool output / 24h by rectal tube)",
+        "category": "symptom",
+        "lrPos": 1.6,
+        "notes": "Primary symptom gate for CDI testing; use this when the stool-frequency/output threshold is met.",
+        "source": {
+          "short": "CDC CDI Clinical Overview",
+          "year": 2024,
+          "url": "https://www.cdc.gov/c-diff/hcp/clinical-overview/"
+        }
+      },
+      {
+        "id": "cdi_watery",
+        "label": "Watery diarrhea (supporting symptom)",
+        "category": "symptom",
+        "lrPos": 1.4,
+        "notes": "Supportive symptom only; the main CDI entry criterion is the stool-frequency/output threshold.",
+        "source": {
+          "short": "CDC CDI Clinical Overview",
+          "year": 2024,
+          "url": "https://www.cdc.gov/c-diff/hcp/clinical-overview/"
+        }
+      },
+      {
+        "id": "cdi_abd_pain",
+        "label": "Abdominal pain/cramping",
+        "category": "symptom",
+        "lrPos": 1.3,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_fever",
+        "label": "Fever (≥38°C)",
+        "category": "vital",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_blood",
+        "label": "Gross blood in stool",
+        "category": "symptom",
+        "lrPos": 0.6,
+        "lrNeg": 1,
+        "notes": "Often suggests alternative dx (e.g., IBD flare, ischemia, invasive bacterial diarrhea).",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_abx",
+        "label": "Antibiotics in prior 8–12 weeks",
+        "category": "host",
+        "lrPos": 2,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_healthcare",
+        "label": "Recent hospitalization/healthcare exposure",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_ppi",
+        "label": "PPI use",
+        "category": "host",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_prev",
+        "label": "Prior CDI",
+        "category": "host",
+        "lrPos": 2.5,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_age_ge65",
+        "label": "Age ≥ 65",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_immuno",
+        "label": "Immunocompromised",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_ibd",
+        "label": "Inflammatory bowel disease",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_enteral_feeding",
+        "label": "Enteral tube feeding",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.95,
+        "notes": "Recognized CDI risk enricher in hospitalized patients; modeled conservatively because effect size varies across cohorts.",
+        "source": {
+          "short": "IDSA/SHEA CDI Guideline",
+          "year": 2017,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_wbc15",
+        "label": "WBC ≥ 15k",
+        "category": "lab",
+        "lrPos": 1.4,
+        "lrNeg": 0.9,
+        "notes": "More severity-associated than diagnostic.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_cr",
+        "label": "Creatinine rise",
+        "category": "lab",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "notes": "More severity-associated than diagnostic.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_test_na",
+        "label": "Stool testing not done/unknown",
+        "category": "micro",
+        "group": "cdi_test",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_naat_neg",
+        "label": "NAAT/PCR: negative",
+        "category": "micro",
+        "lrNeg": 0.1,
+        "group": "cdi_test",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_naat_pos_tox_pos",
+        "label": "NAAT/PCR positive + Toxin EIA positive",
+        "category": "micro",
+        "lrPos": 12,
+        "group": "cdi_test",
+        "notes": "Most supportive of toxin-mediated CDI.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_naat_pos_tox_neg",
+        "label": "NAAT/PCR positive + Toxin EIA negative",
+        "category": "micro",
+        "lrPos": 3.5,
+        "group": "cdi_test",
+        "notes": "Could represent colonization or low toxin burden; interpret clinically.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      },
+      {
+        "id": "cdi_naat_pos_tox_na",
+        "label": "NAAT/PCR positive (toxin not sent/unknown)",
+        "category": "micro",
+        "lrPos": 6,
+        "group": "cdi_test",
+        "notes": "Intermediate support; toxin result would refine.",
+        "source": {
+          "short": "Johnson et al. IDSA/SHEA",
+          "year": 2021,
+          "url": "https://www.idsociety.org/practice-guideline/clostridium-difficile/"
+        }
+      }
+    ]
+  },
+  {
+    "id": "uti",
+    "name": "UTI",
+    "description": "UTI probability update using setting-only pretest probability plus symptoms, urinalysis (and optional culture), and host risk factors. Starter LRs—replace with curated evidence.",
+    "pretestPresets": [
+      {
+        "id": "uti_comm",
+        "label": "Outpatient / primary care",
+        "p": 0.05,
+        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_hc",
+        "label": "ED / inpatient",
+        "p": 0.08,
+        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "uti_dysuria",
+        "label": "Dysuria",
+        "category": "symptom",
+        "lrPos": 2,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_freq",
+        "label": "Frequency/urgency",
+        "category": "symptom",
+        "lrPos": 1.6,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_suprapubic",
+        "label": "Suprapubic pain",
+        "category": "symptom",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_vaginitis",
+        "label": "Vaginal discharge/irritation",
+        "category": "symptom",
+        "lrPos": 0.4,
+        "lrNeg": 1,
+        "notes": "Suggests vaginitis/cervicitis rather than cystitis.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_fever",
+        "label": "Fever (≥38°C)",
+        "category": "vital",
+        "lrPos": 1.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_cva",
+        "label": "CVA tenderness",
+        "category": "exam",
+        "lrPos": 2,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_female",
+        "label": "Female sex",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.95,
+        "group": "uti_sex",
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_male",
+        "label": "Male sex",
+        "category": "host",
+        "lrPos": 0.7,
+        "lrNeg": 1,
+        "group": "uti_sex",
+        "notes": "Lower likelihood of uncomplicated cystitis; consider prostatitis/complicated UTI.",
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_age_ge65",
+        "label": "Age ≥ 65",
+        "category": "host",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_diabetes",
+        "label": "Diabetes mellitus",
+        "category": "host",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_ckd",
+        "label": "Chronic kidney disease",
+        "category": "host",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_immuno",
+        "label": "Immunocompromised",
+        "category": "host",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_catheter",
+        "label": "Indwelling catheter / recent instrumentation",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_obstruction",
+        "label": "Urinary obstruction/BPH or anatomic abnormality",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_stones",
+        "label": "Nephrolithiasis history",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "uti_recurrent",
+        "label": "Recurrent UTIs",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "AUA Recurrent UTI Guideline",
+          "year": 2022,
+          "url": "https://www.auanet.org/guidelines-and-quality/guidelines/recurrent-uti"
+        }
+      },
+      {
+        "id": "ua_le_pos",
+        "label": "Urine leukocyte esterase",
+        "category": "lab",
+        "lrPos": 2.5,
+        "lrNeg": 0.3,
+        "group": "ua_le",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "ua_nit_pos",
+        "label": "Urine nitrite",
+        "category": "lab",
+        "lrPos": 6,
+        "lrNeg": 0.7,
+        "group": "ua_nit",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "ua_pyuria_pos",
+        "label": "Pyuria on microscopy",
+        "category": "lab",
+        "lrPos": 2,
+        "lrNeg": 0.2,
+        "group": "ua_pyuria",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "ua_bact_pos",
+        "label": "Bacteriuria on microscopy",
+        "category": "lab",
+        "lrPos": 2,
+        "lrNeg": 0.6,
+        "group": "ua_bact",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      },
+      {
+        "id": "uti_cx_pos",
+        "label": "Urine culture >100,000 CFU",
+        "category": "micro",
+        "lrPos": 10,
+        "lrNeg": 0.1,
+        "group": "uti_cx",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://doi.org/10.1001/jama.287.20.2701"
+        }
+      }
+    ]
+  },
+  {
+    "id": "endo",
+    "name": "Endocarditis",
+    "description": "Infective endocarditis probability update using setting-only pretest probability plus selected host risk, organism-specific microbiology, risk-score context (VIRSTA / DENOVA / HANDOC), and imaging (TTE/TEE) ± FDG PET/CT. Imaging LRs derived from published sensitivity/specificity where available. Beware correlated Duke elements.",
+    "pretestPresets": [
+      {
+        "id": "endo_very_low",
+        "label": "Outpatient / primary care",
+        "p": 0.001,
+        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_low",
+        "label": "ED / inpatient",
+        "p": 0.005,
+        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_mod",
+        "label": "Tertiary referral center",
+        "p": 0.01,
+        "notes": "Setting-only baseline for referral settings. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "endo_fever",
+        "label": "Fever (≥38°C)",
+        "category": "symptom",
+        "lrPos": 1.4,
+        "lrNeg": 0.85,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_new_murmur",
+        "label": "New regurgitant murmur",
+        "category": "exam",
+        "lrPos": 2.5,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_vascular",
+        "label": "Vascular phenomena (emboli/Janeway/splinter hemorrhages)",
+        "category": "exam",
+        "lrPos": 2,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_immune",
+        "label": "Immunologic phenomena (GN/Osler/RF)",
+        "category": "exam",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_esr_crp",
+        "label": "Elevated ESR/CRP",
+        "category": "lab",
+        "lrPos": 1.1,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_anemia",
+        "label": "Anemia of Chronic Disease",
+        "category": "lab",
+        "lrPos": 1.1,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "2023 ESC Endocarditis Guideline",
+          "year": 2023,
+          "url": "https://www.escardio.org/Guidelines/Clinical-Practice-Guidelines/Endocarditis-Guidelines"
+        }
+      },
+      {
+        "id": "endo_virsta_high",
+        "label": "VIRSTA (SAB) score >=3",
+        "category": "lab",
+        "group": "endo_virsta",
+        "lrPos": 2,
+        "lrNeg": 0.06,
+        "notes": "High-sensitivity rule-out oriented SAB score for endocarditis risk stratification (external validation performance).",
+        "source": {
+          "short": "Tubiana et al. J Infect",
+          "year": 2016,
+          "url": "https://doi.org/10.1016/j.jinf.2016.02.003"
+        }
+      },
+      {
+        "id": "endo_virsta_na",
+        "label": "VIRSTA not applied/unknown",
+        "category": "lab",
+        "group": "endo_virsta",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Tubiana et al. J Infect",
+          "year": 2016,
+          "url": "https://doi.org/10.1016/j.jinf.2016.02.003"
+        }
+      },
+      {
+        "id": "endo_denova_high",
+        "label": "DENOVA (E. faecalis bacteremia) >=3",
+        "category": "lab",
+        "group": "endo_denova",
+        "lrPos": 6.7,
+        "lrNeg": 0.08,
+        "notes": "High sensitivity score for E. faecalis bacteremia endocarditis risk stratification.",
+        "source": {
+          "short": "Berge et al. Infection",
+          "year": 2019,
+          "url": "https://doi.org/10.1007/s15010-018-1208-3"
+        }
+      },
+      {
+        "id": "endo_denova_na",
+        "label": "DENOVA not applied/unknown",
+        "category": "lab",
+        "group": "endo_denova",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Berge et al. Infection",
+          "year": 2019,
+          "url": "https://doi.org/10.1007/s15010-018-1208-3"
+        }
+      },
+      {
+        "id": "endo_handoc_high",
+        "label": "HANDOC (NBHS bacteremia) >=3",
+        "category": "lab",
+        "group": "endo_handoc",
+        "lrPos": 4.2,
+        "lrNeg": 0.08,
+        "notes": "High sensitivity score for non-beta-hemolytic streptococcal bacteremia.",
+        "source": {
+          "short": "Sunnerhagen et al. Clin Infect Dis",
+          "year": 2018,
+          "url": "https://doi.org/10.1093/cid/cix942"
+        }
+      },
+      {
+        "id": "endo_handoc_na",
+        "label": "HANDOC not applied/unknown",
+        "category": "lab",
+        "group": "endo_handoc",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Sunnerhagen et al. Clin Infect Dis",
+          "year": 2018,
+          "url": "https://doi.org/10.1093/cid/cix942"
+        }
+      },
+      {
+        "id": "endo_micro_na",
+        "label": "Blood cultures / serology not done/unknown",
+        "category": "micro",
+        "group": "endo_micro",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_major_typical",
+        "label": "Blood cultures: Duke major (typical organism in ≥2 sets)",
+        "category": "micro",
+        "lrPos": 12,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Duke major criterion; avoid stacking with other major micro options.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_major_persistent",
+        "label": "Blood cultures: Duke major (persistent positivity)",
+        "category": "micro",
+        "lrPos": 15,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Duke major criterion; correlated with typical organism + echo findings.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_saureus_multi",
+        "label": "Blood cultures: Staphylococcus aureus in >=2 sets",
+        "category": "micro",
+        "lrPos": 11,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Typical IE organism; choose one microbiology option to avoid double counting.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_efaecalis_multi",
+        "label": "Blood cultures: Enterococcus faecalis in >=2 sets",
+        "category": "micro",
+        "lrPos": 8,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Typical organism in appropriate context; pair with DENOVA only if clinically justified.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_nbhs_multi",
+        "label": "Blood cultures: NBHS (e.g., viridans group / S. gallolyticus) in >=2 sets",
+        "category": "micro",
+        "lrPos": 7,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Typical organism in appropriate context; pair with HANDOC only if clinically justified.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_pos_not_major",
+        "label": "Blood cultures: positive but NOT Duke major",
+        "category": "micro",
+        "lrPos": 3,
+        "lrNeg": 0.95,
+        "group": "endo_micro",
+        "notes": "Example: single positive set, atypical organism, or uncertain significance.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_bcx_negative",
+        "label": "Blood cultures: negative",
+        "category": "micro",
+        "lrPos": 1,
+        "lrNeg": 0.6,
+        "group": "endo_micro",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_coxiella_major",
+        "label": "Coxiella burnetii Phase I IgG ≥ 1:800",
+        "category": "micro",
+        "lrPos": 20,
+        "lrNeg": 0.95,
+        "group": "endo_micro",
+        "notes": "Major criterion in IE guidelines; very specific for chronic Q fever endocarditis.",
+        "source": {
+          "short": "Fowler et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad271"
+        }
+      },
+      {
+        "id": "endo_tte",
+        "label": "Transthoracic echo (TTE) with evidence of new vegetation, regurgitation or valve perforation",
+        "category": "imaging",
+        "group": "endo_tte",
+        "lrPos": 10.2,
+        "lrNeg": 0.41,
+        "notes": "LR derived from pooled sens/spec (meta-analysis). Performance lower in prosthetic/device/early disease.",
+        "source": {
+          "short": "Bai et al. J Ultrasound Med",
+          "year": 2017,
+          "url": "https://doi.org/10.7863/ultra.16.06021"
+        }
+      },
+      {
+        "id": "endo_tte_na",
+        "label": "TTE not done/unknown",
+        "category": "imaging",
+        "group": "endo_tte",
+        "source": {
+          "short": "Bai et al. J Ultrasound Med",
+          "year": 2017,
+          "url": "https://doi.org/10.7863/ultra.16.06021"
+        }
+      },
+      {
+        "id": "endo_tee",
+        "label": "Transesophageal echo (TEE) with evidence of new vegetation, regurgitation or valve perforation",
+        "category": "imaging",
+        "group": "endo_tee",
+        "lrPos": 9,
+        "lrNeg": 0.12,
+        "notes": "Pooled values for your target population (native vs prosthetic).",
+        "source": {
+          "short": "Shively et al. Am J Med",
+          "year": 1991,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/1892203/"
+        }
+      },
+      {
+        "id": "endo_pet",
+        "label": "FDG PET/CT (prosthetic valve/device infection)",
+        "category": "imaging",
+        "group": "endo_pet",
+        "lrPos": 5.5,
+        "lrNeg": 0.2,
+        "notes": "Best for prosthetic valve/device IE; negative does not exclude native-valve IE.",
+        "source": {
+          "short": "Mahmood et al. J Nucl Cardiol",
+          "year": 2019,
+          "url": "https://doi.org/10.1007/s12350-017-1092-8"
+        }
+      },
+      {
+        "id": "endo_pet_na",
+        "label": "FDG PET/CT not done/unknown",
+        "category": "imaging",
+        "group": "endo_pet",
+        "source": {
+          "short": "Mahmood et al. J Nucl Cardiol",
+          "year": 2019,
+          "url": "https://doi.org/10.1007/s12350-017-1092-8"
+        }
+      }
+    ]
+  },
+  {
+    "id": "active_tb",
+    "name": "Active TB",
+    "description": "Active pulmonary TB probability update using setting-only pretest probability plus selected host risk factors, symptom screen strategy, immune-based tests (QFT/TST), respiratory microbiology (MTB PCR, AFB smear, culture), and chest imaging (CXR or CT). LRs use pooled estimates where available.",
+    "pretestPresets": [
+      {
+        "id": "tb_low",
+        "label": "Outpatient",
+        "p": 0.005,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "WHO Global TB Report",
+          "year": 2024,
+          "url": "https://www.who.int/publications/i/item/9789240101531"
+        }
+      },
+      {
+        "id": "tb_intermediate",
+        "label": "ED / Inpatient",
+        "p": 0.02,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "WHO Global TB Report",
+          "year": 2024,
+          "url": "https://www.who.int/publications/i/item/9789240101531"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "tb_contact",
+        "label": "Close/household contact with infectious pulmonary TB",
+        "category": "host",
+        "lrPos": 2,
+        "lrNeg": 0.85,
+        "notes": "Approximate risk enrichment from contact-investigation cohorts/meta-analyses.",
+        "source": {
+          "short": "Fox et al. PLoS Med",
+          "year": 2013,
+          "url": "https://doi.org/10.1371/journal.pmed.1001432"
+        }
+      },
+      {
+        "id": "tb_birth_travel_high_incidence",
+        "label": "Born in or prolonged travel/residence in high-incidence TB region",
+        "category": "host",
+        "lrPos": 2.1,
+        "lrNeg": 0.9,
+        "notes": "Epidemiologic risk enrichment modeled conservatively to avoid overcounting with other host factors.",
+        "source": {
+          "short": "WHO Global TB Report",
+          "year": 2024,
+          "url": "https://www.who.int/publications/i/item/9789240101531"
+        }
+      },
+      {
+        "id": "tb_incarceration",
+        "label": "Current or recent incarceration",
+        "category": "host",
+        "lrPos": 2.2,
+        "lrNeg": 0.9,
+        "notes": "Prison populations have much higher TB burden than the general population; LR kept conservative due overlap with other social/host risks.",
+        "source": {
+          "short": "Cords et al. Lancet Public Health",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/S2468-2667(21)00025-6"
+        }
+      },
+      {
+        "id": "tb_homelessness",
+        "label": "Experiencing homelessness or regular shelter exposure",
+        "category": "host",
+        "lrPos": 2,
+        "lrNeg": 0.92,
+        "notes": "Homeless populations/shelters are higher-risk TB settings; LR kept conservative to reduce overlap with other vulnerabilities.",
+        "source": {
+          "short": "Beijer et al. Lancet Infect Dis",
+          "year": 2012,
+          "url": "https://doi.org/10.1016/S1473-3099(12)70177-9"
+        }
+      },
+      {
+        "id": "tb_hiv_or_immunosuppression",
+        "label": "HIV or major cellular immunosuppression",
+        "category": "host",
+        "lrPos": 2.5,
+        "lrNeg": 0.9,
+        "notes": "Major TB risk factor; modeled as conservative pretest enrichment in this tool.",
+        "source": {
+          "short": "WHO Global TB Report",
+          "year": 2024,
+          "url": "https://www.who.int/publications/i/item/9789240101531"
+        }
+      },
+      {
+        "id": "tb_diabetes",
+        "label": "Diabetes mellitus",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.95,
+        "notes": "Epidemiologic risk modifier rather than a direct microbiologic diagnostic test.",
+        "source": {
+          "short": "Jeon & Murray. PLoS Med",
+          "year": 2008,
+          "url": "https://doi.org/10.1371/journal.pmed.0050152"
+        }
+      },
+      {
+        "id": "tb_smoking",
+        "label": "Current tobacco smoking",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.96,
+        "notes": "WHO-recognized TB risk factor; modeled as modest epidemiologic pretest enrichment.",
+        "source": {
+          "short": "WHO TB Handbook",
+          "year": 2025,
+          "url": "https://www.who.int/southeastasia/publications/i/item/9789240111967"
+        }
+      },
+      {
+        "id": "tb_undernutrition",
+        "label": "Undernutrition / low BMI",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "notes": "WHO-recognized TB risk factor with meaningful population-level attributable risk.",
+        "source": {
+          "short": "WHO TB Handbook",
+          "year": 2025,
+          "url": "https://www.who.int/southeastasia/publications/i/item/9789240111967"
+        }
+      },
+      {
+        "id": "tb_alcohol_use",
+        "label": "Alcohol use disorder / heavy alcohol use",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.96,
+        "notes": "WHO-recognized TB risk factor; modeled conservatively to avoid overcounting with social exposure risks.",
+        "source": {
+          "short": "WHO TB Handbook",
+          "year": 2025,
+          "url": "https://www.who.int/southeastasia/publications/i/item/9789240111967"
+        }
+      },
+      {
+        "id": "tb_sym_any",
+        "label": "Any WHO TB symptom (cough, fever, night sweats, or weight loss)",
+        "category": "symptom",
+        "group": "tb_sym_screen",
+        "lrPos": 2,
+        "lrNeg": 0.45,
+        "notes": "From pooled sensitivity/specificity of symptom screening studies.",
+        "source": {
+          "short": "van't Hoog et al. Cochrane",
+          "year": 2022,
+          "url": "https://doi.org/10.1002/14651858.CD010890.pub2"
+        }
+      },
+      {
+        "id": "tb_sym_cough_2w",
+        "label": "Cough >=2 weeks (cough-only symptom strategy)",
+        "category": "symptom",
+        "group": "tb_sym_screen",
+        "lrPos": 7.5,
+        "lrNeg": 0.61,
+        "notes": "Higher specificity than broad symptom screens, with lower sensitivity.",
+        "source": {
+          "short": "van't Hoog et al. Cochrane",
+          "year": 2022,
+          "url": "https://doi.org/10.1002/14651858.CD010890.pub2"
+        }
+      },
+      {
+        "id": "tb_sym_na",
+        "label": "Symptom screen not done/unknown",
+        "category": "symptom",
+        "group": "tb_sym_screen",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "van't Hoog et al. Cochrane",
+          "year": 2022,
+          "url": "https://doi.org/10.1002/14651858.CD010890.pub2"
+        }
+      },
+      {
+        "id": "tb_qft",
+        "label": "QuantiFERON (IGRA) result",
+        "category": "lab",
+        "group": "tb_immune_test",
+        "lrPos": 3,
+        "lrNeg": 0.24,
+        "notes": "Set Present=positive, Absent=negative. Supportive only for active TB diagnosis.",
+        "source": {
+          "short": "AlAlyani et al. Diagnostics",
+          "year": 2025,
+          "url": "https://doi.org/10.3390/diagnostics15182343"
+        }
+      },
+      {
+        "id": "tb_tst",
+        "label": "Tuberculin skin test (TST) result",
+        "category": "lab",
+        "group": "tb_immune_test",
+        "lrPos": 1.9,
+        "lrNeg": 0.47,
+        "notes": "Set Present=positive, Absent=negative. Supportive only for active TB diagnosis.",
+        "source": {
+          "short": "AlAlyani et al. Diagnostics",
+          "year": 2025,
+          "url": "https://doi.org/10.3390/diagnostics15182343"
+        }
+      },
+      {
+        "id": "tb_immune_na",
+        "label": "QFT/TST not done/unknown",
+        "category": "lab",
+        "group": "tb_immune_test",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "AlAlyani et al. Diagnostics",
+          "year": 2025,
+          "url": "https://doi.org/10.3390/diagnostics15182343"
+        }
+      },
+      {
+        "id": "tb_mtbpcr_sputum",
+        "label": "MTB PCR (Xpert MTB/RIF) on sputum",
+        "category": "micro",
+        "group": "tb_mtbpcr",
+        "lrPos": 42.5,
+        "lrNeg": 0.15,
+        "notes": "Present=positive PCR, Absent=negative PCR. Pooled sensitivity ~85%, specificity ~98%.",
+        "source": {
+          "short": "Steingart et al. Cochrane",
+          "year": 2014,
+          "url": "https://doi.org/10.1002/14651858.CD009593.pub4"
+        }
+      },
+      {
+        "id": "tb_mtbpcr_bal",
+        "label": "MTB PCR (Xpert MTB/RIF) on BAL",
+        "category": "micro",
+        "group": "tb_mtbpcr",
+        "lrPos": 10.21,
+        "lrNeg": 0.16,
+        "notes": "Present=positive PCR, Absent=negative PCR. Pooled PLR 10.21, NLR 0.16.",
+        "source": {
+          "short": "Liu et al. J Clin Microbiol",
+          "year": 2021,
+          "url": "https://doi.org/10.1128/JCM.02170-20"
+        }
+      },
+      {
+        "id": "tb_afb_smear_sputum",
+        "label": "AFB smear microscopy (sputum)",
+        "category": "micro",
+        "lrPos": 32,
+        "lrNeg": 0.37,
+        "notes": "Present=smear positive, Absent=smear negative. Pooled sensitivity ~64%, specificity ~98%.",
+        "source": {
+          "short": "Davis et al. Lancet Infect Dis",
+          "year": 2013,
+          "url": "https://doi.org/10.1016/S1473-3099(12)70232-3"
+        }
+      },
+      {
+        "id": "tb_culture_sputum",
+        "label": "Mycobacterial culture (sputum)",
+        "category": "micro",
+        "group": "tb_culture",
+        "lrPos": 100,
+        "lrNeg": 0.58,
+        "notes": "Present=culture positive, Absent=culture negative. Reported specificity ~100%; LR+ is mathematically non-finite (capped here at 100).",
+        "source": {
+          "short": "You et al. Syst Rev",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s13643-024-02733-8"
+        }
+      },
+      {
+        "id": "tb_culture_bal",
+        "label": "Mycobacterial culture (BAL)",
+        "category": "micro",
+        "group": "tb_culture",
+        "lrPos": 100,
+        "lrNeg": 0.56,
+        "notes": "Present=culture positive, Absent=culture negative. Reported specificity ~100%; LR+ is mathematically non-finite (capped here at 100).",
+        "source": {
+          "short": "You et al. Syst Rev",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s13643-024-02733-8"
+        }
+      },
+      {
+        "id": "tb_cxr_suggestive",
+        "label": "CXR suggestive of active pulmonary TB",
+        "category": "imaging",
+        "group": "tb_cxr",
+        "lrPos": 19.3,
+        "lrNeg": 0.16,
+        "notes": "Set Present=suggestive CXR, Absent=not suggestive CXR.",
+        "source": {
+          "short": "van't Hoog et al. Cochrane",
+          "year": 2022,
+          "url": "https://doi.org/10.1002/14651858.CD010890.pub2"
+        }
+      },
+      {
+        "id": "tb_cxr_na",
+        "label": "CXR not done/unknown",
+        "category": "imaging",
+        "group": "tb_cxr",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "van't Hoog et al. Cochrane",
+          "year": 2022,
+          "url": "https://doi.org/10.1002/14651858.CD010890.pub2"
+        }
+      },
+      {
+        "id": "tb_ct_suggestive",
+        "label": "Chest CT suggestive of active pulmonary TB",
+        "category": "imaging",
+        "group": "tb_ct",
+        "lrPos": 4.29,
+        "lrNeg": 0.14,
+        "notes": "Set Present=suggestive CT, Absent=not suggestive CT. Derived from sensitivity 89.09% and specificity 79.25% in a culture-referenced HRCT cohort.",
+        "source": {
+          "short": "Rasheed et al. Cureus",
+          "year": 2020,
+          "url": "https://doi.org/10.7759/cureus.8467"
+        }
+      },
+      {
+        "id": "tb_ct_na",
+        "label": "Chest CT not done/unknown",
+        "category": "imaging",
+        "group": "tb_ct",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Rasheed et al. Cureus",
+          "year": 2020,
+          "url": "https://doi.org/10.7759/cureus.8467"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pjp",
+    "name": "PJP",
+    "description": "Pneumocystis jirovecii pneumonia probability update using setting-only pretest probability plus selected host risk factors, vitals, serum BDG, respiratory diagnostics (PCR/DFA), and chest imaging.",
+    "pretestPresets": [
+      {
+        "id": "pjp_low",
+        "label": "Outpatient / Emergency Department",
+        "p": 0.003,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_moderate",
+        "label": "Hospitalized (non-ICU)",
+        "p": 0.01,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_high",
+        "label": "ICU",
+        "p": 0.02,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "pjp_host_hiv_cd4_sot",
+        "label": "HIV (CD4 <=200) or solid organ transplant",
+        "category": "host",
+        "lrPos": 3.2,
+        "lrNeg": 0.9,
+        "notes": "Approximate LR informed by adjusted OR from a bronchoscopy-derived diagnostic cohort.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_host_no_ppx",
+        "label": "No TMP-SMX prophylaxis despite indication",
+        "category": "host",
+        "lrPos": 6.5,
+        "lrNeg": 0.15,
+        "notes": "Absence of prophylaxis increases risk; prophylaxis is strongly protective in risk-score cohorts.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_host_prolonged_steroids",
+        "label": "Prolonged systemic steroids (roughly >=20 mg prednisone-equivalent for >=3 weeks)",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "notes": "Commonly recognized major risk state for non-HIV PJP; treated as conservative pretest enrichment.",
+        "source": {
+          "short": "Shin et al. Sci Rep",
+          "year": 2019,
+          "url": "https://doi.org/10.1038/s41598-019-38618-3"
+        }
+      },
+      {
+        "id": "pjp_host_heme_hsct",
+        "label": "Hematologic malignancy or hematopoietic stem-cell transplant",
+        "category": "host",
+        "lrPos": 2.2,
+        "lrNeg": 0.95,
+        "notes": "High-risk non-HIV host state for PJP; modeled as conservative baseline enrichment.",
+        "source": {
+          "short": "Mori et al. 2024 Review",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/38948111/"
+        }
+      },
+      {
+        "id": "pjp_host_other_tcell_immunosuppression",
+        "label": "Other major T-cell immunosuppression or lymphopenia",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "notes": "Captures major non-HIV immunosuppressive states not already represented by the main host factors.",
+        "source": {
+          "short": "Mori et al. 2024 Review",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/38948111/"
+        }
+      },
+      {
+        "id": "pjp_vital_hypoxemia",
+        "label": "Hypoxemia",
+        "category": "vital",
+        "lrPos": 1.2,
+        "lrNeg": 0.9,
+        "notes": "Weak diagnostic discriminator alone in multivariable diagnostic cohorts.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_vital_fever",
+        "label": "Fever",
+        "category": "vital",
+        "lrPos": 1.2,
+        "lrNeg": 0.95,
+        "notes": "Common but non-specific in immunocompromised hosts.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_bdg_serum",
+        "label": "Serum beta-D-glucan (BDG)",
+        "category": "lab",
+        "group": "pjp_bdg",
+        "lrPos": 4.3,
+        "lrNeg": 0.11,
+        "notes": "Set Present=positive, Absent=negative. Good rule-out utility when pretest probability is low/intermediate.",
+        "source": {
+          "short": "Del Corpo et al. Clin Microbiol Infect",
+          "year": 2020,
+          "url": "https://doi.org/10.1016/j.cmi.2020.05.024"
+        }
+      },
+      {
+        "id": "pjp_bdg_na",
+        "label": "Serum BDG not done/unknown",
+        "category": "lab",
+        "group": "pjp_bdg",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Del Corpo et al. Clin Microbiol Infect",
+          "year": 2020,
+          "url": "https://doi.org/10.1016/j.cmi.2020.05.024"
+        }
+      },
+      {
+        "id": "pjp_ldh_high",
+        "label": "Serum LDH elevated (around >=265 IU/L)",
+        "category": "lab",
+        "lrPos": 3,
+        "lrNeg": 0.75,
+        "notes": "OR-informed approximation from multivariable diagnostic model.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_pcr_bal",
+        "label": "Respiratory PCR (BAL qPCR)",
+        "category": "micro",
+        "group": "pjp_pcr_strategy",
+        "lrPos": 9.19,
+        "lrNeg": 0.014,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Brown et al. Clin Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1093/cid/ciae239"
+        }
+      },
+      {
+        "id": "pjp_pcr_induced_sputum",
+        "label": "Respiratory PCR (induced sputum qPCR)",
+        "category": "micro",
+        "group": "pjp_pcr_strategy",
+        "lrPos": 5.3,
+        "lrNeg": 0.024,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Brown et al. Clin Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1093/cid/ciae239"
+        }
+      },
+      {
+        "id": "pjp_pcr_upper_airway",
+        "label": "Respiratory PCR (upper airway sample)",
+        "category": "micro",
+        "group": "pjp_pcr_strategy",
+        "lrPos": 9.34,
+        "lrNeg": 0.12,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Brown et al. Clin Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1093/cid/ciae239"
+        }
+      },
+      {
+        "id": "pjp_pcr_na",
+        "label": "Respiratory PCR not done/unknown",
+        "category": "micro",
+        "group": "pjp_pcr_strategy",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Brown et al. Clin Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1093/cid/ciae239"
+        }
+      },
+      {
+        "id": "pjp_dfa",
+        "label": "Respiratory direct fluorescent antibody (DFA/IFA)",
+        "category": "micro",
+        "group": "pjp_dfa_strategy",
+        "lrPos": 20,
+        "lrNeg": 0.73,
+        "notes": "Set Present=positive, Absent=negative. Very specific but substantially less sensitive than PCR in routine cohorts.",
+        "source": {
+          "short": "Veintimilla et al. J Fungi",
+          "year": 2023,
+          "url": "https://doi.org/10.3390/jof9040414"
+        }
+      },
+      {
+        "id": "pjp_dfa_na",
+        "label": "Respiratory DFA/IFA not done/unknown",
+        "category": "micro",
+        "group": "pjp_dfa_strategy",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Veintimilla et al. J Fungi",
+          "year": 2023,
+          "url": "https://doi.org/10.3390/jof9040414"
+        }
+      },
+      {
+        "id": "pjp_cxr_typical",
+        "label": "CXR typical of PJP (diffuse/interstitial-interstitial-alveolar pattern)",
+        "category": "imaging",
+        "group": "pjp_imaging",
+        "lrPos": 3,
+        "lrNeg": 0.7,
+        "notes": "Approximation informed by pooled ORs and multivariable diagnostic cohorts.",
+        "source": {
+          "short": "Wills et al. Open Forum Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1093/ofid/ofae146"
+        }
+      },
+      {
+        "id": "pjp_ct_typical",
+        "label": "CT typical of PJP (ground-glass/interstitial pattern)",
+        "category": "imaging",
+        "group": "pjp_imaging",
+        "lrPos": 4.4,
+        "lrNeg": 0.45,
+        "notes": "OR-informed approximation from multivariable CT diagnostic cohorts.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      },
+      {
+        "id": "pjp_imaging_na",
+        "label": "Chest imaging not done/unknown",
+        "category": "imaging",
+        "group": "pjp_imaging",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Mappin-Kasirer et al. BMC Infect Dis",
+          "year": 2024,
+          "url": "https://doi.org/10.1186/s12879-024-09957-y"
+        }
+      }
+    ]
+  },
+  {
+    "id": "inv_candida",
+    "name": "Invasive Candidiasis",
+    "description": "Invasive candidiasis probability update using care-setting pretest probability plus selected risk factors (host findings), serum biomarkers, molecular diagnostics, and culture-based confirmation.",
+    "pretestPresets": [
+      {
+        "id": "icand_low",
+        "label": "Outpatient / Emergency Department",
+        "p": 0.002,
+        "notes": "Setting-only baseline (low prevalence). Add host/risk findings separately below.",
+        "source": {
+          "short": "Clancy and Nguyen. Clin Infect Dis",
+          "year": 2013,
+          "url": "https://doi.org/10.1093/cid/cit006"
+        }
+      },
+      {
+        "id": "icand_icu_risk",
+        "label": "Hospitalized (non-ICU)",
+        "p": 0.006,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "Clancy and Nguyen. Clin Infect Dis",
+          "year": 2013,
+          "url": "https://doi.org/10.1093/cid/cit006"
+        }
+      },
+      {
+        "id": "icand_high",
+        "label": "ICU",
+        "p": 0.01,
+        "notes": "Setting-only baseline (typical ICU incidence is generally low single-digit percentages). Add host/risk findings separately below.",
+        "source": {
+          "short": "Bassetti et al. Crit Care",
+          "year": 2019,
+          "url": "https://doi.org/10.1186/s13054-019-2497-3"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "icand_component_tpn",
+        "label": "Total parenteral nutrition",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.92,
+        "notes": "Candida Score component; modeled as an OR-informed risk enricher rather than a standalone diagnostic test.",
+        "source": {
+          "short": "León et al. Crit Care Med",
+          "year": 2006,
+          "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
+        }
+      },
+      {
+        "id": "icand_component_surgery",
+        "label": "Recent surgery",
+        "category": "host",
+        "lrPos": 1.7,
+        "lrNeg": 0.9,
+        "notes": "Candida Score component; modeled as an OR-informed risk enricher rather than a standalone diagnostic test.",
+        "source": {
+          "short": "León et al. Crit Care Med",
+          "year": 2006,
+          "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
+        }
+      },
+      {
+        "id": "icand_host_broad_abx",
+        "label": "Broad-spectrum antibiotics",
+        "category": "host",
+        "lrPos": 1.7,
+        "lrNeg": 0.92,
+        "notes": "Common baseline risk enricher for invasive candidiasis in hospitalized patients.",
+        "source": {
+          "short": "IDSA Candidiasis Guideline",
+          "year": 2016,
+          "url": "https://www.idsociety.org/practice-guideline/candidiasis/"
+        }
+      },
+      {
+        "id": "icand_host_cvc",
+        "label": "Central venous catheter",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.95,
+        "notes": "Major device-related candidemia risk state; kept conservative because risk varies by setting.",
+        "source": {
+          "short": "IDSA Candidiasis Guideline",
+          "year": 2016,
+          "url": "https://www.idsociety.org/practice-guideline/candidiasis/"
+        }
+      },
+      {
+        "id": "icand_host_dialysis",
+        "label": "Renal replacement therapy / dialysis",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.95,
+        "notes": "Common candidemia risk modifier in critically ill patients.",
+        "source": {
+          "short": "IDSA Candidiasis Guideline",
+          "year": 2016,
+          "url": "https://www.idsociety.org/practice-guideline/candidiasis/"
+        }
+      },
+      {
+        "id": "icand_component_multifocal_colonization",
+        "label": "Multifocal Candida colonization",
+        "category": "micro",
+        "lrPos": 2.3,
+        "lrNeg": 0.85,
+        "notes": "Candida Score component; stronger enrichment when colonization is documented at multiple non-blood sites.",
+        "source": {
+          "short": "León et al. Crit Care Med",
+          "year": 2006,
+          "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
+        }
+      },
+      {
+        "id": "icand_component_severe_sepsis",
+        "label": "Severe sepsis/septic shock",
+        "category": "vital",
+        "lrPos": 2.8,
+        "lrNeg": 0.85,
+        "notes": "Candida Score component with the highest weighting in the original score derivation.",
+        "source": {
+          "short": "León et al. Crit Care Med",
+          "year": 2006,
+          "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
+        }
+      },
+      {
+        "id": "icand_bdg_serum",
+        "label": "Serum beta-D-glucan (BDG)",
+        "category": "lab",
+        "group": "icand_bdg",
+        "lrPos": 5.22,
+        "lrNeg": 0.27,
+        "notes": "Pan-fungal biomarker; values derived from pooled IFI performance and interpreted as supportive (not Candida-specific).",
+        "source": {
+          "short": "Karageorgopoulos et al. Clin Infect Dis",
+          "year": 2011,
+          "url": "https://doi.org/10.1093/cid/ciq206"
+        }
+      },
+      {
+        "id": "icand_bdg_na",
+        "label": "Serum BDG not done/unknown",
+        "category": "lab",
+        "group": "icand_bdg",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Karageorgopoulos et al. Clin Infect Dis",
+          "year": 2011,
+          "url": "https://doi.org/10.1093/cid/ciq206"
+        }
+      },
+      {
+        "id": "icand_mannan_antimannan",
+        "label": "Combined mannan + anti-mannan assay",
+        "category": "lab",
+        "group": "icand_mannan",
+        "lrPos": 5.93,
+        "lrNeg": 0.2,
+        "notes": "Set Present=positive combined assay, Absent=negative combined assay.",
+        "source": {
+          "short": "Mikulska et al. Crit Care",
+          "year": 2010,
+          "url": "https://doi.org/10.1186/cc9365"
+        }
+      },
+      {
+        "id": "icand_mannan_na",
+        "label": "Mannan/anti-mannan testing not done/unknown",
+        "category": "lab",
+        "group": "icand_mannan",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Mikulska et al. Crit Care",
+          "year": 2010,
+          "url": "https://doi.org/10.1186/cc9365"
+        }
+      },
+      {
+        "id": "icand_t2candida",
+        "label": "T2Candida panel",
+        "category": "micro",
+        "group": "icand_t2",
+        "lrPos": 10.16,
+        "lrNeg": 0.08,
+        "notes": "Set Present=positive, Absent=negative. High NPV performance in pooled analyses.",
+        "source": {
+          "short": "Tang et al. BMC Infect Dis",
+          "year": 2019,
+          "url": "https://doi.org/10.1186/s12879-019-4419-z"
+        }
+      },
+      {
+        "id": "icand_t2_na",
+        "label": "T2Candida not done/unknown",
+        "category": "micro",
+        "group": "icand_t2",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Tang et al. BMC Infect Dis",
+          "year": 2019,
+          "url": "https://doi.org/10.1186/s12879-019-4419-z"
+        }
+      },
+      {
+        "id": "icand_pcr_blood",
+        "label": "Candida PCR from blood",
+        "category": "micro",
+        "group": "icand_pcr",
+        "lrPos": 11.88,
+        "lrNeg": 0.05,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Avni et al. J Clin Microbiol",
+          "year": 2011,
+          "url": "https://doi.org/10.1128/JCM.01602-10"
+        }
+      },
+      {
+        "id": "icand_pcr_na",
+        "label": "Candida PCR not done/unknown",
+        "category": "micro",
+        "group": "icand_pcr",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Avni et al. J Clin Microbiol",
+          "year": 2011,
+          "url": "https://doi.org/10.1128/JCM.01602-10"
+        }
+      },
+      {
+        "id": "icand_culture_positive",
+        "label": "Blood/sterile-site culture positive for Candida",
+        "category": "micro",
+        "group": "icand_culture",
+        "lrPos": 20,
+        "notes": "Strong rule-in finding. A negative blood culture should not be used to exclude invasive candidiasis.",
+        "source": {
+          "short": "Clancy and Nguyen. J Fungi",
+          "year": 2018,
+          "url": "https://doi.org/10.3390/jof4010027"
+        }
+      },
+      {
+        "id": "icand_culture_na",
+        "label": "Culture strategy not done/unknown",
+        "category": "micro",
+        "group": "icand_culture",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Clancy and Nguyen. J Fungi",
+          "year": 2018,
+          "url": "https://doi.org/10.3390/jof4010027"
+        }
+      }
+    ]
+  },
+  {
+    "id": "inv_mold",
+    "name": "Invasive Mold Infection",
+    "description": "Invasive mold infection probability update using care-setting pretest probability plus selected host risk factors, chest imaging, serum/BAL fungal biomarkers, Aspergillus PCR, and Mucorales PCR. Current diagnostics are Aspergillus-dominant with dedicated Mucorales PCR support.",
+    "pretestPresets": [
+      {
+        "id": "imi_low",
+        "label": "Outpatient / Emergency Department",
+        "p": 0.001,
+        "notes": "Setting-only baseline (very low prevalence). Add host/risk findings separately below.",
+        "source": {
+          "short": "Patterson et al. IDSA Aspergillosis",
+          "year": 2016,
+          "url": "https://doi.org/10.1093/cid/ciw326"
+        }
+      },
+      {
+        "id": "imi_heme_high",
+        "label": "Hospitalized (non-ICU)",
+        "p": 0.005,
+        "notes": "Setting-only baseline. Add host/risk findings separately below.",
+        "source": {
+          "short": "Cruciani et al. Cochrane",
+          "year": 2019,
+          "url": "https://doi.org/10.1002/14651858.CD009551.pub4"
+        }
+      },
+      {
+        "id": "imi_icu_viral",
+        "label": "ICU",
+        "p": 0.015,
+        "notes": "Setting-only baseline (non-enriched ICU population). Add host/risk findings separately below.",
+        "source": {
+          "short": "Feys et al. Lancet Infect Dis",
+          "year": 2022,
+          "url": "https://doi.org/10.1016/S1473-3099(22)00044-8"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "imi_host_neutropenia_hsct",
+        "label": "Profound neutropenia or recent allogeneic HSCT",
+        "category": "host",
+        "lrPos": 3,
+        "lrNeg": 0.85,
+        "notes": "Consensus major host factor for invasive mold disease; modeled as pretest enrichment.",
+        "source": {
+          "short": "Donnelly et al. Clin Infect Dis",
+          "year": 2020,
+          "url": "https://doi.org/10.1093/cid/ciz1008"
+        }
+      },
+      {
+        "id": "imi_host_hematologic_malignancy",
+        "label": "Active hematologic malignancy (e.g., AML/MDS/relapsed leukemia)",
+        "category": "host",
+        "lrPos": 2.2,
+        "lrNeg": 0.92,
+        "notes": "Consensus host-risk enricher for invasive aspergillosis and related mold disease.",
+        "source": {
+          "short": "Donnelly et al. Clin Infect Dis",
+          "year": 2020,
+          "url": "https://doi.org/10.1093/cid/ciz1008"
+        }
+      },
+      {
+        "id": "imi_host_solid_organ_transplant",
+        "label": "Solid organ transplant recipient",
+        "category": "host",
+        "lrPos": 1.9,
+        "lrNeg": 0.94,
+        "notes": "Modeled as a conservative pretest-risk enrichment factor.",
+        "source": {
+          "short": "Patterson et al. IDSA Aspergillosis",
+          "year": 2016,
+          "url": "https://doi.org/10.1093/cid/ciw326"
+        }
+      },
+      {
+        "id": "imi_host_steroids_tcell",
+        "label": "Prolonged corticosteroids or significant T-cell immunosuppression",
+        "category": "host",
+        "lrPos": 2,
+        "lrNeg": 0.9,
+        "notes": "Modeled as a conservative host-risk enricher when classic immunosuppression is present.",
+        "source": {
+          "short": "Donnelly et al. Clin Infect Dis",
+          "year": 2020,
+          "url": "https://doi.org/10.1093/cid/ciz1008"
+        }
+      },
+      {
+        "id": "imi_host_icu_viral_steroid",
+        "label": "Severe viral pneumonia in ICU with corticosteroid exposure (CAPA context)",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "notes": "Host/context enrichment only; add diagnostics (GM/PCR/imaging) for meaningful rule-in or rule-out shifts.",
+        "source": {
+          "short": "Feys et al. Lancet Infect Dis",
+          "year": 2022,
+          "url": "https://doi.org/10.1016/S1473-3099(22)00044-8"
+        }
+      },
+      {
+        "id": "imi_fever_refractory",
+        "label": "Persistent/refractory fever despite broad-spectrum antibacterials",
+        "category": "symptom",
+        "lrPos": 1.4,
+        "lrNeg": 0.9,
+        "notes": "Supportive but non-specific in high-risk patients.",
+        "source": {
+          "short": "Patterson et al. IDSA Aspergillosis",
+          "year": 2016,
+          "url": "https://doi.org/10.1093/cid/ciw326"
+        }
+      },
+      {
+        "id": "imi_ct_halo_sign",
+        "label": "Chest CT halo sign (nodular lesion with surrounding ground-glass opacity)",
+        "category": "imaging",
+        "group": "imi_ct",
+        "lrPos": 5.6,
+        "lrNeg": 0.55,
+        "notes": "Good rule-in support in the right host context; absence does not exclude invasive mold infection.",
+        "source": {
+          "short": "Agarwal et al. Eur J Radiol",
+          "year": 2020,
+          "url": "https://doi.org/10.1016/j.ejrad.2020.108843"
+        }
+      },
+      {
+        "id": "imi_ct_na",
+        "label": "Chest CT not done/unknown",
+        "category": "imaging",
+        "group": "imi_ct",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Agarwal et al. Eur J Radiol",
+          "year": 2020,
+          "url": "https://doi.org/10.1016/j.ejrad.2020.108843"
+        }
+      },
+      {
+        "id": "imi_serum_gm_odi10",
+        "label": "Serum galactomannan (ODI threshold around 1.0)",
+        "category": "lab",
+        "group": "imi_gm",
+        "lrPos": 5.2,
+        "lrNeg": 0.31,
+        "notes": "Set Present=positive, Absent=negative. Conservative LR estimate using ODI around 1.0 to limit false positives.",
+        "source": {
+          "short": "Leeflang et al. Cochrane",
+          "year": 2015,
+          "url": "https://doi.org/10.1002/14651858.CD007394.pub2"
+        }
+      },
+      {
+        "id": "imi_bal_gm_odi10",
+        "label": "BAL galactomannan (ODI threshold around 1.5)",
+        "category": "lab",
+        "group": "imi_gm",
+        "lrPos": 53.7,
+        "lrNeg": 0.08,
+        "notes": "Set Present=positive, Absent=negative. Very strong rule-in utility in high-risk hematology cohorts.",
+        "source": {
+          "short": "Heng et al. Crit Rev Microbiol",
+          "year": 2015,
+          "url": "https://doi.org/10.3109/1040841X.2013.804033"
+        }
+      },
+      {
+        "id": "imi_gm_na",
+        "label": "Galactomannan testing not done/unknown",
+        "category": "lab",
+        "group": "imi_gm",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Heng et al. Crit Rev Microbiol",
+          "year": 2015,
+          "url": "https://doi.org/10.3109/1040841X.2013.804033"
+        }
+      },
+      {
+        "id": "imi_serum_bdg",
+        "label": "Serum beta-D-glucan (BDG)",
+        "category": "lab",
+        "group": "imi_bdg",
+        "lrPos": 4,
+        "lrNeg": 0.34,
+        "notes": "Pan-fungal biomarker; interpret with clinical context and potential non-mold causes of positivity.",
+        "source": {
+          "short": "Huang et al. Clin Respir J",
+          "year": 2024,
+          "url": "https://doi.org/10.1111/crj.13760"
+        }
+      },
+      {
+        "id": "imi_bdg_na",
+        "label": "Serum BDG not done/unknown",
+        "category": "lab",
+        "group": "imi_bdg",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Huang et al. Clin Respir J",
+          "year": 2024,
+          "url": "https://doi.org/10.1111/crj.13760"
+        }
+      },
+      {
+        "id": "imi_aspergillus_lfd",
+        "label": "Aspergillus lateral flow test (LFD/LFA)",
+        "category": "lab",
+        "group": "imi_lfd",
+        "lrPos": 6.65,
+        "lrNeg": 0.26,
+        "notes": "Set Present=positive, Absent=negative. Interpret by specimen type and local assay performance.",
+        "source": {
+          "short": "Zhang et al. Heliyon",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.heliyon.2024.e34569"
+        }
+      },
+      {
+        "id": "imi_lfd_na",
+        "label": "Aspergillus LFD/LFA not done/unknown",
+        "category": "lab",
+        "group": "imi_lfd",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Zhang et al. Heliyon",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.heliyon.2024.e34569"
+        }
+      },
+      {
+        "id": "imi_aspergillus_pcr_bal",
+        "label": "Aspergillus PCR from BAL",
+        "category": "micro",
+        "group": "imi_aspergillus_pcr",
+        "lrPos": 25.1,
+        "lrNeg": 0.1,
+        "notes": "Set Present=positive, Absent=negative. Performance can vary with antifungal exposure and assay method.",
+        "source": {
+          "short": "Avni et al. J Clin Microbiol",
+          "year": 2012,
+          "url": "https://doi.org/10.1128/JCM.00942-12"
+        }
+      },
+      {
+        "id": "imi_aspergillus_pcr_na",
+        "label": "Aspergillus PCR strategy not done/unknown",
+        "category": "micro",
+        "group": "imi_aspergillus_pcr",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Avni et al. J Clin Microbiol",
+          "year": 2012,
+          "url": "https://doi.org/10.1128/JCM.00942-12"
+        }
+      },
+      {
+        "id": "imi_mucorales_pcr_bal",
+        "label": "Mucorales PCR from BAL",
+        "category": "micro",
+        "group": "imi_mucorales_pcr",
+        "lrPos": 23.5,
+        "lrNeg": 0.03,
+        "notes": "Set Present=positive, Absent=negative. Very strong negative LR in pooled analyses.",
+        "source": {
+          "short": "Brown et al. Int J Infect Dis",
+          "year": 2025,
+          "url": "https://doi.org/10.1016/j.ijid.2025.107941"
+        }
+      },
+      {
+        "id": "imi_mucorales_pcr_blood",
+        "label": "Mucorales PCR from blood",
+        "category": "micro",
+        "group": "imi_mucorales_pcr",
+        "lrPos": 18.3,
+        "lrNeg": 0.19,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Brown et al. Int J Infect Dis",
+          "year": 2025,
+          "url": "https://doi.org/10.1016/j.ijid.2025.107941"
+        }
+      },
+      {
+        "id": "imi_mucorales_pcr_na",
+        "label": "Mucorales PCR not done/unknown",
+        "category": "micro",
+        "group": "imi_mucorales_pcr",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Brown et al. Int J Infect Dis",
+          "year": 2025,
+          "url": "https://doi.org/10.1016/j.ijid.2025.107941"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pji",
+    "name": "PJI",
+    "description": "Prosthetic joint infection probability update using setting-only pretest probability plus selected host risk factors, exam findings, inflammatory markers, synovial biomarkers, microbiology, and supportive imaging.",
+    "pretestPresets": [
+      {
+        "id": "pji_low",
+        "label": "Outpatient arthroplasty clinic follow-up",
+        "p": 0.03,
+        "notes": "Setting-only baseline. Add host/exam/lab findings separately below.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_intermediate",
+        "label": "ED / inpatient",
+        "p": 0.08,
+        "notes": "Setting-only baseline. Add host/exam/lab findings separately below.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_high",
+        "label": "Pre-revision arthroplasty evaluation",
+        "p": 0.15,
+        "notes": "Setting-only baseline for revision workup contexts. Add host/exam/lab findings separately below.",
+        "source": {
+          "short": "Parvizi et al. J Arthroplasty",
+          "year": 2018,
+          "url": "https://doi.org/10.1016/j.arth.2018.09.028"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "pji_host_revision_arthroplasty",
+        "label": "Prior revision arthroplasty",
+        "category": "host",
+        "lrPos": 2.2,
+        "lrNeg": 0.9,
+        "notes": "Approximate enrichment from pooled observational risk-factor data.",
+        "source": {
+          "short": "Zhu et al. Int Wound J",
+          "year": 2016,
+          "url": "https://doi.org/10.1111/iwj.12465"
+        }
+      },
+      {
+        "id": "pji_host_obesity",
+        "label": "Obesity (roughly BMI >=30)",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.95,
+        "notes": "Modeled as a modest pretest risk enricher.",
+        "source": {
+          "short": "Zhu et al. Int Wound J",
+          "year": 2016,
+          "url": "https://doi.org/10.1111/iwj.12465"
+        }
+      },
+      {
+        "id": "pji_host_diabetes",
+        "label": "Diabetes mellitus",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.95,
+        "notes": "Modeled as a modest pretest risk enricher.",
+        "source": {
+          "short": "Zhu et al. Int Wound J",
+          "year": 2016,
+          "url": "https://doi.org/10.1111/iwj.12465"
+        }
+      },
+      {
+        "id": "pji_host_ra_immunosuppression",
+        "label": "Rheumatoid arthritis or meaningful immunosuppression",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.95,
+        "notes": "Risk-factor enrichment from pooled observational datasets.",
+        "source": {
+          "short": "Zhu et al. Int Wound J",
+          "year": 2016,
+          "url": "https://doi.org/10.1111/iwj.12465"
+        }
+      },
+      {
+        "id": "pji_host_prior_pji",
+        "label": "Prior prosthetic joint infection",
+        "category": "host",
+        "lrPos": 2.0,
+        "lrNeg": 0.95,
+        "notes": "Conservative baseline risk enrichment for patients with prior PJI history.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_tobacco_use",
+        "label": "Current tobacco use",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.98,
+        "notes": "AAOS-recognized modifiable baseline risk factor; modeled conservatively.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_malnutrition",
+        "label": "Malnutrition / hypoalbuminemia",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.97,
+        "notes": "AAOS-recognized nutritional risk factor; modeled as a modest baseline enricher.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_ckd",
+        "label": "Chronic kidney disease",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.97,
+        "notes": "AAOS-recognized baseline risk factor; modeled conservatively to limit overlap with other comorbidities.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_liver_disease",
+        "label": "Chronic liver disease",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.98,
+        "notes": "AAOS-recognized baseline risk factor; modeled as a modest pretest enricher.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_anemia",
+        "label": "Anemia",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.98,
+        "notes": "AAOS-recognized baseline risk factor; treated as a modest risk enricher.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_host_alcohol_use",
+        "label": "Alcohol use disorder",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.98,
+        "notes": "AAOS-recognized baseline risk factor; modeled conservatively.",
+        "source": {
+          "short": "AAOS PJI CPG",
+          "year": 2021,
+          "url": "https://www.aaos.org/globalassets/quality-and-practice-resources/pji/diagnosis-and-prevention-of-periprosthetic-joint-infections-clinical-practice-guideline-4-24-19.pdf"
+        }
+      },
+      {
+        "id": "pji_sym_joint_pain",
+        "label": "Persistent or worsening pain in prosthetic joint",
+        "category": "symptom",
+        "lrPos": 1.4,
+        "lrNeg": 0.8,
+        "notes": "Common but non-specific; best interpreted with labs and aspiration data.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_vital_fever",
+        "label": "Fever (>=38 C)",
+        "category": "vital",
+        "lrPos": 1.3,
+        "lrNeg": 0.95,
+        "notes": "Absent fever does not exclude PJI, especially chronic presentations.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_sym_local_inflammation",
+        "label": "Local erythema, warmth, swelling, or drainage",
+        "category": "exam",
+        "lrPos": 1.8,
+        "lrNeg": 0.8,
+        "notes": "Physical exam finding; supportive but not definitive without microbiologic correlation.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_exam_sinus_tract",
+        "label": "Sinus tract communicating with prosthesis",
+        "category": "exam",
+        "lrPos": 30,
+        "lrNeg": 0.95,
+        "notes": "Major diagnostic criterion with very high rule-in value.",
+        "source": {
+          "short": "Parvizi et al. J Arthroplasty",
+          "year": 2018,
+          "url": "https://doi.org/10.1016/j.arth.2018.09.028"
+        }
+      },
+      {
+        "id": "pji_crp",
+        "label": "C-reactive protein elevated",
+        "category": "lab",
+        "lrPos": 3.01,
+        "lrNeg": 0.14,
+        "notes": "Set Present=above selected threshold, Absent=below threshold.",
+        "source": {
+          "short": "Tarabichi et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.02.030"
+        }
+      },
+      {
+        "id": "pji_esr",
+        "label": "ESR elevated",
+        "category": "lab",
+        "lrPos": 4.99,
+        "lrNeg": 0.31,
+        "notes": "Set Present=above selected threshold, Absent=below threshold.",
+        "source": {
+          "short": "Tarabichi et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.02.030"
+        }
+      },
+      {
+        "id": "pji_alpha_defensin_elisa",
+        "label": "Synovial alpha-defensin (ELISA laboratory assay)",
+        "category": "lab",
+        "group": "pji_synovial_marker",
+        "lrPos": 41.8,
+        "lrNeg": 0.12,
+        "notes": "Set Present=positive, Absent=negative. Very strong rule-in performance in pooled analyses.",
+        "source": {
+          "short": "Paul et al. JBJI",
+          "year": 2025,
+          "url": "https://doi.org/10.5194/jbji-10-525-2025"
+        }
+      },
+      {
+        "id": "pji_alpha_defensin_lateral_flow",
+        "label": "Synovial alpha-defensin (lateral flow)",
+        "category": "lab",
+        "group": "pji_synovial_marker",
+        "lrPos": 17,
+        "lrNeg": 0.23,
+        "notes": "Set Present=positive, Absent=negative. Point-of-care format with lower sensitivity vs ELISA.",
+        "source": {
+          "short": "Paul et al. JBJI",
+          "year": 2025,
+          "url": "https://doi.org/10.5194/jbji-10-525-2025"
+        }
+      },
+      {
+        "id": "pji_leukocyte_esterase",
+        "label": "Synovial leukocyte esterase strip",
+        "category": "lab",
+        "group": "pji_synovial_marker",
+        "lrPos": 20.4,
+        "lrNeg": 0.13,
+        "notes": "Set Present=positive, Absent=negative. Strong diagnostic utility in pooled analyses.",
+        "source": {
+          "short": "Poursalehian et al. Arthroplasty",
+          "year": 2025,
+          "url": "https://doi.org/10.1186/s42836-025-00325-y"
+        }
+      },
+      {
+        "id": "pji_synovial_marker_na",
+        "label": "Synovial biomarker testing not done/unknown",
+        "category": "lab",
+        "group": "pji_synovial_marker",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Poursalehian et al. Arthroplasty",
+          "year": 2025,
+          "url": "https://doi.org/10.1186/s42836-025-00325-y"
+        }
+      },
+      {
+        "id": "pji_synovial_fluid_culture",
+        "label": "Preoperative synovial fluid culture",
+        "category": "micro",
+        "group": "pji_culture_strategy",
+        "lrPos": 15.8,
+        "lrNeg": 0.39,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Watanabe et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.03.016"
+        }
+      },
+      {
+        "id": "pji_intraop_tissue_culture",
+        "label": "Intraoperative periprosthetic tissue culture",
+        "category": "micro",
+        "group": "pji_culture_strategy",
+        "lrPos": 8.9,
+        "lrNeg": 0.32,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Watanabe et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.03.016"
+        }
+      },
+      {
+        "id": "pji_sonication_culture",
+        "label": "Sonication fluid culture (removed prosthesis)",
+        "category": "micro",
+        "group": "pji_culture_strategy",
+        "lrPos": 8.7,
+        "lrNeg": 0.24,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Watanabe et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.03.016"
+        }
+      },
+      {
+        "id": "pji_culture_na",
+        "label": "Culture strategy not done/unknown",
+        "category": "micro",
+        "group": "pji_culture_strategy",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Watanabe et al. J Arthroplasty",
+          "year": 2024,
+          "url": "https://doi.org/10.1016/j.arth.2024.03.016"
+        }
+      },
+      {
+        "id": "pji_synovial_pcr",
+        "label": "Synovial PCR for bacterial detection",
+        "category": "micro",
+        "group": "pji_pcr_strategy",
+        "lrPos": 12.7,
+        "lrNeg": 0.26,
+        "notes": "Set Present=positive, Absent=negative.",
+        "source": {
+          "short": "Jun et al. Surg Infect",
+          "year": 2018,
+          "url": "https://doi.org/10.1089/sur.2018.014"
+        }
+      },
+      {
+        "id": "pji_pcr_na",
+        "label": "Synovial PCR not done/unknown",
+        "category": "micro",
+        "group": "pji_pcr_strategy",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Jun et al. Surg Infect",
+          "year": 2018,
+          "url": "https://doi.org/10.1089/sur.2018.014"
+        }
+      },
+      {
+        "id": "pji_xray_supportive",
+        "label": "Plain radiograph suggestive of infection (rapid loosening/osteolysis/periosteal reaction)",
+        "category": "imaging",
+        "group": "pji_imaging",
+        "lrPos": 2,
+        "lrNeg": 0.7,
+        "notes": "Supportive finding with limited standalone discrimination.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      },
+      {
+        "id": "pji_imaging_na",
+        "label": "Imaging not done/unknown",
+        "category": "imaging",
+        "group": "pji_imaging",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Cortes-Penfield et al. Clin Infect Dis",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciac992"
+        }
+      }
+    ]
+  }
+]
