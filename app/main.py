@@ -2122,6 +2122,92 @@ def _assistant_review_options() -> List[AssistantOption]:
     ]
 
 
+def _assistant_single_ast_follow_up(label: str) -> str | None:
+    cleaned = (label or "").strip()
+    if not cleaned:
+        return None
+    normalized = re.sub(r"\s+(positive|negative|present|absent)$", "", cleaned, flags=re.IGNORECASE)
+    return (
+        f"The next thing I want to know is {cleaned}. "
+        f"You can answer in one line, for example: '{normalized} susceptible' or '{normalized} resistant.'"
+    )
+
+
+def _assistant_single_case_follow_up(
+    module: SyndromeModule,
+    parsed_request: AnalyzeRequest | None,
+    *,
+    state: AssistantState | None = None,
+) -> str | None:
+    next_items = _top_missing_item_specs(module, parsed_request, limit=1, state=state)
+    if not next_items:
+        return None
+    item_id, label = next_items[0]
+    item = _assistant_case_item_by_id(module, item_id)
+    if item is None:
+        return None
+    present_text, absent_text = _assistant_case_item_text(item, module)
+    return (
+        f"The next thing I want to know is {label}. "
+        f"You can answer in one line, for example: '{present_text}' or '{absent_text}'."
+    )
+
+
+def _assistant_concise_probid_follow_up(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+    *,
+    lead: str = "That helps.",
+) -> str:
+    pieces = [lead]
+    follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
+    if follow_up:
+        pieces.append(follow_up)
+    elif text_result.requires_confirmation:
+        pieces.append("If anything looks off, correct it or add another detail.")
+    else:
+        pieces.append("If this extraction matches the case, ask for my consultant impression.")
+    return " ".join(piece.strip() for piece in pieces if piece and piece.strip())
+
+
+def _assistant_concise_mechid_follow_up(
+    result: MechIDTextAnalyzeResponse,
+    *,
+    lead: str = "That helps.",
+    latest_message: str | None = None,
+) -> str:
+    parsed = result.parsed_request
+    if parsed is None:
+        message = (
+            "I still could not confidently identify the organism and AST pattern. "
+            "Please add the organism plus a few susceptibility calls."
+        )
+        if result.warnings:
+            message += " " + result.warnings[0]
+        return message
+
+    pieces = [lead]
+    if result.provisional_advice is not None and result.provisional_advice.missing_susceptibilities:
+        next_label = result.provisional_advice.missing_susceptibilities[0]
+        if latest_message:
+            latest_norm = " ".join(_normalize_choice(latest_message).split())
+            for candidate in result.provisional_advice.missing_susceptibilities:
+                candidate_norm = " ".join(_normalize_choice(candidate.replace(":", " ")).split())
+                if candidate_norm and candidate_norm in latest_norm:
+                    continue
+                next_label = candidate
+                break
+        follow_up = _assistant_single_ast_follow_up(next_label)
+        if follow_up:
+            pieces.append(follow_up)
+    elif result.analysis is None:
+        pieces.append("Please add a few susceptibility calls so I can tighten the interpretation.")
+    else:
+        pieces.append("If this extraction matches the case, ask for my consultant impression.")
+    return " ".join(piece.strip() for piece in pieces if piece and piece.strip())
+
+
 def _join_readable(items: List[str]) -> str:
     if not items:
         return ""
@@ -2931,9 +3017,9 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
             if advice.notes:
                 summary += f"\nImportant context captured: {advice.notes[0]}"
             if advice.missing_susceptibilities:
-                summary += (
-                    f"\nWhat still needs confirmation: susceptibilities for {_join_readable(advice.missing_susceptibilities[:5])}."
-                )
+                follow_up = _assistant_single_ast_follow_up(advice.missing_susceptibilities[0])
+                if follow_up:
+                    summary += f"\n{follow_up}"
             summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
             return summary
 
@@ -3989,9 +4075,9 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
             f"I also captured {_join_readable(absent_findings)} as absent or negative."
         )
 
-    missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
-    if missing_suggestions:
-        summary += " The next details most likely to sharpen the estimate are " + _join_readable(missing_suggestions) + "."
+    single_follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
+    if single_follow_up:
+        summary += " " + single_follow_up
     score_name = _assistant_selected_endo_score_id(state)
     if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state):
         summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
@@ -4138,8 +4224,8 @@ def _assistant_intake_case_from_text(
         options=_assistant_review_options_for_case(module, text_result, state),
         analysis=text_result,
         tips=[
-            "Review what I extracted, then ask for my consultant impression or add another case detail.",
-            "You can still switch to the step-by-step pathway by choosing Add case detail.",
+            "Reply with the single follow-up detail I asked for, in normal words, and I will keep the case moving.",
+            "If the extraction already looks right, ask for my consultant impression.",
         ],
     )
 
@@ -4194,8 +4280,8 @@ def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: Assista
         options=_assistant_mechid_review_options(mechid_result),
         mechidAnalysis=mechid_result,
         tips=[
-            "Include the organism plus a few AST calls, such as resistant or susceptible to named antibiotics.",
-            "If the extracted details look right, run the interpretation.",
+            "Reply with the next susceptibility or context detail I asked for, in normal words, and I will update the case.",
+            "If the extraction already looks right, ask for my consultant impression.",
         ],
     )
 
@@ -4383,8 +4469,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_mechid_review_options(mechid_result),
             mechidAnalysis=mechid_result,
             tips=[
-                "Review what I extracted from the text before running the interpretation.",
-                "Add more AST details if anything is missing or wrong.",
+                "Answer the single follow-up question in one line if that is faster than using the buttons.",
+                "Add more AST details, syndrome context, or severity if anything is missing or wrong.",
             ],
         )
 
@@ -4448,16 +4534,18 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 ],
             )
 
-        review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
         return AssistantTurnResponse(
-            assistantMessage=review_message,
-            assistantNarrationRefined=narration_refined,
+            assistantMessage=_assistant_concise_mechid_follow_up(
+                mechid_result,
+                latest_message=req.message,
+            ),
+            assistantNarrationRefined=False,
             state=state,
             options=_assistant_mechid_review_options(mechid_result),
             mechidAnalysis=mechid_result,
             tips=[
-                "Ask for my consultant impression if the extracted organism and AST pattern look right.",
-                "Otherwise add more case detail or begin a new consult.",
+                "Keep replying in normal words and I will keep the case moving one question at a time.",
+                "If the extraction looks right already, ask for my consultant impression.",
             ],
         )
 
@@ -4853,8 +4941,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_review_options_for_case(module, text_result, state),
             analysis=text_result,
             tips=[
-                "Review the parsed request before asking for my consultant impression.",
-                "Use the Add buttons to fill in suggested missing findings, or type another case detail.",
+                "Answer the single next question in normal words if that is faster than using the Add buttons.",
+                "If the extraction looks right already, ask for my consultant impression.",
             ],
         )
 
@@ -4896,16 +4984,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if present_text.strip().lower() not in existing_lines:
                 state.case_text = _append_case_text(state.case_text, present_text)
             text_result = _assistant_parse_case_text(module, state)
-            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=review_message,
-                assistantNarrationRefined=narration_refined,
+                assistantMessage=_assistant_concise_probid_follow_up(
+                    module,
+                    text_result,
+                    state,
+                    lead=f"Okay, I added {item.label}.",
+                ),
+                assistantNarrationRefined=False,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
                 tips=[
-                    f"I added '{item.label}' to the case and refreshed the review.",
-                    "Use the remaining Add buttons or ask for my consultant impression.",
+                    "Keep replying in normal words and I will keep the case moving one question at a time.",
+                    "If the extraction looks right already, ask for my consultant impression.",
                 ],
             )
 
@@ -4919,16 +5011,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 (entry_label for entry_id, entry_label in _assistant_endo_score_component_entries(state) if entry_id == score_factor_id),
                 score_factor_id.replace("_", " "),
             )
-            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=review_message,
-                assistantNarrationRefined=narration_refined,
+                assistantMessage=_assistant_concise_probid_follow_up(
+                    module,
+                    text_result,
+                    state,
+                    lead=f"Okay, I added the score component {score_label}.",
+                ),
+                assistantNarrationRefined=False,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
                 tips=[
-                    f"I added the score component '{score_label}' and refreshed the review.",
-                    "Continue confirming score components, add findings, or ask for my consultant impression.",
+                    "Keep replying in normal words and I will keep the case moving one question at a time.",
+                    "If the extraction looks right already, ask for my consultant impression.",
                 ],
             )
 
@@ -4998,16 +5094,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if module.id == "endo":
                 _assistant_merge_endo_score_factor_ids(state, _assistant_infer_endo_score_factor_ids_from_text(state, req.message))
             text_result = _assistant_parse_case_text(module, state)
-            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=review_message,
-                assistantNarrationRefined=narration_refined,
+                assistantMessage=_assistant_concise_probid_follow_up(module, text_result, state),
+                assistantNarrationRefined=False,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
                 tips=[
-                    "I updated the parsed request with your new detail.",
-                    "Use Present or Absent with the suggestion buttons, or ask for my consultant impression when the review looks complete.",
+                    "Keep replying in normal words and I will keep the case moving one question at a time.",
+                    "If the extraction looks right already, ask for my consultant impression.",
                 ],
             )
 
