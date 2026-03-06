@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 FindingState = Literal["present", "absent", "unknown"]
 Recommendation = Literal["observe", "test", "treat"]
+ASTResult = Literal["Susceptible", "Intermediate", "Resistant"]
 
 
 class SourceRef(BaseModel):
@@ -282,6 +283,8 @@ AssistantStage = Literal[
     "select_pretest_factors",
     "describe_case",
     "confirm_case",
+    "mechid_describe",
+    "mechid_confirm",
     "done",
 ]
 
@@ -298,6 +301,7 @@ class AssistantOption(BaseModel):
 
 class AssistantState(BaseModel):
     stage: AssistantStage = "select_module"
+    workflow: Literal["probid", "mechid"] = "probid"
     module_id: Optional[str] = Field(default=None, alias="moduleId")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
     endo_blood_culture_context: Optional[
@@ -308,6 +312,7 @@ class AssistantState(BaseModel):
         Literal["exam_vitals", "lab", "micro", "imaging"]
     ] = Field(default=None, alias="caseSection")
     case_text: Optional[str] = Field(default=None, alias="caseText")
+    mechid_text: Optional[str] = Field(default=None, alias="mechidText")
     pretest_factor_ids: List[str] = Field(default_factory=list, alias="pretestFactorIds")
     pretest_factor_labels: List[str] = Field(default_factory=list, alias="pretestFactorLabels")
     parser_strategy: Literal["auto", "rule", "local", "openai"] = Field(default="auto", alias="parserStrategy")
@@ -334,6 +339,66 @@ class AssistantTurnResponse(BaseModel):
     state: AssistantState
     options: List[AssistantOption] = Field(default_factory=list)
     analysis: Optional[TextAnalyzeResponse] = None
+    mechid_analysis: Optional["MechIDTextAnalyzeResponse"] = Field(default=None, alias="mechidAnalysis")
     tips: List[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTxContext(BaseModel):
+    syndrome: str = "Not specified"
+    severity: str = "Not specified"
+
+
+class MechIDAnalyzeRequest(BaseModel):
+    organism: str = Field(min_length=1)
+    susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
+    tx_context: Optional[MechIDTxContext] = Field(default=None, alias="txContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDResultRow(BaseModel):
+    antibiotic: str
+    result: ASTResult
+    source: Literal["user", "cascade_rule", "intrinsic_rule"]
+
+
+class MechIDAnalyzeResponse(BaseModel):
+    organism: str
+    panel: List[str] = Field(default_factory=list)
+    submitted_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="submittedResults")
+    inferred_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="inferredResults")
+    final_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="finalResults")
+    rows: List[MechIDResultRow] = Field(default_factory=list)
+    mechanisms: List[str] = Field(default_factory=list)
+    cautions: List[str] = Field(default_factory=list)
+    favorable_signals: List[str] = Field(default_factory=list, alias="favorableSignals")
+    therapy_notes: List[str] = Field(default_factory=list, alias="therapyNotes")
+    references: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTextAnalyzeRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class MechIDTextParsedRequest(BaseModel):
+    organism: Optional[str] = None
+    susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
+    tx_context: MechIDTxContext = Field(default_factory=MechIDTxContext, alias="txContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTextAnalyzeResponse(BaseModel):
+    parser: str = "rule-based-v1"
+    text: str
+    parsed_request: Optional[MechIDTextParsedRequest] = Field(default=None, alias="parsedRequest")
+    warnings: List[str] = Field(default_factory=list)
+    requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
+    analysis: Optional[MechIDAnalyzeResponse] = None
 
     model_config = {"populate_by_name": True}

@@ -172,5 +172,123 @@
       "pji_crp",
       "pji_alpha_defensin_elisa"
     ]
+  },
+  {
+    "text": "Emergency department patient with a hot swollen native knee, fever, elevated CRP, synovial WBC at least 50000, and a positive Gram stain from the aspirate.",
+    "moduleId": "septic_arthritis",
+    "presetId": "sa_ed",
+    "findings": {
+      "sa_sym_monoarthritis": "present",
+      "sa_vital_fever": "present",
+      "sa_crp": "present",
+      "sa_synovial_wbc_ge50k": "present",
+      "sa_gram_stain": "present"
+    },
+    "orderedFindingIds": [
+      "sa_sym_monoarthritis",
+      "sa_vital_fever",
+      "sa_crp",
+      "sa_synovial_wbc_ge50k",
+      "sa_gram_stain"
+    ]
+  },
+  {
+    "text": "ED patient with severe headache, fever, nuchal rigidity, confusion, low CSF glucose, CSF neutrophils above 80 percent, and a positive CSF Gram stain.",
+    "moduleId": "bacterial_meningitis",
+    "presetId": "bm_ed",
+    "findings": {
+      "bm_sym_headache": "present",
+      "bm_vital_fever": "present",
+      "bm_exam_neck_stiffness": "present",
+      "bm_exam_ams": "present",
+      "bm_csf_glucose_ratio_low": "present",
+      "bm_csf_pmn_ge80": "present",
+      "bm_csf_gram_stain": "present"
+    },
+    "orderedFindingIds": [
+      "bm_sym_headache",
+      "bm_vital_fever",
+      "bm_exam_neck_stiffness",
+      "bm_exam_ams",
+      "bm_csf_glucose_ratio_low",
+      "bm_csf_pmn_ge80",
+      "bm_csf_gram_stain"
+    ]
+  },
+  {
+    "text": "Emergency department patient with fever, confusion, memory and personality change, CSF pleocytosis, MRI showing temporal lobe abnormality, and CSF HSV PCR positive.",
+    "moduleId": "encephalitis",
+    "presetId": "enc_ed",
+    "findings": {
+      "enc_sym_fever": "present",
+      "enc_exam_ams": "present",
+      "enc_exam_behavioral_change": "present",
+      "enc_csf_pleocytosis": "present",
+      "enc_mri_temporal": "present",
+      "enc_hsv_pcr": "present"
+    },
+    "orderedFindingIds": [
+      "enc_sym_fever",
+      "enc_exam_ams",
+      "enc_exam_behavioral_change",
+      "enc_csf_pleocytosis",
+      "enc_mri_temporal",
+      "enc_hsv_pcr"
+    ]
+  },
+  {
+    "text": "ED patient with severe back pain, fever, markedly elevated ESR and CRP, and MRI showing a spinal epidural abscess.",
+    "moduleId": "spinal_epidural_abscess",
+    "presetId": "sea_ed",
+    "findings": {
+      "sea_sym_back_pain": "present",
+      "sea_vital_fever": "present",
+      "sea_esr_high": "present",
+      "sea_crp_high": "present",
+      "sea_mri_positive": "present"
+    },
+    "orderedFindingIds": [
+      "sea_sym_back_pain",
+      "sea_vital_fever",
+      "sea_esr_high",
+      "sea_crp_high",
+      "sea_mri_positive"
+    ]
+  },
+  {
+    "text": "Emergency department patient with severe headache, fever, new aphasia, and MRI showing a ring-enhancing lesion with restricted diffusion compatible with brain abscess.",
+    "moduleId": "brain_abscess",
+    "presetId": "ba_ed",
+    "findings": {
+      "ba_sym_headache": "present",
+      "ba_vital_fever": "present",
+      "ba_exam_focal_deficit": "present",
+      "ba_mri_dwi_positive": "present"
+    },
+    "orderedFindingIds": [
+      "ba_sym_headache",
+      "ba_vital_fever",
+      "ba_exam_focal_deficit",
+      "ba_mri_dwi_positive"
+    ]
+  },
+  {
+    "text": "ED patient with severe pain out of proportion, rapidly progressive leg infection, hypotension, elevated lactate, and CT compatible with necrotizing fasciitis.",
+    "moduleId": "necrotizing_soft_tissue_infection",
+    "presetId": "nsti_ed",
+    "findings": {
+      "nsti_sym_pain_out_of_proportion": "present",
+      "nsti_sym_rapid_progression": "present",
+      "nsti_vital_hypotension": "present",
+      "nsti_lactate_high": "present",
+      "nsti_ct_positive": "present"
+    },
+    "orderedFindingIds": [
+      "nsti_sym_pain_out_of_proportion",
+      "nsti_sym_rapid_progression",
+      "nsti_vital_hypotension",
+      "nsti_lactate_high",
+      "nsti_ct_positive"
+    ]
   }
 ]

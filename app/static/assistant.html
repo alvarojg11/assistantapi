@@ -499,7 +499,7 @@
       <section class="workspace" aria-label="Assistant workspace">
         <main class="chat-card">
           <div class="system-note" id="helpBanner">
-            I’m your Uncertainty Assistant. Describe a case in plain language, or choose a structured pathway from the options.
+            I’m your Uncertainty Assistant. Describe a syndrome case in plain language, or use the resistance mechanism pathway for organism plus AST interpretation.
           </div>
 
           <div class="messages" id="messages" aria-live="polite"></div>
@@ -628,7 +628,7 @@
         if (!options.length) return;
         const currentStage = state.assistantState?.stage || null;
         const supportsInsertMode = ["describe_case", "confirm_case"].includes(currentStage);
-        const useSingleLineChoices = ["select_module", "select_preset", "select_endo_blood_culture_context", "confirm_case", "done"].includes(currentStage);
+        const useSingleLineChoices = ["select_module", "select_preset", "select_endo_blood_culture_context", "confirm_case", "mechid_describe", "mechid_confirm", "done"].includes(currentStage);
         const hasCaseHelpers = options.some(
           (opt) => typeof opt.value === "string" && opt.value.startsWith("insert_text:")
         );
@@ -844,6 +844,7 @@
 
       function setTopStatus(resp) {
         const s = resp?.state || {};
+        const workflow = s.workflow || "probid";
         const sectionLabelMap = {
           exam_vitals: "Vitals + Physical Exam",
           lab: "Laboratory",
@@ -853,14 +854,20 @@
         const currentSection = s.caseSection || null;
         const currentSectionLabel = sectionLabelMap[currentSection] || "—";
         els.summaryStage.textContent = s.stage || "—";
-        els.summaryModule.textContent = s.moduleId || "—";
+        els.summaryModule.textContent = workflow === "mechid" ? "Resistance mechanism + therapy" : (s.moduleId || "—");
         els.summaryPreset.textContent = s.presetId || "—";
         els.summaryCaseSection.textContent = currentSectionLabel;
         const factorLabels = s.pretestFactorLabels || [];
         els.summaryFactors.textContent = factorLabels.length ? factorLabels.join(", ") : "—";
-        els.helpBanner.textContent = currentSection
-          ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
-          : "I’m your Uncertainty Assistant. Describe a case in plain language, or choose a structured pathway from the options.";
+        if (workflow === "mechid" && s.stage === "mechid_describe") {
+          els.helpBanner.textContent = "Current step: paste the organism, AST pattern, and any treatment context you have.";
+        } else if (workflow === "mechid" && s.stage === "mechid_confirm") {
+          els.helpBanner.textContent = "Current step: review the extracted organism and susceptibility pattern, then run the interpretation.";
+        } else {
+          els.helpBanner.textContent = currentSection
+            ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
+          : "I’m your Uncertainty Assistant. Describe a syndrome case in plain language, or use the resistance mechanism pathway for organism plus AST interpretation.";
+        }
       }
 
       function decisionClass(decision) {
@@ -870,6 +877,75 @@
       }
 
       function renderAnalysis(resp) {
+        const mechidResult = resp?.mechidAnalysis;
+        if (mechidResult) {
+          const parsed = mechidResult.parsedRequest;
+          const analysis = mechidResult.analysis;
+          const warnings = mechidResult.warnings || [];
+          const parserLabel = mechidResult.parser || "—";
+          els.parserBadge.textContent = `parser: ${parserLabel}`;
+          els.parserBadge.className = `badge ${warnings.length ? "warn" : "good"}`;
+
+          if (analysis) {
+            const mechanisms = (analysis.mechanisms || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const cautions = (analysis.cautions || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const signals = (analysis.favorableSignals || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const therapyNotes = (analysis.therapyNotes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const references = (analysis.references || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const finalResults = Object.entries(analysis.finalResults || {})
+              .map(([drug, call]) => `<li>${escapeHtml(drug)}: ${escapeHtml(call)}</li>`)
+              .join("");
+            els.analysisSummary.innerHTML = `
+              <h3>Analysis</h3>
+              <div class="decision test">MechID interpretation</div>
+              <div class="kv">
+                <div class="k">Organism</div><div class="v">${escapeHtml(analysis.organism || "—")}</div>
+                <div class="k">AST calls</div><div class="v">${Object.keys(analysis.finalResults || {}).length}</div>
+                <div class="k">Mechanisms</div><div class="v">${(analysis.mechanisms || []).length || 0}</div>
+                <div class="k">Panel size</div><div class="v">${(analysis.panel || []).length || 0}</div>
+              </div>
+              ${therapyNotes ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Therapy notes</div><ul class="list">${therapyNotes}</ul></div>` : ""}
+              ${mechanisms ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Likely mechanisms</div><ul class="list">${mechanisms}</ul></div>` : ""}
+              ${cautions ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Cautions</div><ul class="list warn-list">${cautions}</ul></div>` : ""}
+              ${signals ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Favorable signals</div><ul class="list">${signals}</ul></div>` : ""}
+              <details style="margin-top:10px;">
+                <summary>Expanded details</summary>
+                ${finalResults ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Final interpreted AST</div><ul class="list">${finalResults}</ul></div>` : ""}
+                ${references ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">References</div><ul class="list">${references}</ul></div>` : ""}
+              </details>
+            `;
+          } else {
+            els.analysisSummary.innerHTML = `<h3>Analysis</h3><div class="muted">No mechanism interpretation yet. Add a clearer organism and susceptibility pattern.</div>`;
+          }
+
+          if (parsed) {
+            const parsedResults = Object.entries(parsed.susceptibilityResults || {})
+              .map(([drug, call]) => `<li>${escapeHtml(drug)}: ${escapeHtml(call)}</li>`)
+              .join("");
+            els.parsedPanel.innerHTML = `
+              <h3>What I Picked Up</h3>
+              <div class="kv" style="margin-bottom:8px;">
+                <div class="k">Organism</div><div class="v">${escapeHtml(parsed.organism || "—")}</div>
+                <div class="k">Syndrome</div><div class="v">${escapeHtml(parsed.txContext?.syndrome || "Not specified")}</div>
+                <div class="k">Severity</div><div class="v">${escapeHtml(parsed.txContext?.severity || "Not specified")}</div>
+              </div>
+              ${parsedResults ? `<div><div class="muted" style="font-size:12px;">Extracted AST</div><ul class="list">${parsedResults}</ul></div>` : `<div class="muted">No AST calls extracted yet.</div>`}
+            `;
+          } else {
+            els.parsedPanel.innerHTML = `<h3>What I Picked Up</h3><div class="muted">Waiting for an organism plus susceptibility pattern.</div>`;
+          }
+
+          if (warnings.length) {
+            els.warningsPanel.innerHTML = `
+              <h3>Warnings</h3>
+              <ul class="list warn-list">${warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("")}</ul>
+            `;
+          } else {
+            els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+          }
+          return;
+        }
+
         const textResult = resp?.analysis;
         const analysis = textResult?.analysis;
         const understood = textResult?.understood;

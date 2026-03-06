@@ -330,6 +330,47 @@ PRETEST_FACTOR_CONFIG: Dict[str, Tuple[PretestFactorRef, ...]] = {
         _item_ref("pji_host_anemia"),
         _item_ref("pji_host_alcohol_use"),
     ),
+    "septic_arthritis": (
+        _item_ref("sa_host_age_gt80"),
+        _item_ref("sa_host_diabetes"),
+        _item_ref("sa_host_ra"),
+        _item_ref("sa_host_immunosuppression"),
+        _item_ref("sa_host_ivdu"),
+        _item_ref("sa_host_recent_joint_surgery_or_injection"),
+        _item_ref("sa_host_bacteremia_or_overlying_ssti"),
+    ),
+    "bacterial_meningitis": (
+        _item_ref("bm_host_age_ge50"),
+        _item_ref("bm_host_immunocompromised"),
+        _item_ref("bm_host_csf_leak_or_neurosurgery"),
+        _item_ref("bm_host_otitis_sinusitis"),
+        _item_ref("bm_host_bacteremia_sepsis"),
+    ),
+    "encephalitis": (
+        _item_ref("enc_host_immunocompromised"),
+        _item_ref("enc_host_transplant_or_biologic"),
+        _item_ref("enc_host_vector_travel_exposure"),
+    ),
+    "spinal_epidural_abscess": (
+        _item_ref("sea_host_ivdu"),
+        _item_ref("sea_host_diabetes"),
+        _item_ref("sea_host_immunocompromised"),
+        _item_ref("sea_host_recent_spinal_procedure"),
+        _item_ref("sea_host_bacteremia_or_ssti"),
+    ),
+    "brain_abscess": (
+        _item_ref("ba_host_otogenic_sinus_dental"),
+        _item_ref("ba_host_neurosurgery_trauma"),
+        _item_ref("ba_host_endocarditis_bacteremia"),
+        _item_ref("ba_host_immunocompromised"),
+    ),
+    "necrotizing_soft_tissue_infection": (
+        _item_ref("nsti_host_diabetes"),
+        _item_ref("nsti_host_immunocompromised"),
+        _item_ref("nsti_host_ivdu"),
+        _item_ref("nsti_host_recent_surgery_or_trauma"),
+        _item_ref("nsti_host_perineal_or_chronic_wound_source"),
+    ),
 }
 
 

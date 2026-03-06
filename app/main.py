@@ -30,6 +30,11 @@ from .schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     DecisionThresholds,
+    MechIDAnalyzeRequest,
+    MechIDAnalyzeResponse,
+    MechIDTextAnalyzeRequest,
+    MechIDTextAnalyzeResponse,
+    MechIDTextParsedRequest,
     PretestSummary,
     ProbIDControlsInput,
     ReferenceEntry,
@@ -41,6 +46,8 @@ from .schemas import (
 )
 from .services.module_store import InMemoryModuleStore
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
+from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
+from .services.mechid_text_parser import parse_mechid_text
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
 from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
 
@@ -72,8 +79,34 @@ ASSISTANT_MODULE_LABELS = {
     "pjp": "Pneumocystis jirovecii pneumonia (PJP)",
     "inv_candida": "Invasive candidiasis",
     "inv_mold": "Invasive mold infection",
+    "septic_arthritis": "Septic arthritis",
+    "bacterial_meningitis": "Bacterial meningitis",
+    "encephalitis": "Encephalitis",
+    "spinal_epidural_abscess": "Spinal epidural abscess",
+    "brain_abscess": "Brain abscess",
+    "necrotizing_soft_tissue_infection": "Necrotizing soft tissue infection",
     "pji": "Prosthetic joint infection (PJI)",
 }
+
+MECHID_ASSISTANT_ID = "mechid"
+MECHID_ASSISTANT_LABEL = "Resistance mechanism + therapy"
+MECHID_ASSISTANT_DESCRIPTION = (
+    "Interpret an organism plus susceptibility pattern to estimate likely resistance mechanisms and therapy options."
+)
+MECHID_INTENT_TOKENS = (
+    "mechanism",
+    "resistance",
+    "resistant",
+    "susceptible",
+    "sensitive",
+    "intermediate",
+    "antibiogram",
+    "susceptibility",
+    "ast",
+    "best antibiotic",
+    "best therapy",
+    "what should i treat with",
+)
 
 ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
     "staph": {
@@ -619,6 +652,310 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
             "PJI imaging completed",
         ),
     },
+    "septic_arthritis": {
+        "sa_crp": (
+            "CRP elevated",
+            "CRP not elevated",
+        ),
+        "sa_esr": (
+            "ESR elevated",
+            "ESR not elevated",
+        ),
+        "sa_synovial_wbc_ge50k": (
+            "Synovial WBC at least 50,000",
+            "Synovial WBC below 50,000",
+        ),
+        "sa_synovial_na": (
+            "Arthrocentesis cell count not done",
+            "Arthrocentesis completed",
+        ),
+        "sa_synovial_pmn_ge90": (
+            "Synovial PMN at least 90%",
+            "Synovial PMN below 90%",
+        ),
+        "sa_gram_stain": (
+            "Synovial Gram stain positive",
+            "Synovial Gram stain negative",
+        ),
+        "sa_gram_stain_na": (
+            "Synovial Gram stain not done",
+            "Synovial Gram stain completed",
+        ),
+        "sa_synovial_culture": (
+            "Synovial fluid culture positive",
+            "Synovial fluid culture negative",
+        ),
+        "sa_synovial_culture_na": (
+            "Synovial fluid culture not done",
+            "Synovial fluid culture completed",
+        ),
+        "sa_blood_culture_positive": (
+            "Blood culture positive with matching pathogen",
+            "Blood culture negative",
+        ),
+        "sa_blood_culture_na": (
+            "Blood cultures not done",
+            "Blood cultures completed",
+        ),
+        "sa_ultrasound_effusion": (
+            "Joint ultrasound shows effusion",
+            "Joint ultrasound without effusion",
+        ),
+        "sa_imaging_na": (
+            "Joint imaging not done",
+            "Joint imaging completed",
+        ),
+    },
+    "bacterial_meningitis": {
+        "bm_serum_procalcitonin": (
+            "Serum procalcitonin elevated",
+            "Serum procalcitonin not elevated",
+        ),
+        "bm_csf_wbc_ge1000": (
+            "CSF WBC at least 1,000",
+            "CSF WBC below 1,000",
+        ),
+        "bm_csf_cell_count_na": (
+            "CSF cell count not done",
+            "CSF cell count completed",
+        ),
+        "bm_csf_pmn_ge80": (
+            "CSF neutrophils at least 80%",
+            "CSF neutrophils below 80%",
+        ),
+        "bm_csf_glucose_ratio_low": (
+            "CSF glucose low or CSF:serum glucose ratio below 0.4",
+            "CSF glucose not low",
+        ),
+        "bm_csf_protein_high": (
+            "CSF protein elevated",
+            "CSF protein not elevated",
+        ),
+        "bm_csf_lactate_high": (
+            "CSF lactate elevated",
+            "CSF lactate not elevated",
+        ),
+        "bm_csf_gram_stain": (
+            "CSF Gram stain positive",
+            "CSF Gram stain negative",
+        ),
+        "bm_csf_gram_na": (
+            "CSF Gram stain not done",
+            "CSF Gram stain completed",
+        ),
+        "bm_csf_culture": (
+            "CSF culture positive",
+            "CSF culture negative",
+        ),
+        "bm_csf_culture_na": (
+            "CSF culture not done",
+            "CSF culture completed",
+        ),
+        "bm_blood_culture_positive": (
+            "Blood culture positive with plausible meningitis pathogen",
+            "Blood culture negative",
+        ),
+        "bm_blood_culture_na": (
+            "Blood cultures not done",
+            "Blood cultures completed",
+        ),
+        "bm_csf_bacterial_pcr": (
+            "CSF bacterial PCR positive",
+            "CSF bacterial PCR negative",
+        ),
+        "bm_csf_pcr_na": (
+            "CSF bacterial PCR not done",
+            "CSF bacterial PCR completed",
+        ),
+        "bm_imaging_supportive": (
+            "Neuroimaging supportive of meningitis",
+            "Neuroimaging not supportive of meningitis",
+        ),
+        "bm_imaging_na": (
+            "Neuroimaging not done",
+            "Neuroimaging completed",
+        ),
+    },
+    "encephalitis": {
+        "enc_csf_pleocytosis": (
+            "CSF pleocytosis present",
+            "No CSF pleocytosis",
+        ),
+        "enc_csf_cell_count_na": (
+            "CSF cell count not done",
+            "CSF cell count completed",
+        ),
+        "enc_csf_protein_high": (
+            "CSF protein elevated",
+            "CSF protein not elevated",
+        ),
+        "enc_csf_rbc_high": (
+            "CSF RBC elevated",
+            "CSF RBC not elevated",
+        ),
+        "enc_hsv_pcr": (
+            "CSF HSV PCR positive",
+            "CSF HSV PCR negative",
+        ),
+        "enc_hsv_pcr_na": (
+            "CSF HSV PCR not done",
+            "CSF HSV PCR completed",
+        ),
+        "enc_csf_viral_pcr": (
+            "Other CSF viral PCR positive",
+            "Other CSF viral PCR negative",
+        ),
+        "enc_csf_viral_pcr_na": (
+            "Other CSF viral PCR not done",
+            "Other CSF viral PCR completed",
+        ),
+        "enc_mri_temporal": (
+            "MRI with temporal or insular encephalitis pattern",
+            "MRI without temporal encephalitis pattern",
+        ),
+        "enc_mri_na": (
+            "Brain MRI not done",
+            "Brain MRI completed",
+        ),
+        "enc_eeg_temporal": (
+            "EEG with temporal slowing or periodic discharges",
+            "EEG without temporal encephalitis pattern",
+        ),
+        "enc_eeg_na": (
+            "EEG not done",
+            "EEG completed",
+        ),
+    },
+    "spinal_epidural_abscess": {
+        "sea_esr_high": (
+            "ESR markedly elevated",
+            "ESR not markedly elevated",
+        ),
+        "sea_crp_high": (
+            "CRP elevated",
+            "CRP not elevated",
+        ),
+        "sea_wbc_high": (
+            "Peripheral WBC elevated",
+            "Peripheral WBC not elevated",
+        ),
+        "sea_blood_culture_positive": (
+            "Blood culture positive with plausible SEA pathogen",
+            "Blood culture negative",
+        ),
+        "sea_blood_culture_na": (
+            "Blood cultures not done",
+            "Blood cultures completed",
+        ),
+        "sea_mri_positive": (
+            "MRI spine shows epidural abscess or phlegmon",
+            "MRI spine without epidural abscess",
+        ),
+        "sea_mri_na": (
+            "MRI spine not done",
+            "MRI spine completed",
+        ),
+        "sea_discitis_osteo": (
+            "Imaging suggests discitis or vertebral osteomyelitis",
+            "Imaging does not suggest discitis or vertebral osteomyelitis",
+        ),
+    },
+    "brain_abscess": {
+        "ba_crp_high": (
+            "CRP elevated",
+            "CRP not elevated",
+        ),
+        "ba_wbc_high": (
+            "Peripheral WBC elevated",
+            "Peripheral WBC not elevated",
+        ),
+        "ba_blood_culture_positive": (
+            "Blood culture positive with plausible brain abscess pathogen",
+            "Blood culture negative",
+        ),
+        "ba_blood_culture_na": (
+            "Blood cultures not done",
+            "Blood cultures completed",
+        ),
+        "ba_aspirate_culture_positive": (
+            "Abscess aspirate or operative culture positive",
+            "Abscess aspirate or operative culture negative",
+        ),
+        "ba_aspirate_culture_na": (
+            "Abscess aspirate culture not done",
+            "Abscess aspirate culture completed",
+        ),
+        "ba_mri_dwi_positive": (
+            "MRI with ring-enhancing lesion and restricted diffusion",
+            "MRI without abscess-compatible restricted diffusion",
+        ),
+        "ba_mri_na": (
+            "Brain MRI not done",
+            "Brain MRI completed",
+        ),
+        "ba_ct_ring_enhancing": (
+            "Contrast CT with ring-enhancing lesion",
+            "Contrast CT without ring-enhancing lesion",
+        ),
+        "ba_ct_na": (
+            "Brain CT not done",
+            "Brain CT completed",
+        ),
+        "ba_imaging_multifocal": (
+            "Imaging shows multifocal lesions or surrounding cerebritis",
+            "Imaging does not show multifocal lesions or surrounding cerebritis",
+        ),
+    },
+    "necrotizing_soft_tissue_infection": {
+        "nsti_crp_high": (
+            "CRP markedly elevated",
+            "CRP not markedly elevated",
+        ),
+        "nsti_wbc_high": (
+            "Peripheral WBC elevated",
+            "Peripheral WBC not elevated",
+        ),
+        "nsti_sodium_low": (
+            "Hyponatremia present",
+            "No hyponatremia",
+        ),
+        "nsti_lactate_high": (
+            "Lactate elevated",
+            "Lactate not elevated",
+        ),
+        "nsti_blood_culture_positive": (
+            "Blood culture positive with plausible NSTI pathogen",
+            "Blood culture negative",
+        ),
+        "nsti_blood_culture_na": (
+            "Blood cultures not done",
+            "Blood cultures completed",
+        ),
+        "nsti_operative_findings": (
+            "Operative findings classic for NSTI",
+            "Operative findings not classic for NSTI",
+        ),
+        "nsti_operative_na": (
+            "Operative exploration not done",
+            "Operative exploration completed",
+        ),
+        "nsti_ct_positive": (
+            "CT compatible with NSTI",
+            "CT not compatible with NSTI",
+        ),
+        "nsti_ct_na": (
+            "CT not done",
+            "CT completed",
+        ),
+        "nsti_mri_positive": (
+            "MRI compatible with NSTI",
+            "MRI not compatible with NSTI",
+        ),
+        "nsti_mri_na": (
+            "MRI not done",
+            "MRI completed",
+        ),
+    },
 }
 
 
@@ -645,10 +982,105 @@ def get_module(module_id: str) -> SyndromeModule:
     return module
 
 
+def _build_mechid_text_response(text: str) -> MechIDTextAnalyzeResponse:
+    warnings: List[str] = []
+    try:
+        parsed = parse_mechid_text(text)
+    except MechIDEngineError as exc:
+        return MechIDTextAnalyzeResponse(
+            text=text,
+            parsedRequest=None,
+            warnings=[str(exc)],
+            requiresConfirmation=True,
+            analysis=None,
+        )
+
+    parsed_request = None
+    analysis = None
+    if parsed["organism"] is not None:
+        parsed_request = MechIDTextParsedRequest(
+            organism=parsed["organism"],
+            susceptibilityResults=parsed["susceptibilityResults"],
+            txContext=parsed["txContext"],
+        )
+        if parsed["susceptibilityResults"]:
+            try:
+                analyzed = analyze_mechid(
+                    organism=parsed["organism"],
+                    susceptibility_results=parsed["susceptibilityResults"],
+                    tx_context=parsed["txContext"],
+                )
+                analysis = MechIDAnalyzeResponse(
+                    organism=analyzed["organism"],
+                    panel=analyzed["panel"],
+                    submittedResults=analyzed["submitted_results"],
+                    inferredResults=analyzed["inferred_results"],
+                    finalResults=analyzed["final_results"],
+                    rows=analyzed["rows"],
+                    mechanisms=analyzed["mechanisms"],
+                    cautions=analyzed["cautions"],
+                    favorableSignals=analyzed["favorable_signals"],
+                    therapyNotes=analyzed["therapy_notes"],
+                    references=analyzed["references"],
+                    warnings=list(parsed["warnings"]),
+                )
+            except MechIDEngineError as exc:
+                warnings.append(str(exc))
+
+    warnings.extend(parsed["warnings"])
+    return MechIDTextAnalyzeResponse(
+        text=text,
+        parsedRequest=parsed_request,
+        warnings=warnings,
+        requiresConfirmation=bool(parsed["requiresConfirmation"] or analysis is None),
+        analysis=analysis,
+    )
+
+
 @app.post("/v1/modules/register", response_model=RegisterModulesResponse)
 def register_modules(payload: RegisterModulesRequest) -> RegisterModulesResponse:
     ids = store.upsert_many(payload.modules)
     return RegisterModulesResponse(registered=len(ids), ids=ids)
+
+
+@app.get("/v1/mechid/organisms")
+def list_mechid_supported_organisms() -> dict:
+    try:
+        return {"organisms": list_mechid_organisms()}
+    except MechIDEngineError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/v1/mechid/analyze", response_model=MechIDAnalyzeResponse)
+def analyze_mechid_endpoint(req: MechIDAnalyzeRequest) -> MechIDAnalyzeResponse:
+    try:
+        payload = analyze_mechid(
+            organism=req.organism,
+            susceptibility_results=req.susceptibility_results,
+            tx_context=req.tx_context.model_dump() if req.tx_context is not None else None,
+        )
+    except MechIDEngineError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return MechIDAnalyzeResponse(
+        organism=payload["organism"],
+        panel=payload["panel"],
+        submittedResults=payload["submitted_results"],
+        inferredResults=payload["inferred_results"],
+        finalResults=payload["final_results"],
+        rows=payload["rows"],
+        mechanisms=payload["mechanisms"],
+        cautions=payload["cautions"],
+        favorableSignals=payload["favorable_signals"],
+        therapyNotes=payload["therapy_notes"],
+        references=payload["references"],
+        warnings=[],
+    )
+
+
+@app.post("/v1/mechid/analyze-text", response_model=MechIDTextAnalyzeResponse)
+def analyze_mechid_text_endpoint(req: MechIDTextAnalyzeRequest) -> MechIDTextAnalyzeResponse:
+    return _build_mechid_text_response(req.text)
 
 
 def _resolve_module(req: AnalyzeRequest) -> SyndromeModule:
@@ -1213,7 +1645,13 @@ def analyze_text(req: TextAnalyzeRequest) -> TextAnalyzeResponse:
 
 
 def _assistant_module_options() -> List[AssistantOption]:
-    options: List[AssistantOption] = []
+    options: List[AssistantOption] = [
+        AssistantOption(
+            value=MECHID_ASSISTANT_ID,
+            label=MECHID_ASSISTANT_LABEL,
+            description=MECHID_ASSISTANT_DESCRIPTION,
+        )
+    ]
     for summary in store.list_summaries():
         module = store.get(summary.id)
         options.append(
@@ -1236,6 +1674,74 @@ def _assistant_review_options() -> List[AssistantOption]:
         AssistantOption(value="add_more_details", label="Add more details"),
         AssistantOption(value="restart", label="Start over"),
     ]
+
+
+def _join_readable(items: List[str]) -> str:
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def _format_mechid_results(results: Dict[str, str]) -> str:
+    if not results:
+        return "no susceptibility calls yet"
+    ordered = [f"{antibiotic} {result.lower()}" for antibiotic, result in sorted(results.items())]
+    return _join_readable(ordered)
+
+
+def _assistant_mechid_review_options(result: MechIDTextAnalyzeResponse) -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    if result.analysis is not None:
+        options.append(AssistantOption(value="run_assessment", label="Run interpretation"))
+    options.append(AssistantOption(value="add_more_details", label="Add more details"))
+    options.append(AssistantOption(value="restart", label="Start over"))
+    return options
+
+
+def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> str:
+    parsed = result.parsed_request
+    if parsed is None or not parsed.organism:
+        message = (
+            "I could not confidently identify the organism yet. "
+            "Paste the organism plus a few susceptibility calls, for example: "
+            "'E. coli resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem.'"
+        )
+        if result.warnings:
+            message += " " + result.warnings[0]
+        return message
+
+    summary = (
+        f"I extracted {parsed.organism} with {_format_mechid_results(parsed.susceptibility_results)}."
+    )
+    context_bits: List[str] = []
+    if parsed.tx_context.syndrome != "Not specified":
+        context_bits.append(parsed.tx_context.syndrome)
+    if parsed.tx_context.severity != "Not specified":
+        context_bits.append(parsed.tx_context.severity)
+    if context_bits:
+        summary += f" Clinical context: {_join_readable(context_bits)}."
+
+    if result.analysis is not None:
+        if result.analysis.mechanisms:
+            summary += f" Likely mechanism(s): {_join_readable(result.analysis.mechanisms[:3])}."
+        if result.analysis.therapy_notes:
+            summary += f" Therapy guidance: {_join_readable(result.analysis.therapy_notes[:2])}."
+        if result.analysis.cautions:
+            summary += f" Key caution: {result.analysis.cautions[0]}."
+        if final:
+            summary += " Review the full interpretation in the analysis panel."
+        else:
+            summary += " If this looks right, run the interpretation. Otherwise add or correct details."
+        return summary
+
+    if result.warnings:
+        summary += " " + _join_readable(result.warnings[:2])
+    summary += " Add or correct susceptibility details so I can infer a mechanism and therapy plan."
+    return summary
 
 
 def _assistant_review_options_for_case(
@@ -1775,6 +2281,56 @@ ASSISTANT_MISSING_PRIORITY_BY_MODULE: Dict[str, List[str]] = {
         "pji_xray_supportive",
         "pji_synovial_pcr",
     ],
+    "septic_arthritis": [
+        "sa_synovial_wbc_ge50k",
+        "sa_gram_stain",
+        "sa_synovial_culture",
+        "sa_crp",
+        "sa_synovial_pmn_ge90",
+        "sa_blood_culture_positive",
+        "sa_ultrasound_effusion",
+    ],
+    "bacterial_meningitis": [
+        "bm_csf_gram_stain",
+        "bm_csf_culture",
+        "bm_csf_bacterial_pcr",
+        "bm_csf_glucose_ratio_low",
+        "bm_csf_wbc_ge1000",
+        "bm_csf_lactate_high",
+        "bm_blood_culture_positive",
+    ],
+    "encephalitis": [
+        "enc_hsv_pcr",
+        "enc_mri_temporal",
+        "enc_csf_pleocytosis",
+        "enc_csf_rbc_high",
+        "enc_csf_viral_pcr",
+        "enc_eeg_temporal",
+    ],
+    "spinal_epidural_abscess": [
+        "sea_mri_positive",
+        "sea_esr_high",
+        "sea_crp_high",
+        "sea_blood_culture_positive",
+        "sea_exam_neuro_deficit",
+        "sea_discitis_osteo",
+    ],
+    "brain_abscess": [
+        "ba_mri_dwi_positive",
+        "ba_aspirate_culture_positive",
+        "ba_ct_ring_enhancing",
+        "ba_blood_culture_positive",
+        "ba_exam_focal_deficit",
+        "ba_imaging_multifocal",
+    ],
+    "necrotizing_soft_tissue_infection": [
+        "nsti_ct_positive",
+        "nsti_operative_findings",
+        "nsti_vital_hypotension",
+        "nsti_exam_bullae_or_necrosis",
+        "nsti_crp_high",
+        "nsti_lactate_high",
+    ],
 }
 
 
@@ -2281,8 +2837,10 @@ def _assistant_intake_case_from_text(
         return None
 
     state.module_id = module.id
+    state.workflow = "probid"
     state.preset_id = text_result.parsed_request.preset_id or state.preset_id
     state.case_text = message_text
+    state.mechid_text = None
     state.case_section = None
     if module.id == "endo":
         if not state.endo_blood_culture_context:
@@ -2314,14 +2872,55 @@ def _assistant_intake_case_from_text(
     )
 
 
+def _assistant_is_mechid_intent(message: str | None) -> bool:
+    text = _normalize_choice(message)
+    if not text:
+        return False
+    return any(token in text for token in MECHID_INTENT_TOKENS)
+
+
+def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: AssistantState) -> AssistantTurnResponse | None:
+    message_text = (req.message or "").strip()
+    if not message_text or not _assistant_is_mechid_intent(message_text):
+        return None
+
+    state.workflow = "mechid"
+    state.stage = "mechid_confirm"
+    state.module_id = None
+    state.preset_id = None
+    state.case_section = None
+    state.case_text = None
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+    state.mechid_text = message_text
+
+    mechid_result = _build_mechid_text_response(message_text)
+    return AssistantTurnResponse(
+        assistantMessage=_build_mechid_review_message(mechid_result),
+        state=state,
+        options=_assistant_mechid_review_options(mechid_result),
+        mechidAnalysis=mechid_result,
+        tips=[
+            "Include the organism plus a few AST calls, such as resistant or susceptible to named antibiotics.",
+            "If the extracted details look right, run the interpretation.",
+        ],
+    )
+
+
 def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     sel = (req.selection or "").strip()
+    if sel == MECHID_ASSISTANT_ID:
+        return sel
     if sel and store.get(sel):
         return sel
 
     msg = (req.message or "").strip()
     if not msg:
         return None
+    if _assistant_is_mechid_intent(msg):
+        return MECHID_ASSISTANT_ID
 
     # Reuse text parser module inference for typed natural-language syndrome selection.
     parsed = parse_text_to_request(
@@ -2378,7 +2977,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if restart_requested:
         state = AssistantState(
+            workflow="probid",
             caseText=None,
+            mechidText=None,
             endoScoreFactorIds=[],
             caseSection=None,
             pretestFactorIds=[],
@@ -2393,9 +2994,40 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         if direct_case_response is not None:
             return direct_case_response
 
+        direct_mechid_response = _assistant_intake_mechid_from_text(req, state)
+        if direct_mechid_response is not None:
+            return direct_mechid_response
+
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id:
+            if chosen_module_id == MECHID_ASSISTANT_ID:
+                state.workflow = "mechid"
+                state.stage = "mechid_describe"
+                state.module_id = None
+                state.preset_id = None
+                state.case_section = None
+                state.case_text = None
+                state.mechid_text = None
+                state.pretest_factor_ids = []
+                state.pretest_factor_labels = []
+                state.endo_blood_culture_context = None
+                state.endo_score_factor_ids = []
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Paste the organism and susceptibility pattern in plain language. "
+                        "For example: 'E. coli resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem, bloodstream infection in septic shock.'"
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start over")],
+                    tips=[
+                        "I can extract the organism, AST pattern, and basic treatment context from free text.",
+                        "Ask for likely resistance mechanism, therapy, or both.",
+                    ],
+                )
+
+            state.workflow = "probid"
             state.module_id = chosen_module_id
+            state.mechid_text = None
             state.endo_blood_culture_context = None
             state.endo_score_factor_ids = []
             state.case_section = None
@@ -2418,12 +3050,105 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         return AssistantTurnResponse(
             assistantMessage=(
-                "I’m your Uncertainty Assistant. You can describe a case in plain language, or choose a structured pathway from the options. Which syndrome would you like to approach today?"
+                "I’m your Uncertainty Assistant. You can describe a syndrome case in plain language, or choose the resistance mechanism pathway if you want organism plus AST interpretation."
             ),
             state=state,
             options=_assistant_module_options(),
             tips=[
-                "I’ll translate what you tell me into calculator inputs, show what I understood, and suggest important missing findings.",
+                "I can either run a ProbID syndrome workup or a MechID resistance-mechanism interpretation.",
+            ],
+        )
+
+    if state.stage == "mechid_describe":
+        message_text = (req.message or "").strip()
+        if not message_text:
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "Paste the organism and susceptibility pattern in plain language. "
+                    "For example: 'Klebsiella pneumoniae resistant to ceftriaxone, susceptible to meropenem and amikacin.'"
+                ),
+                state=state,
+                options=[AssistantOption(value="restart", label="Start over")],
+                tips=[
+                    "Mention the organism plus at least a few antibiotics.",
+                    "You can also include the syndrome or severity, such as pneumonia or septic shock.",
+                ],
+            )
+
+        state.workflow = "mechid"
+        state.mechid_text = _append_case_text(state.mechid_text, message_text)
+        state.stage = "mechid_confirm"
+        mechid_result = _build_mechid_text_response(state.mechid_text)
+        return AssistantTurnResponse(
+            assistantMessage=_build_mechid_review_message(mechid_result),
+            state=state,
+            options=_assistant_mechid_review_options(mechid_result),
+            mechidAnalysis=mechid_result,
+            tips=[
+                "Review what I extracted from the text before running the interpretation.",
+                "Add more AST details if anything is missing or wrong.",
+            ],
+        )
+
+    if state.stage == "mechid_confirm":
+        if not state.mechid_text:
+            state.stage = "mechid_describe"
+            return AssistantTurnResponse(
+                assistantMessage="Paste the organism and susceptibility pattern, and I’ll interpret the likely mechanism and therapy implications.",
+                state=state,
+                options=[AssistantOption(value="restart", label="Start over")],
+                tips=["Include the organism plus resistant or susceptible calls for named antibiotics."],
+            )
+
+        if req.message and req.message.strip():
+            state.mechid_text = _append_case_text(state.mechid_text, req.message)
+
+        mechid_result = _build_mechid_text_response(state.mechid_text)
+
+        if req.selection == "add_more_details" and not (req.message and req.message.strip()):
+            state.stage = "mechid_describe"
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "Add any other susceptibility details, organism clarifications, or treatment context you want me to factor in."
+                ),
+                state=state,
+                options=[AssistantOption(value="restart", label="Start over")],
+                mechidAnalysis=mechid_result,
+                tips=[
+                    "Useful additions are more AST calls, syndrome context, severity, or source information.",
+                ],
+            )
+
+        if _is_ready_to_assess(req):
+            if mechid_result.analysis is None:
+                return AssistantTurnResponse(
+                    assistantMessage=_build_mechid_review_message(mechid_result),
+                    state=state,
+                    options=_assistant_mechid_review_options(mechid_result),
+                    mechidAnalysis=mechid_result,
+                    tips=[
+                        "I still need a clearer organism and susceptibility pattern before I can finalize the interpretation.",
+                    ],
+                )
+            state.stage = "done"
+            return AssistantTurnResponse(
+                assistantMessage=_build_mechid_review_message(mechid_result, final=True),
+                state=state,
+                options=[AssistantOption(value="restart", label="Start another case")],
+                mechidAnalysis=mechid_result,
+                tips=[
+                    "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
+                ],
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage=_build_mechid_review_message(mechid_result),
+            state=state,
+            options=_assistant_mechid_review_options(mechid_result),
+            mechidAnalysis=mechid_result,
+            tips=[
+                "Run the interpretation if the extracted organism and AST pattern look right.",
+                "Otherwise add more details or restart.",
             ],
         )
 
@@ -2977,7 +3702,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     # done / fallback
     if restart_requested:
         state = AssistantState(
+            workflow="probid",
             caseText=None,
+            mechidText=None,
             endoScoreFactorIds=[],
             caseSection=None,
             parserStrategy=state.parser_strategy,
@@ -2986,17 +3713,21 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         )
     else:
         state.stage = "select_module"
+        state.workflow = "probid"
         state.module_id = None
         state.preset_id = None
         state.endo_blood_culture_context = None
         state.endo_score_factor_ids = []
         state.case_section = None
         state.case_text = None
+        state.mechid_text = None
         state.pretest_factor_ids = []
         state.pretest_factor_labels = []
 
     return AssistantTurnResponse(
-        assistantMessage="Ready for another case. Which syndrome would you like to approach today?",
+        assistantMessage=(
+            "Ready for another case. You can start a syndrome workup or a resistance mechanism interpretation."
+        ),
         state=state,
         options=_assistant_module_options(),
         tips=["Type 'restart' anytime to reset the conversation."],

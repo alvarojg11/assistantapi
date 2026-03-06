@@ -38,6 +38,12 @@ MODULE_ALIASES: Dict[str, List[str]] = {
     "pjp": ["pjp", "pcp", "pneumocystis"],
     "inv_candida": ["invasive candidiasis", "candida", "candidemia"],
     "inv_mold": ["invasive mold", "aspergillus", "mucor", "mold infection"],
+    "septic_arthritis": ["septic arthritis", "infectious arthritis", "septic joint", "native joint infection"],
+    "bacterial_meningitis": ["bacterial meningitis", "meningitis", "pyogenic meningitis", "bacterial meningitis concern"],
+    "encephalitis": ["encephalitis", "viral encephalitis", "infectious encephalitis", "hsv encephalitis", "herpes encephalitis"],
+    "spinal_epidural_abscess": ["spinal epidural abscess", "sea", "epidural abscess", "spinal epidural infection"],
+    "brain_abscess": ["brain abscess", "cerebral abscess", "intracranial abscess", "pyogenic brain abscess"],
+    "necrotizing_soft_tissue_infection": ["necrotizing soft tissue infection", "nsti", "necrotizing fasciitis", "flesh eating infection", "fournier gangrene"],
     "pji": ["pji", "prosthetic joint infection", "joint prosthesis infection"],
 }
 
@@ -554,6 +560,534 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "pji_imaging_na": {
         "present": ["pji imaging not done", "imaging not done for pji"],
         "absent": ["pji imaging completed", "imaging completed for pji"],
+    },
+    "sa_host_ra": {
+        "present": ["rheumatoid arthritis", "inflammatory arthritis"],
+        "absent": ["no rheumatoid arthritis", "no inflammatory arthritis"],
+    },
+    "sa_host_diabetes": {
+        "present": ["diabetes", "diabetes mellitus", "diabetic"],
+        "absent": ["no diabetes", "not diabetic"],
+    },
+    "sa_host_immunosuppression": {
+        "present": ["immunosuppressed", "on chemotherapy", "transplant recipient", "on biologic therapy", "high dose steroids"],
+        "absent": ["not immunosuppressed", "no immunosuppression"],
+    },
+    "sa_host_ivdu": {
+        "present": ["injection drug use", "ivdu", "injects drugs"],
+        "absent": ["no injection drug use", "no ivdu"],
+    },
+    "sa_host_recent_joint_surgery_or_injection": {
+        "present": ["recent joint injection", "recent arthroscopy", "recent joint surgery", "penetrating trauma to the joint"],
+        "absent": ["no recent joint injection or surgery", "no penetrating trauma to the joint"],
+    },
+    "sa_host_bacteremia_or_overlying_ssti": {
+        "present": ["bacteremia", "bloodstream infection", "overlying cellulitis", "skin infection over the joint"],
+        "absent": ["no bacteremia", "no overlying cellulitis", "no bloodstream infection"],
+    },
+    "sa_sym_monoarthritis": {
+        "present": ["acute monoarthritis", "hot swollen joint", "painful swollen joint", "single swollen joint", "swollen painful knee"],
+        "absent": ["no acute monoarthritis", "no swollen joint"],
+    },
+    "sa_vital_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "sa_exam_painful_rom": {
+        "present": ["pain with passive range of motion", "painful range of motion", "severe pain with movement"],
+        "absent": ["painless range of motion", "full range of motion without pain"],
+    },
+    "sa_exam_warmth_effusion": {
+        "present": ["warm swollen joint", "joint warmth", "joint effusion", "erythematous joint", "swollen knee"],
+        "absent": ["no joint effusion", "no joint warmth", "joint not swollen"],
+    },
+    "sa_crp": {
+        "present": ["crp elevated", "elevated crp", "c reactive protein elevated"],
+        "absent": ["crp not elevated", "normal crp"],
+    },
+    "sa_esr": {
+        "present": ["esr elevated", "elevated esr"],
+        "absent": ["esr not elevated", "normal esr"],
+    },
+    "sa_synovial_wbc_ge50k": {
+        "present": ["synovial wbc above 50000", "synovial fluid wbc above 50000", "synovial white count above 50000", "synovial wbc at least 50000"],
+        "absent": ["synovial wbc below 50000", "synovial fluid wbc below 50000", "synovial white count below 50000"],
+    },
+    "sa_synovial_na": {
+        "present": ["arthrocentesis not done", "synovial cell count not done", "joint aspiration not done"],
+        "absent": ["arthrocentesis completed", "joint aspiration completed"],
+    },
+    "sa_synovial_pmn_ge90": {
+        "present": ["synovial pmn above 90", "synovial pmn 90 percent", "neutrophils above 90 percent in synovial fluid"],
+        "absent": ["synovial pmn below 90", "neutrophils below 90 percent in synovial fluid"],
+    },
+    "sa_gram_stain": {
+        "present": ["synovial gram stain positive", "gram stain positive from synovial fluid", "organisms seen on gram stain"],
+        "absent": ["synovial gram stain negative", "gram stain negative from synovial fluid"],
+    },
+    "sa_gram_stain_na": {
+        "present": ["synovial gram stain not done", "gram stain not done on synovial fluid"],
+        "absent": ["synovial gram stain completed", "gram stain completed on synovial fluid"],
+    },
+    "sa_synovial_culture": {
+        "present": ["synovial culture positive", "joint aspirate culture positive", "synovial fluid culture positive"],
+        "absent": ["synovial culture negative", "joint aspirate culture negative", "synovial fluid culture negative"],
+    },
+    "sa_synovial_culture_na": {
+        "present": ["synovial culture not done", "joint aspirate culture not done"],
+        "absent": ["synovial culture completed", "joint aspirate culture completed"],
+    },
+    "sa_blood_culture_positive": {
+        "present": ["blood culture positive with matching pathogen", "bacteremia with matching organism", "blood cultures growing the same organism"],
+        "absent": ["blood culture negative", "blood cultures negative"],
+    },
+    "sa_blood_culture_na": {
+        "present": ["blood cultures not done", "blood culture not done"],
+        "absent": ["blood cultures completed", "blood culture completed"],
+    },
+    "sa_ultrasound_effusion": {
+        "present": ["ultrasound shows joint effusion", "joint ultrasound with effusion", "imaging shows joint effusion"],
+        "absent": ["ultrasound without effusion", "joint ultrasound without effusion"],
+    },
+    "sa_imaging_na": {
+        "present": ["joint imaging not done", "ultrasound not done for the joint"],
+        "absent": ["joint imaging completed", "ultrasound completed for the joint"],
+    },
+    "bm_host_immunocompromised": {
+        "present": ["immunocompromised", "immunosuppressed", "on chemotherapy", "transplant recipient", "high dose steroids"],
+        "absent": ["not immunocompromised", "no immunosuppression"],
+    },
+    "bm_host_csf_leak_or_neurosurgery": {
+        "present": ["csf leak", "recent neurosurgery", "vp shunt", "cns device", "recent skull base fracture"],
+        "absent": ["no csf leak", "no recent neurosurgery"],
+    },
+    "bm_host_otitis_sinusitis": {
+        "present": ["otitis", "mastoiditis", "sinusitis", "ear infection", "severe sinus infection"],
+        "absent": ["no otitis", "no mastoiditis", "no sinusitis"],
+    },
+    "bm_host_bacteremia_sepsis": {
+        "present": ["bacteremia", "bloodstream infection", "sepsis", "septic shock"],
+        "absent": ["no bacteremia", "no sepsis"],
+    },
+    "bm_sym_headache": {
+        "present": ["headache", "severe headache"],
+        "absent": ["no headache"],
+    },
+    "bm_vital_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "bm_exam_neck_stiffness": {
+        "present": ["neck stiffness", "meningismus", "nuchal rigidity", "stiff neck"],
+        "absent": ["no neck stiffness", "no meningismus", "supple neck"],
+    },
+    "bm_exam_ams": {
+        "present": ["altered mental status", "confused", "encephalopathic", "obtunded"],
+        "absent": ["normal mental status", "alert and oriented"],
+    },
+    "bm_exam_petechiae": {
+        "present": ["petechial rash", "purpuric rash", "petechiae", "purpura"],
+        "absent": ["no petechiae", "no purpura", "no rash"],
+    },
+    "bm_exam_seizure": {
+        "present": ["seizure", "new seizure", "convulsion"],
+        "absent": ["no seizure"],
+    },
+    "bm_serum_procalcitonin": {
+        "present": ["serum procalcitonin elevated", "procalcitonin elevated", "high procalcitonin"],
+        "absent": ["serum procalcitonin not elevated", "procalcitonin normal", "low procalcitonin"],
+    },
+    "bm_csf_wbc_ge1000": {
+        "present": ["csf wbc above 1000", "csf white count above 1000", "csf wbc at least 1000", "csf pleocytosis above 1000"],
+        "absent": ["csf wbc below 1000", "csf white count below 1000"],
+    },
+    "bm_csf_cell_count_na": {
+        "present": ["lp not done", "lumbar puncture not done", "csf cell count not done"],
+        "absent": ["lp completed", "lumbar puncture completed", "csf cell count completed"],
+    },
+    "bm_csf_pmn_ge80": {
+        "present": ["csf neutrophils above 80 percent", "csf pmn above 80", "csf neutrophils at least 80 percent"],
+        "absent": ["csf neutrophils below 80 percent", "csf pmn below 80"],
+    },
+    "bm_csf_glucose_ratio_low": {
+        "present": ["csf glucose low", "csf serum glucose ratio below 0.4", "csf glucose ratio below 0.4", "low csf glucose"],
+        "absent": ["csf glucose not low", "csf serum glucose ratio not low"],
+    },
+    "bm_csf_protein_high": {
+        "present": ["csf protein elevated", "high csf protein"],
+        "absent": ["csf protein not elevated", "normal csf protein"],
+    },
+    "bm_csf_lactate_high": {
+        "present": ["csf lactate elevated", "high csf lactate"],
+        "absent": ["csf lactate not elevated", "normal csf lactate"],
+    },
+    "bm_csf_gram_stain": {
+        "present": ["csf gram stain positive", "gram stain positive from csf", "organisms seen on csf gram stain"],
+        "absent": ["csf gram stain negative", "gram stain negative from csf"],
+    },
+    "bm_csf_gram_na": {
+        "present": ["csf gram stain not done", "gram stain not done on csf"],
+        "absent": ["csf gram stain completed", "gram stain completed on csf"],
+    },
+    "bm_csf_culture": {
+        "present": ["csf culture positive", "cerebrospinal fluid culture positive"],
+        "absent": ["csf culture negative", "cerebrospinal fluid culture negative"],
+    },
+    "bm_csf_culture_na": {
+        "present": ["csf culture not done", "cerebrospinal fluid culture not done"],
+        "absent": ["csf culture completed", "cerebrospinal fluid culture completed"],
+    },
+    "bm_blood_culture_positive": {
+        "present": ["blood culture positive with meningitis pathogen", "blood cultures growing pneumococcus", "blood cultures growing meningococcus", "blood cultures positive with matching organism"],
+        "absent": ["blood culture negative", "blood cultures negative"],
+    },
+    "bm_blood_culture_na": {
+        "present": ["blood cultures not done", "blood culture not done"],
+        "absent": ["blood cultures completed", "blood culture completed"],
+    },
+    "bm_csf_bacterial_pcr": {
+        "present": ["csf bacterial pcr positive", "meningitis panel positive for bacteria", "multiplex csf panel positive for bacteria"],
+        "absent": ["csf bacterial pcr negative", "meningitis panel negative for bacteria"],
+    },
+    "bm_csf_pcr_na": {
+        "present": ["csf bacterial pcr not done", "meningitis panel not done"],
+        "absent": ["csf bacterial pcr completed", "meningitis panel completed"],
+    },
+    "bm_imaging_supportive": {
+        "present": ["imaging supportive of meningitis", "mri supportive of meningitis", "ct supportive of meningitis"],
+        "absent": ["imaging not supportive of meningitis", "mri not supportive of meningitis", "ct not supportive of meningitis"],
+    },
+    "bm_imaging_na": {
+        "present": ["neuroimaging not done", "brain imaging not done", "head ct not done", "brain mri not done"],
+        "absent": ["neuroimaging completed", "brain imaging completed"],
+    },
+    "enc_host_immunocompromised": {
+        "present": ["immunocompromised", "immunosuppressed", "on chemotherapy", "advanced hiv", "high dose steroids"],
+        "absent": ["not immunocompromised", "no immunosuppression"],
+    },
+    "enc_host_transplant_or_biologic": {
+        "present": ["transplant recipient", "on biologic therapy", "on tacrolimus", "on major immunomodulator"],
+        "absent": ["no transplant", "not on biologic therapy"],
+    },
+    "enc_host_vector_travel_exposure": {
+        "present": ["mosquito exposure", "tick exposure", "recent travel", "animal bite", "arboviral exposure"],
+        "absent": ["no travel exposure", "no vector exposure"],
+    },
+    "enc_sym_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "enc_exam_ams": {
+        "present": ["altered mental status", "encephalopathy", "confused", "obtunded", "encephalopathic"],
+        "absent": ["normal mental status", "alert and oriented"],
+    },
+    "enc_exam_behavioral_change": {
+        "present": ["behavioral change", "personality change", "memory change", "short term memory loss"],
+        "absent": ["no behavioral change", "no memory change"],
+    },
+    "enc_exam_focal_deficit": {
+        "present": ["focal neurologic deficit", "aphasia", "hemiparesis", "new neurologic deficit"],
+        "absent": ["no focal neurologic deficit"],
+    },
+    "enc_exam_seizure": {
+        "present": ["seizure", "new seizure", "convulsion"],
+        "absent": ["no seizure"],
+    },
+    "enc_csf_pleocytosis": {
+        "present": ["csf pleocytosis", "csf white count elevated", "lymphocytic pleocytosis", "csf wbc elevated"],
+        "absent": ["no csf pleocytosis", "normal csf cell count"],
+    },
+    "enc_csf_cell_count_na": {
+        "present": ["lp not done", "lumbar puncture not done", "csf cell count not done"],
+        "absent": ["lp completed", "lumbar puncture completed", "csf cell count completed"],
+    },
+    "enc_csf_protein_high": {
+        "present": ["csf protein elevated", "high csf protein"],
+        "absent": ["csf protein normal", "csf protein not elevated"],
+    },
+    "enc_csf_rbc_high": {
+        "present": ["csf rbc elevated", "hemorrhagic csf", "rbc in csf elevated", "bloody csf"],
+        "absent": ["csf rbc not elevated", "no rbc elevation in csf"],
+    },
+    "enc_hsv_pcr": {
+        "present": ["csf hsv pcr positive", "hsv pcr positive in csf", "positive hsv from csf"],
+        "absent": ["csf hsv pcr negative", "hsv pcr negative in csf"],
+    },
+    "enc_hsv_pcr_na": {
+        "present": ["csf hsv pcr not done", "hsv pcr not done on csf"],
+        "absent": ["csf hsv pcr completed", "hsv pcr completed on csf"],
+    },
+    "enc_csf_viral_pcr": {
+        "present": ["csf viral pcr positive", "viral meningitis encephalitis panel positive", "positive viral csf panel"],
+        "absent": ["csf viral pcr negative", "viral csf panel negative"],
+    },
+    "enc_csf_viral_pcr_na": {
+        "present": ["csf viral pcr not done", "viral csf panel not done"],
+        "absent": ["csf viral pcr completed", "viral csf panel completed"],
+    },
+    "enc_mri_temporal": {
+        "present": ["temporal lobe mri abnormality", "mri temporal hyperintensity", "frontotemporal mri abnormality", "insular mri abnormality", "mri compatible with hsv encephalitis"],
+        "absent": ["mri without temporal abnormality", "mri not supportive of encephalitis"],
+    },
+    "enc_mri_na": {
+        "present": ["brain mri not done", "mri not done"],
+        "absent": ["brain mri completed", "mri completed"],
+    },
+    "enc_eeg_temporal": {
+        "present": ["eeg temporal slowing", "eeg periodic discharges", "temporal periodic discharges on eeg", "eeg compatible with encephalitis"],
+        "absent": ["eeg without temporal slowing", "eeg not supportive of encephalitis"],
+    },
+    "enc_eeg_na": {
+        "present": ["eeg not done"],
+        "absent": ["eeg completed"],
+    },
+    "sea_host_ivdu": {
+        "present": ["injection drug use", "ivdu", "injects drugs"],
+        "absent": ["no injection drug use", "no ivdu"],
+    },
+    "sea_host_diabetes": {
+        "present": ["diabetes", "diabetes mellitus", "diabetic"],
+        "absent": ["no diabetes", "not diabetic"],
+    },
+    "sea_host_immunocompromised": {
+        "present": ["immunocompromised", "immunosuppressed", "on chemotherapy", "high dose steroids"],
+        "absent": ["not immunocompromised", "no immunosuppression"],
+    },
+    "sea_host_recent_spinal_procedure": {
+        "present": ["recent spinal procedure", "recent epidural injection", "recent spinal surgery", "spinal hardware", "recent lumbar puncture"],
+        "absent": ["no recent spinal procedure", "no recent spinal surgery"],
+    },
+    "sea_host_bacteremia_or_ssti": {
+        "present": ["bacteremia", "bloodstream infection", "cellulitis", "skin infection", "soft tissue infection"],
+        "absent": ["no bacteremia", "no skin infection", "no soft tissue infection"],
+    },
+    "sea_sym_back_pain": {
+        "present": ["severe back pain", "focal back pain", "neck pain", "spine pain"],
+        "absent": ["no back pain", "no neck pain"],
+    },
+    "sea_vital_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "sea_exam_spinal_tenderness": {
+        "present": ["midline spinal tenderness", "spinal tenderness", "vertebral tenderness"],
+        "absent": ["no spinal tenderness", "no midline tenderness"],
+    },
+    "sea_exam_neuro_deficit": {
+        "present": ["focal neurologic deficit", "new weakness", "leg weakness", "paraparesis", "neurologic deficit"],
+        "absent": ["no focal neurologic deficit", "no weakness"],
+    },
+    "sea_exam_bowel_bladder": {
+        "present": ["urinary retention", "bowel bladder dysfunction", "saddle anesthesia with retention", "new incontinence"],
+        "absent": ["no urinary retention", "no bowel bladder dysfunction"],
+    },
+    "sea_esr_high": {
+        "present": ["esr elevated", "markedly elevated esr", "esr high"],
+        "absent": ["esr not elevated", "normal esr"],
+    },
+    "sea_crp_high": {
+        "present": ["crp elevated", "elevated crp", "crp high"],
+        "absent": ["crp not elevated", "normal crp"],
+    },
+    "sea_wbc_high": {
+        "present": ["wbc elevated", "white count elevated", "leukocytosis"],
+        "absent": ["wbc not elevated", "normal white count", "no leukocytosis"],
+    },
+    "sea_blood_culture_positive": {
+        "present": ["blood culture positive", "blood cultures growing staph", "positive blood cultures with matching organism"],
+        "absent": ["blood culture negative", "blood cultures negative"],
+    },
+    "sea_blood_culture_na": {
+        "present": ["blood cultures not done", "blood culture not done"],
+        "absent": ["blood cultures completed", "blood culture completed"],
+    },
+    "sea_mri_positive": {
+        "present": ["mri shows epidural abscess", "spine mri positive for epidural abscess", "epidural phlegmon on mri", "mri with spinal epidural abscess"],
+        "absent": ["mri without epidural abscess", "spine mri negative for epidural abscess"],
+    },
+    "sea_mri_na": {
+        "present": ["mri not done", "spine mri not done"],
+        "absent": ["mri completed", "spine mri completed"],
+    },
+    "sea_discitis_osteo": {
+        "present": ["discitis on imaging", "vertebral osteomyelitis on imaging", "discitis osteomyelitis"],
+        "absent": ["no discitis", "no vertebral osteomyelitis"],
+    },
+    "ba_host_otogenic_sinus_dental": {
+        "present": ["sinusitis", "mastoiditis", "otitis", "dental infection", "dental abscess", "ear infection"],
+        "absent": ["no sinusitis", "no dental infection", "no ear infection"],
+    },
+    "ba_host_neurosurgery_trauma": {
+        "present": ["recent neurosurgery", "craniotomy", "penetrating head trauma", "cranial hardware"],
+        "absent": ["no recent neurosurgery", "no head trauma"],
+    },
+    "ba_host_endocarditis_bacteremia": {
+        "present": ["endocarditis", "bacteremia", "bloodstream infection", "hematogenous source"],
+        "absent": ["no bacteremia", "no endocarditis"],
+    },
+    "ba_host_immunocompromised": {
+        "present": ["immunocompromised", "immunosuppressed", "on chemotherapy", "high dose steroids"],
+        "absent": ["not immunocompromised", "no immunosuppression"],
+    },
+    "ba_sym_headache": {
+        "present": ["headache", "severe headache"],
+        "absent": ["no headache"],
+    },
+    "ba_vital_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "ba_exam_focal_deficit": {
+        "present": ["focal neurologic deficit", "aphasia", "hemiparesis", "new weakness", "focal deficit"],
+        "absent": ["no focal neurologic deficit", "no focal deficit"],
+    },
+    "ba_exam_ams": {
+        "present": ["altered mental status", "confused", "encephalopathic", "obtunded"],
+        "absent": ["normal mental status", "alert and oriented"],
+    },
+    "ba_exam_seizure": {
+        "present": ["seizure", "new seizure", "convulsion"],
+        "absent": ["no seizure"],
+    },
+    "ba_crp_high": {
+        "present": ["crp elevated", "elevated crp", "crp high"],
+        "absent": ["crp not elevated", "normal crp"],
+    },
+    "ba_wbc_high": {
+        "present": ["wbc elevated", "white count elevated", "leukocytosis"],
+        "absent": ["wbc not elevated", "normal white count", "no leukocytosis"],
+    },
+    "ba_blood_culture_positive": {
+        "present": ["blood culture positive", "blood cultures growing streptococcus", "positive blood cultures with matching organism"],
+        "absent": ["blood culture negative", "blood cultures negative"],
+    },
+    "ba_blood_culture_na": {
+        "present": ["blood cultures not done", "blood culture not done"],
+        "absent": ["blood cultures completed", "blood culture completed"],
+    },
+    "ba_aspirate_culture_positive": {
+        "present": ["abscess aspirate culture positive", "operative culture positive", "pus culture positive from brain abscess"],
+        "absent": ["abscess aspirate culture negative", "operative culture negative"],
+    },
+    "ba_aspirate_culture_na": {
+        "present": ["abscess aspirate culture not done", "operative culture not done"],
+        "absent": ["abscess aspirate culture completed", "operative culture completed"],
+    },
+    "ba_mri_dwi_positive": {
+        "present": ["mri with restricted diffusion compatible with abscess", "ring enhancing lesion with restricted diffusion", "mri compatible with brain abscess"],
+        "absent": ["mri without restricted diffusion compatible with abscess", "mri not supportive of brain abscess"],
+    },
+    "ba_mri_na": {
+        "present": ["brain mri not done", "mri not done"],
+        "absent": ["brain mri completed", "mri completed"],
+    },
+    "ba_ct_ring_enhancing": {
+        "present": ["ct with ring enhancing lesion", "ring-enhancing lesion on ct", "contrast ct compatible with abscess"],
+        "absent": ["ct without ring enhancing lesion", "ct not supportive of abscess"],
+    },
+    "ba_ct_na": {
+        "present": ["brain ct not done", "ct not done"],
+        "absent": ["brain ct completed", "ct completed"],
+    },
+    "ba_imaging_multifocal": {
+        "present": ["multiple lesions on imaging", "multifocal lesions", "surrounding cerebritis", "vasogenic edema around lesion"],
+        "absent": ["no multifocal lesions", "no surrounding cerebritis"],
+    },
+    "nsti_host_diabetes": {
+        "present": ["diabetes", "diabetes mellitus", "diabetic"],
+        "absent": ["no diabetes", "not diabetic"],
+    },
+    "nsti_host_immunocompromised": {
+        "present": ["immunocompromised", "immunosuppressed", "on chemotherapy", "high dose steroids"],
+        "absent": ["not immunocompromised", "no immunosuppression"],
+    },
+    "nsti_host_ivdu": {
+        "present": ["injection drug use", "ivdu", "injects drugs"],
+        "absent": ["no injection drug use", "no ivdu"],
+    },
+    "nsti_host_recent_surgery_or_trauma": {
+        "present": ["recent surgery", "recent trauma", "recent wound", "recent injection at the site", "postoperative wound"],
+        "absent": ["no recent surgery or trauma", "no wound"],
+    },
+    "nsti_host_perineal_or_chronic_wound_source": {
+        "present": ["perineal source", "fournier", "pressure ulcer", "chronic wound", "skin ulcer"],
+        "absent": ["no perineal source", "no chronic wound"],
+    },
+    "nsti_sym_pain_out_of_proportion": {
+        "present": ["pain out of proportion", "severe pain out of proportion", "exquisite pain out of proportion"],
+        "absent": ["pain not out of proportion"],
+    },
+    "nsti_sym_rapid_progression": {
+        "present": ["rapid progression", "worsening over hours", "rapidly progressive soft tissue infection"],
+        "absent": ["not rapidly progressive"],
+    },
+    "nsti_vital_fever": {
+        "present": ["fever", "febrile"],
+        "absent": ["afebrile", "no fever"],
+    },
+    "nsti_vital_hypotension": {
+        "present": ["hypotension", "shock", "septic shock"],
+        "absent": ["normotensive", "no hypotension", "no shock"],
+    },
+    "nsti_exam_bullae_or_necrosis": {
+        "present": ["hemorrhagic bullae", "skin necrosis", "ecchymosis", "necrotic skin"],
+        "absent": ["no bullae", "no skin necrosis"],
+    },
+    "nsti_exam_crepitus": {
+        "present": ["crepitus", "subcutaneous gas on exam"],
+        "absent": ["no crepitus"],
+    },
+    "nsti_exam_cutaneous_anesthesia": {
+        "present": ["cutaneous anesthesia", "skin numbness over lesion", "sensory loss over lesion"],
+        "absent": ["no sensory loss over lesion"],
+    },
+    "nsti_crp_high": {
+        "present": ["crp markedly elevated", "crp elevated", "high crp"],
+        "absent": ["crp not elevated", "normal crp"],
+    },
+    "nsti_wbc_high": {
+        "present": ["wbc elevated", "white count elevated", "leukocytosis"],
+        "absent": ["wbc not elevated", "normal white count", "no leukocytosis"],
+    },
+    "nsti_sodium_low": {
+        "present": ["hyponatremia", "sodium low", "low sodium"],
+        "absent": ["no hyponatremia", "sodium normal"],
+    },
+    "nsti_lactate_high": {
+        "present": ["lactate elevated", "high lactate"],
+        "absent": ["lactate not elevated", "normal lactate"],
+    },
+    "nsti_blood_culture_positive": {
+        "present": ["blood culture positive", "blood cultures positive", "positive blood cultures with matching organism"],
+        "absent": ["blood culture negative", "blood cultures negative"],
+    },
+    "nsti_blood_culture_na": {
+        "present": ["blood cultures not done", "blood culture not done"],
+        "absent": ["blood cultures completed", "blood culture completed"],
+    },
+    "nsti_operative_findings": {
+        "present": ["dishwater fluid", "necrotic fascia", "easy fascial dissection", "operative findings classic for necrotizing fasciitis"],
+        "absent": ["operative findings not classic for necrotizing fasciitis"],
+    },
+    "nsti_operative_na": {
+        "present": ["operative exploration not done", "surgery not done"],
+        "absent": ["operative exploration completed", "surgery completed"],
+    },
+    "nsti_ct_positive": {
+        "present": ["ct compatible with necrotizing fasciitis", "ct with fascial gas", "ct with deep fascial fluid", "ct showing infection crossing fascial planes"],
+        "absent": ["ct not compatible with necrotizing fasciitis", "ct without deep fascial gas or fluid"],
+    },
+    "nsti_ct_na": {
+        "present": ["ct not done"],
+        "absent": ["ct completed"],
+    },
+    "nsti_mri_positive": {
+        "present": ["mri compatible with necrotizing fasciitis", "deep fascial t2 hyperintensity on mri", "mri showing deep fascial enhancement"],
+        "absent": ["mri not compatible with necrotizing fasciitis"],
+    },
+    "nsti_mri_na": {
+        "present": ["mri not done"],
+        "absent": ["mri completed"],
     },
 }
 

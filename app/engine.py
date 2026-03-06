@@ -110,6 +110,36 @@ BASE_HARM_BY_MODULE: Dict[str, dict] = {
         "unnecessaryTx": 8,
         "evidence": {"short": "Cortes-Penfield et al. Clin Infect Dis", "url": "https://doi.org/10.1093/cid/ciac992"},
     },
+    "septic_arthritis": {
+        "missedDx": 18,
+        "unnecessaryTx": 6,
+        "evidence": {"short": "Margaretten et al. JAMA", "url": None},
+    },
+    "bacterial_meningitis": {
+        "missedDx": 22,
+        "unnecessaryTx": 5,
+        "evidence": {"short": "Brouwer et al. Lancet", "url": None},
+    },
+    "encephalitis": {
+        "missedDx": 20,
+        "unnecessaryTx": 7,
+        "evidence": {"short": "Tunkel et al. IDSA", "url": None},
+    },
+    "spinal_epidural_abscess": {
+        "missedDx": 24,
+        "unnecessaryTx": 6,
+        "evidence": {"short": "Davis et al. J Emerg Med", "url": None},
+    },
+    "brain_abscess": {
+        "missedDx": 22,
+        "unnecessaryTx": 7,
+        "evidence": {"short": "Brouwer et al. Curr Opin Infect Dis", "url": None},
+    },
+    "necrotizing_soft_tissue_infection": {
+        "missedDx": 26,
+        "unnecessaryTx": 8,
+        "evidence": {"short": "IDSA SSTI Guideline", "url": None},
+    },
     "inv_mold": {
         "missedDx": 18,
         "unnecessaryTx": 9,
@@ -516,6 +546,90 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 2,
                 "Strong synovial/microbiologic evidence selected.",
                 _evidence("Cortes-Penfield et al. Clin Infect Dis", "https://doi.org/10.1093/cid/ciac992"),
+            )
+
+    if module_id == "septic_arthritis":
+        if has("sa_host_immunosuppression") or has("sa_host_bacteremia_or_overlying_ssti"):
+            add_missed_dx_driver(
+                3,
+                "High-risk host or hematogenous/contiguous source context selected.",
+                _evidence("Mathews et al. Lancet"),
+            )
+        if has("sa_synovial_wbc_ge50k") or has("sa_gram_stain") or has("sa_synovial_culture"):
+            add_missed_dx_driver(
+                3,
+                "Strong synovial or microbiologic evidence selected.",
+                _evidence("Carpenter et al. Acad Emerg Med"),
+            )
+
+    if module_id == "bacterial_meningitis":
+        if has("bm_host_csf_leak_or_neurosurgery") or has("bm_host_bacteremia_sepsis"):
+            add_missed_dx_driver(
+                4,
+                "High-risk structural or bacteremic context selected.",
+                _evidence("Brouwer et al. Lancet"),
+            )
+        if has("bm_csf_gram_stain") or has("bm_csf_culture") or has("bm_csf_bacterial_pcr") or has("bm_csf_glucose_ratio_low"):
+            add_missed_dx_driver(
+                4,
+                "Strong CSF or microbiologic evidence selected.",
+                _evidence("Brouwer et al. Lancet"),
+            )
+
+    if module_id == "encephalitis":
+        if has("enc_host_immunocompromised") or has("enc_host_transplant_or_biologic"):
+            add_missed_dx_driver(
+                3,
+                "High-risk host context selected.",
+                _evidence("Tunkel et al. IDSA"),
+            )
+        if has("enc_hsv_pcr") or has("enc_mri_temporal") or has("enc_eeg_temporal"):
+            add_missed_dx_driver(
+                4,
+                "Strong HSV-weighted molecular, MRI, or EEG evidence selected.",
+                _evidence("Tunkel et al. IDSA"),
+            )
+
+    if module_id == "spinal_epidural_abscess":
+        if has("sea_host_recent_spinal_procedure") or has("sea_host_bacteremia_or_ssti"):
+            add_missed_dx_driver(
+                4,
+                "High-risk local inoculation or bacteremic context selected.",
+                _evidence("Arko et al. Surg Neurol Int"),
+            )
+        if has("sea_mri_positive") or has("sea_exam_neuro_deficit") or has("sea_exam_bowel_bladder"):
+            add_missed_dx_driver(
+                4,
+                "Strong MRI or neurologic compression evidence selected.",
+                _evidence("Davis et al. J Emerg Med"),
+            )
+
+    if module_id == "brain_abscess":
+        if has("ba_host_otogenic_sinus_dental") or has("ba_host_endocarditis_bacteremia") or has("ba_host_neurosurgery_trauma"):
+            add_missed_dx_driver(
+                4,
+                "High-risk contiguous, hematogenous, or postoperative source context selected.",
+                _evidence("Helweg-Larsen et al. Open Forum Infect Dis"),
+            )
+        if has("ba_mri_dwi_positive") or has("ba_aspirate_culture_positive") or has("ba_exam_focal_deficit"):
+            add_missed_dx_driver(
+                4,
+                "Strong MRI, operative microbiology, or focal neurologic evidence selected.",
+                _evidence("Brouwer et al. Curr Opin Infect Dis"),
+            )
+
+    if module_id == "necrotizing_soft_tissue_infection":
+        if has("nsti_host_recent_surgery_or_trauma") or has("nsti_host_perineal_or_chronic_wound_source"):
+            add_missed_dx_driver(
+                4,
+                "High-risk local source context selected.",
+                _evidence("IDSA SSTI Guideline"),
+            )
+        if has("nsti_vital_hypotension") or has("nsti_exam_bullae_or_necrosis") or has("nsti_operative_findings") or has("nsti_ct_positive"):
+            add_missed_dx_driver(
+                5,
+                "Strong systemic toxicity, operative, or imaging evidence selected.",
+                _evidence("Fernando et al. Ann Surg"),
             )
 
     if module_id == "inv_mold":

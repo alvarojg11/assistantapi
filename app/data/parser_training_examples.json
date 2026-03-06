@@ -350,5 +350,257 @@
       "pji_esr",
       "pji_alpha_defensin_elisa"
     ]
+  },
+  {
+    "text": "ED patient with acute painful swollen knee, fever, CRP elevated, synovial WBC above 50000, and synovial Gram stain positive.",
+    "moduleId": "septic_arthritis",
+    "presetId": "sa_ed",
+    "findings": {
+      "sa_sym_monoarthritis": "present",
+      "sa_vital_fever": "present",
+      "sa_crp": "present",
+      "sa_synovial_wbc_ge50k": "present",
+      "sa_gram_stain": "present"
+    },
+    "orderedFindingIds": [
+      "sa_sym_monoarthritis",
+      "sa_vital_fever",
+      "sa_crp",
+      "sa_synovial_wbc_ge50k",
+      "sa_gram_stain"
+    ]
+  },
+  {
+    "text": "Inpatient consult for warm swollen native shoulder in an immunosuppressed patient with painful range of motion, ESR elevated, ultrasound showing effusion, and synovial fluid culture positive.",
+    "moduleId": "septic_arthritis",
+    "presetId": "sa_high",
+    "findings": {
+      "sa_host_immunosuppression": "present",
+      "sa_exam_warmth_effusion": "present",
+      "sa_exam_painful_rom": "present",
+      "sa_esr": "present",
+      "sa_ultrasound_effusion": "present",
+      "sa_synovial_culture": "present"
+    },
+    "orderedFindingIds": [
+      "sa_host_immunosuppression",
+      "sa_exam_warmth_effusion",
+      "sa_exam_painful_rom",
+      "sa_esr",
+      "sa_ultrasound_effusion",
+      "sa_synovial_culture"
+    ]
+  },
+  {
+    "text": "Emergency department patient with headache, fever, neck stiffness, altered mental status, CSF glucose low, CSF neutrophils above 80 percent, and CSF Gram stain positive.",
+    "moduleId": "bacterial_meningitis",
+    "presetId": "bm_ed",
+    "findings": {
+      "bm_sym_headache": "present",
+      "bm_vital_fever": "present",
+      "bm_exam_neck_stiffness": "present",
+      "bm_exam_ams": "present",
+      "bm_csf_glucose_ratio_low": "present",
+      "bm_csf_pmn_ge80": "present",
+      "bm_csf_gram_stain": "present"
+    },
+    "orderedFindingIds": [
+      "bm_sym_headache",
+      "bm_vital_fever",
+      "bm_exam_neck_stiffness",
+      "bm_exam_ams",
+      "bm_csf_glucose_ratio_low",
+      "bm_csf_pmn_ge80",
+      "bm_csf_gram_stain"
+    ]
+  },
+  {
+    "text": "ICU consult for suspected bacterial meningitis after recent neurosurgery with fever, seizure, CSF white count above 1000, elevated CSF lactate, and CSF culture positive.",
+    "moduleId": "bacterial_meningitis",
+    "presetId": "bm_high",
+    "findings": {
+      "bm_host_csf_leak_or_neurosurgery": "present",
+      "bm_vital_fever": "present",
+      "bm_exam_seizure": "present",
+      "bm_csf_wbc_ge1000": "present",
+      "bm_csf_lactate_high": "present",
+      "bm_csf_culture": "present"
+    },
+    "orderedFindingIds": [
+      "bm_host_csf_leak_or_neurosurgery",
+      "bm_vital_fever",
+      "bm_exam_seizure",
+      "bm_csf_wbc_ge1000",
+      "bm_csf_lactate_high",
+      "bm_csf_culture"
+    ]
+  },
+  {
+    "text": "Emergency department patient with fever, confusion, personality change, CSF pleocytosis, temporal lobe MRI abnormality, and CSF HSV PCR positive.",
+    "moduleId": "encephalitis",
+    "presetId": "enc_ed",
+    "findings": {
+      "enc_sym_fever": "present",
+      "enc_exam_ams": "present",
+      "enc_exam_behavioral_change": "present",
+      "enc_csf_pleocytosis": "present",
+      "enc_mri_temporal": "present",
+      "enc_hsv_pcr": "present"
+    },
+    "orderedFindingIds": [
+      "enc_sym_fever",
+      "enc_exam_ams",
+      "enc_exam_behavioral_change",
+      "enc_csf_pleocytosis",
+      "enc_mri_temporal",
+      "enc_hsv_pcr"
+    ]
+  },
+  {
+    "text": "ICU consult for immunocompromised patient with encephalopathy, new seizure, elevated CSF protein and RBCs, EEG with temporal periodic discharges, and HSV PCR still pending.",
+    "moduleId": "encephalitis",
+    "presetId": "enc_high",
+    "findings": {
+      "enc_host_immunocompromised": "present",
+      "enc_exam_ams": "present",
+      "enc_exam_seizure": "present",
+      "enc_csf_protein_high": "present",
+      "enc_csf_rbc_high": "present",
+      "enc_eeg_temporal": "present",
+      "enc_hsv_pcr_na": "present"
+    },
+    "orderedFindingIds": [
+      "enc_host_immunocompromised",
+      "enc_exam_ams",
+      "enc_exam_seizure",
+      "enc_csf_protein_high",
+      "enc_csf_rbc_high",
+      "enc_eeg_temporal",
+      "enc_hsv_pcr_na"
+    ]
+  },
+  {
+    "text": "Emergency department patient with severe focal back pain, fever, diabetes, markedly elevated ESR and CRP, and MRI showing a spinal epidural abscess.",
+    "moduleId": "spinal_epidural_abscess",
+    "presetId": "sea_ed",
+    "findings": {
+      "sea_sym_back_pain": "present",
+      "sea_vital_fever": "present",
+      "sea_host_diabetes": "present",
+      "sea_esr_high": "present",
+      "sea_crp_high": "present",
+      "sea_mri_positive": "present"
+    },
+    "orderedFindingIds": [
+      "sea_sym_back_pain",
+      "sea_vital_fever",
+      "sea_host_diabetes",
+      "sea_esr_high",
+      "sea_crp_high",
+      "sea_mri_positive"
+    ]
+  },
+  {
+    "text": "Inpatient spine consult after recent epidural injection with back pain, leg weakness, urinary retention, positive blood cultures, and MRI showing epidural phlegmon with discitis.",
+    "moduleId": "spinal_epidural_abscess",
+    "presetId": "sea_high",
+    "findings": {
+      "sea_host_recent_spinal_procedure": "present",
+      "sea_sym_back_pain": "present",
+      "sea_exam_neuro_deficit": "present",
+      "sea_exam_bowel_bladder": "present",
+      "sea_blood_culture_positive": "present",
+      "sea_mri_positive": "present",
+      "sea_discitis_osteo": "present"
+    },
+    "orderedFindingIds": [
+      "sea_host_recent_spinal_procedure",
+      "sea_sym_back_pain",
+      "sea_exam_neuro_deficit",
+      "sea_exam_bowel_bladder",
+      "sea_blood_culture_positive",
+      "sea_mri_positive",
+      "sea_discitis_osteo"
+    ]
+  },
+  {
+    "text": "Emergency department patient with severe headache, fever, aphasia, and MRI showing a ring-enhancing lesion with restricted diffusion compatible with brain abscess.",
+    "moduleId": "brain_abscess",
+    "presetId": "ba_ed",
+    "findings": {
+      "ba_sym_headache": "present",
+      "ba_vital_fever": "present",
+      "ba_exam_focal_deficit": "present",
+      "ba_mri_dwi_positive": "present"
+    },
+    "orderedFindingIds": [
+      "ba_sym_headache",
+      "ba_vital_fever",
+      "ba_exam_focal_deficit",
+      "ba_mri_dwi_positive"
+    ]
+  },
+  {
+    "text": "Neurosurgery consult for patient with sinusitis, confusion, seizure, elevated CRP, positive blood cultures, and operative aspirate culture positive from a ring-enhancing brain lesion.",
+    "moduleId": "brain_abscess",
+    "presetId": "ba_high",
+    "findings": {
+      "ba_host_otogenic_sinus_dental": "present",
+      "ba_exam_ams": "present",
+      "ba_exam_seizure": "present",
+      "ba_crp_high": "present",
+      "ba_blood_culture_positive": "present",
+      "ba_aspirate_culture_positive": "present"
+    },
+    "orderedFindingIds": [
+      "ba_host_otogenic_sinus_dental",
+      "ba_exam_ams",
+      "ba_exam_seizure",
+      "ba_crp_high",
+      "ba_blood_culture_positive",
+      "ba_aspirate_culture_positive"
+    ]
+  },
+  {
+    "text": "Emergency department patient with diabetes, severe pain out of proportion, rapidly progressive leg infection, hypotension, elevated lactate, and CT compatible with necrotizing fasciitis.",
+    "moduleId": "necrotizing_soft_tissue_infection",
+    "presetId": "nsti_ed",
+    "findings": {
+      "nsti_host_diabetes": "present",
+      "nsti_sym_pain_out_of_proportion": "present",
+      "nsti_sym_rapid_progression": "present",
+      "nsti_vital_hypotension": "present",
+      "nsti_lactate_high": "present",
+      "nsti_ct_positive": "present"
+    },
+    "orderedFindingIds": [
+      "nsti_host_diabetes",
+      "nsti_sym_pain_out_of_proportion",
+      "nsti_sym_rapid_progression",
+      "nsti_vital_hypotension",
+      "nsti_lactate_high",
+      "nsti_ct_positive"
+    ]
+  },
+  {
+    "text": "Surgical consult for Fournier gangrene with perineal source, bullae, crepitus, elevated CRP, positive blood cultures, and operative findings of dishwater fluid and necrotic fascia.",
+    "moduleId": "necrotizing_soft_tissue_infection",
+    "presetId": "nsti_high",
+    "findings": {
+      "nsti_host_perineal_or_chronic_wound_source": "present",
+      "nsti_exam_bullae_or_necrosis": "present",
+      "nsti_exam_crepitus": "present",
+      "nsti_crp_high": "present",
+      "nsti_blood_culture_positive": "present",
+      "nsti_operative_findings": "present"
+    },
+    "orderedFindingIds": [
+      "nsti_host_perineal_or_chronic_wound_source",
+      "nsti_exam_bullae_or_necrosis",
+      "nsti_exam_crepitus",
+      "nsti_crp_high",
+      "nsti_blood_culture_positive",
+      "nsti_operative_findings"
+    ]
   }
 ]
