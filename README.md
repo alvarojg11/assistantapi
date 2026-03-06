@@ -126,7 +126,7 @@ You can also override the parser model per request with:
 - `POST /v1/modules/register`
 - `POST /v1/analyze`
 - `POST /v1/analyze-text` (free-text parser + optional analysis)
-- `POST /v1/assistant/turn` (guided "Uncertainty Assistant" conversation)
+- `POST /v1/assistant/turn` (guided "ID Consultant Assistant" conversation)
 
 ## Example analyze request
 
@@ -228,7 +228,7 @@ The `/assistant` web UI also includes a **Parser model** field that sends this v
 ## Guided UX endpoint: `POST /v1/assistant/turn`
 
 This endpoint provides a conversational flow that:
-1. Introduces itself as **Uncertainty Assistant**
+1. Introduces itself as **ID Consultant Assistant**
 2. Asks which syndrome to approach
 3. Asks for the setting/pretest context
 4. Accepts a plain-language case description

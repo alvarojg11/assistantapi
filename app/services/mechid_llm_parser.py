@@ -17,8 +17,8 @@ ASTResult = Literal["Susceptible", "Intermediate", "Resistant"]
 class MechIDLLMExtractionPayload(BaseModel):
     organism: str | None = None
     susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
-    tx_context: Dict[str, str] = Field(
-        default_factory=lambda: {"syndrome": "Not specified", "severity": "Not specified"},
+    tx_context: Dict[str, Any] = Field(
+        default_factory=lambda: {"syndrome": "Not specified", "severity": "Not specified", "oralPreference": False},
         alias="txContext",
     )
     confidence: Literal["low", "medium", "high"] = "medium"
@@ -58,6 +58,7 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "Normalize susceptibility values to exactly one of: Susceptible, Intermediate, Resistant.\n"
         "If the organism is unclear, set organism to null instead of guessing.\n"
         "If syndrome or severity is not clearly stated, use 'Not specified'.\n"
+        "Set oralPreference to true only if the user is explicitly asking for oral therapy, oral step-down, or PO options.\n"
         "Preserve as many explicitly stated AST calls as possible.\n"
         "Set confidence to low when the organism or the AST pattern is ambiguous.\n"
         "Use ambiguities for details that could support multiple interpretations.\n"
@@ -77,6 +78,7 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
     tx_context = {
         "syndrome": payload.tx_context.get("syndrome", "Not specified") or "Not specified",
         "severity": payload.tx_context.get("severity", "Not specified") or "Not specified",
+        "oralPreference": bool(payload.tx_context.get("oralPreference", False)),
     }
 
     if organism:
@@ -169,6 +171,8 @@ def parse_mechid_text_with_openai(
         normalized["txContext"]["syndrome"] = rule_fallback["txContext"]["syndrome"]
     if normalized["txContext"].get("severity") == "Not specified" and rule_fallback["txContext"].get("severity") != "Not specified":
         normalized["txContext"]["severity"] = rule_fallback["txContext"]["severity"]
+    if not normalized["txContext"].get("oralPreference") and rule_fallback["txContext"].get("oralPreference"):
+        normalized["txContext"]["oralPreference"] = True
 
     normalized["requiresConfirmation"] = bool(
         normalized["requiresConfirmation"]

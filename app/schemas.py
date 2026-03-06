@@ -334,7 +334,7 @@ class AssistantTurnRequest(BaseModel):
 
 
 class AssistantTurnResponse(BaseModel):
-    assistant_name: str = Field(default="Uncertainty Assistant", alias="assistantName")
+    assistant_name: str = Field(default="ID Consultant Assistant", alias="assistantName")
     assistant_message: str = Field(alias="assistantMessage")
     state: AssistantState
     options: List[AssistantOption] = Field(default_factory=list)
@@ -348,6 +348,9 @@ class AssistantTurnResponse(BaseModel):
 class MechIDTxContext(BaseModel):
     syndrome: str = "Not specified"
     severity: str = "Not specified"
+    oral_preference: bool = Field(default=False, alias="oralPreference")
+
+    model_config = {"populate_by_name": True}
 
 
 class MechIDAnalyzeRequest(BaseModel):

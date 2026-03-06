@@ -43,7 +43,19 @@ SYNDROME_HINTS = {
     "meningitis": "CNS infection",
     "cns": "CNS infection",
     "osteomyelitis": "Bone/joint infection",
+    "bone infection": "Bone/joint infection",
+    "septic arthritis": "Bone/joint infection",
+    "joint infection": "Bone/joint infection",
     "joint": "Bone/joint infection",
+    "prosthetic joint": "Bone/joint infection",
+    "pji": "Bone/joint infection",
+    "diabetic foot": "Other deep-seated / high-inoculum focus",
+    "dfi": "Other deep-seated / high-inoculum focus",
+    "wound infection": "Other deep-seated / high-inoculum focus",
+    "soft tissue infection": "Other deep-seated / high-inoculum focus",
+    "ssti": "Other deep-seated / high-inoculum focus",
+    "deep abscess": "Other deep-seated / high-inoculum focus",
+    "deep seated": "Other deep-seated / high-inoculum focus",
 }
 
 SEVERITY_HINTS = {
@@ -53,6 +65,21 @@ SEVERITY_HINTS = {
     "severe": "Severe / septic shock",
     "bacteremic shock": "Severe / septic shock",
 }
+
+ORAL_PREFERENCE_HINTS = (
+    "oral option",
+    "oral options",
+    "oral antibiotic",
+    "oral antibiotics",
+    "by mouth",
+    "po option",
+    "po therapy",
+    "po antibiotic",
+    "step down",
+    "step-down",
+    "oral step down",
+    "oral step-down",
+)
 
 
 def _normalize_text(text: str) -> str:
@@ -125,6 +152,7 @@ def _extract_antibiotic_results(text_norm: str, organism: str) -> Dict[str, str]
 def _infer_tx_context(text_norm: str) -> Dict[str, str]:
     syndrome = "Not specified"
     severity = "Not specified"
+    oral_preference = False
     for token, label in SYNDROME_HINTS.items():
         if token in text_norm:
             syndrome = label
@@ -133,7 +161,8 @@ def _infer_tx_context(text_norm: str) -> Dict[str, str]:
         if token in text_norm:
             severity = label
             break
-    return {"syndrome": syndrome, "severity": severity}
+    oral_preference = any(token in text_norm for token in ORAL_PREFERENCE_HINTS)
+    return {"syndrome": syndrome, "severity": severity, "oralPreference": oral_preference}
 
 
 def parse_mechid_text(text: str) -> Dict[str, object]:

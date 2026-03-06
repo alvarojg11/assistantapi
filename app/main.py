@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Dict, List
 
@@ -1495,6 +1496,23 @@ def _build_recommendation_summary(
         )
         return summary, next_steps
 
+    label = _assistant_module_label(module)
+    if recommendation == "observe":
+        return (
+            f"{label} probability is currently low enough that I would not escalate syndrome-directed testing or treatment unless new data meaningfully raises concern.",
+            [],
+        )
+    if recommendation == "test":
+        return (
+            f"{label} remains in an intermediate range, so I would keep it on the differential and get the next highest-yield discriminating data before committing to full syndrome-directed treatment.",
+            [],
+        )
+    if recommendation == "treat":
+        return (
+            f"{label} probability is high enough that empiric syndrome-directed treatment is justified while the diagnostic picture is being confirmed.",
+            [],
+        )
+
     return None, []
 
 
@@ -1554,21 +1572,7 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         preset_id=preset_id,
     )
 
-    explanation = None
-    if req.include_explanation:
-        if recommendation_summary:
-            explanation = (
-                f"For {module.name}, the estimated probability is {posttest_probability:.1%}. "
-                f"{recommendation_summary}"
-            )
-        else:
-            explanation = (
-                f"For {module.name}, the estimated probability is {posttest_probability:.1%}. "
-                f"This is {('above' if recommendation == 'treat' else 'below' if recommendation == 'observe' else 'between')} "
-                f"the configured decision thresholds, so the suggested action is '{recommendation}'."
-            )
-
-    return AnalyzeResponse(
+    response = AnalyzeResponse(
         moduleId=module.id,
         moduleName=module.name,
         pretest=PretestSummary(baseProbability=base_pretest, adjustedProbability=adjusted_pretest, presetId=preset_id),
@@ -1583,8 +1587,11 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         stepwise=stepwise,
         reasons=reasons,
         riskFlags=risk_flags,
-        explanationForUser=explanation,
+        explanationForUser=None,
     )
+    if req.include_explanation:
+        response.explanation_for_user = _build_probid_consult_message(module, response)
+    return response
 
 
 @app.post("/v1/analyze-text", response_model=TextAnalyzeResponse)
@@ -1749,9 +1756,9 @@ def _assistant_module_label(module: SyndromeModule) -> str:
 
 def _assistant_review_options() -> List[AssistantOption]:
     return [
-        AssistantOption(value="run_assessment", label="Run assessment"),
-        AssistantOption(value="add_more_details", label="Add more details"),
-        AssistantOption(value="restart", label="Start over"),
+        AssistantOption(value="run_assessment", label="Give consultant impression"),
+        AssistantOption(value="add_more_details", label="Add case detail"),
+        AssistantOption(value="restart", label="Start new consult"),
     ]
 
 
@@ -1765,6 +1772,94 @@ def _join_readable(items: List[str]) -> str:
     return f"{', '.join(items[:-1])}, and {items[-1]}"
 
 
+def _friendly_probid_bottom_line(module: SyndromeModule, analysis: AnalyzeResponse) -> str:
+    probability = round(analysis.posttest_probability * 100)
+    syndrome_name = module.name.lower()
+    if analysis.recommendation == "treat":
+        return (
+            f"The estimated probability of {module.name} is about {probability}%, which is high enough that I would treat this as likely {syndrome_name} while confirming the diagnosis."
+        )
+    if analysis.recommendation == "test":
+        return (
+            f"The estimated probability of {module.name} is about {probability}%, which keeps {syndrome_name} in an intermediate zone. I would keep working it up before treating it as established."
+        )
+    return (
+        f"The estimated probability of {module.name} is about {probability}%, which puts {syndrome_name} below the action threshold for now unless new findings shift the picture."
+    )
+
+
+def _friendly_probid_drivers(analysis: AnalyzeResponse) -> str:
+    if not analysis.applied_findings:
+        return (
+            "I do not yet have strong discriminating findings, so the estimate is still being driven mostly by the starting pretest probability."
+        )
+
+    top_findings = [
+        f"{finding.label} ({finding.state}, LR {finding.lr_used:.2f})"
+        for finding in analysis.applied_findings[:3]
+    ]
+    return f"The biggest drivers here are {_join_readable(top_findings)}."
+
+
+def _friendly_probid_probability_and_harm(analysis: AnalyzeResponse) -> str:
+    probability = analysis.posttest_probability
+    threshold_sentence = (
+        f"Post-test probability is {probability:.1%} after a combined LR of {analysis.combined_lr:.2f}. "
+        f"The current action thresholds are observe at or below {analysis.thresholds.observe_probability:.1%} "
+        f"and treat at or above {analysis.thresholds.treat_probability:.1%}."
+    )
+    harm_reason = next((reason for reason in analysis.reasons if reason.startswith("Harm model: ")), None)
+    if harm_reason:
+        return threshold_sentence + " " + harm_reason.removeprefix("Harm model: ").strip()
+    return (
+        threshold_sentence
+        + " Those thresholds reflect the current harm tradeoff between unnecessary treatment and a missed diagnosis."
+    )
+
+
+def _friendly_probid_next_steps(analysis: AnalyzeResponse) -> str:
+    if analysis.recommended_next_steps:
+        return _join_readable(analysis.recommended_next_steps[:3]) + "."
+    if analysis.recommendation == "treat":
+        return "Start syndrome-directed treatment and close the highest-yield diagnostic gaps in parallel."
+    if analysis.recommendation == "test":
+        return "Get the highest-yield next test, imaging study, or microbiology result that would move this estimate one way or the other."
+    return "Keep watching the clinical trajectory and only reopen this workup if new objective findings increase concern."
+
+
+def _friendly_probid_change_mind(
+    analysis: AnalyzeResponse,
+    missing_suggestions: List[str] | None = None,
+) -> str:
+    if missing_suggestions:
+        return f"The results most likely to move this estimate are {_join_readable(missing_suggestions[:3])}."
+    if analysis.recommendation == "treat":
+        return "High-quality negative objective data or a stronger competing diagnosis would lower my confidence."
+    if analysis.recommendation == "test":
+        return "A discriminating microbiology, imaging, or bedside finding could push this either toward treatment or away from the syndrome."
+    return "New focal findings, supportive microbiology, or compatible imaging could raise concern quickly."
+
+
+def _build_probid_consult_message(
+    module: SyndromeModule,
+    analysis: AnalyzeResponse,
+    *,
+    missing_suggestions: List[str] | None = None,
+    include_panel_note: bool = False,
+) -> str:
+    lines = [
+        "My impression:",
+        f"Bottom line: {_friendly_probid_bottom_line(module, analysis)}",
+        f"Probability and harm: {_friendly_probid_probability_and_harm(analysis)}",
+        f"Why I think that: {_friendly_probid_drivers(analysis)}",
+        f"What I would do next: {_friendly_probid_next_steps(analysis)}",
+        f"What would change my mind: {_friendly_probid_change_mind(analysis, missing_suggestions)}",
+    ]
+    if include_panel_note:
+        lines.append("I left the LR breakdown and structured findings in the analysis panel below.")
+    return "\n".join(lines)
+
+
 def _format_mechid_results(results: Dict[str, str]) -> str:
     if not results:
         return "no susceptibility calls yet"
@@ -1775,10 +1870,256 @@ def _format_mechid_results(results: Dict[str, str]) -> str:
 def _assistant_mechid_review_options(result: MechIDTextAnalyzeResponse) -> List[AssistantOption]:
     options: List[AssistantOption] = []
     if result.analysis is not None:
-        options.append(AssistantOption(value="run_assessment", label="Run interpretation"))
-    options.append(AssistantOption(value="add_more_details", label="Add more details"))
-    options.append(AssistantOption(value="restart", label="Start over"))
+        options.append(AssistantOption(value="run_assessment", label="Give consultant impression"))
+    options.append(AssistantOption(value="add_more_details", label="Add case detail"))
+    options.append(AssistantOption(value="restart", label="Start new consult"))
     return options
+
+
+def _clean_mechid_text(text: str) -> str:
+    cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    cleaned = cleaned.replace("→", " -> ").replace("β", "beta")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _friendly_mechid_mechanism(result: MechIDAnalyzeResponse) -> str:
+    if not result.mechanisms:
+        return "I do not see a single dominant resistance mechanism from the submitted pattern."
+
+    cleaned = [_clean_mechid_text(item).rstrip(".") for item in result.mechanisms[:2]]
+    first = cleaned[0]
+    if "ESBL pattern" in first:
+        summary = "This looks most like an ESBL-producing isolate."
+    elif "Fluoroquinolone resistance" in first:
+        summary = "This looks most like a fluoroquinolone-resistant isolate."
+    elif "Methicillin" in first:
+        summary = "This looks most like methicillin resistance."
+    else:
+        summary = f"The leading resistance explanation is: {first}."
+
+    if len(cleaned) > 1:
+        second = cleaned[1]
+        if "Fluoroquinolone resistance" in second:
+            summary += " I also see clear fluoroquinolone resistance."
+        else:
+            summary += f" I also see a second resistance signal: {second}."
+    return summary
+
+
+def _friendly_mechid_therapy(
+    result: MechIDAnalyzeResponse,
+    parsed: MechIDTextParsedRequest | None,
+) -> str:
+    provided_results = parsed.susceptibility_results if parsed is not None else {}
+    susceptible_agents = [
+        antibiotic
+        for antibiotic, call in (provided_results or result.final_results).items()
+        if call == "Susceptible"
+    ]
+    resistant_agents = [
+        antibiotic
+        for antibiotic, call in (provided_results or result.final_results).items()
+        if call == "Resistant"
+    ]
+    syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
+    severity = parsed.tx_context.severity if parsed is not None else "Not specified"
+
+    preferred = None
+    for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
+        if candidate in susceptible_agents:
+            preferred = candidate
+            break
+    if preferred is None and susceptible_agents:
+        preferred = susceptible_agents[0]
+
+    lines: List[str] = []
+    if preferred is not None:
+        if severity == "Severe / septic shock":
+            lines.append(f"For this severity, I would lean toward {preferred} if it fits the infection source and patient factors.")
+        elif syndrome == "CNS infection":
+            lines.append(f"For a CNS infection, I would prioritize an agent with reliable CNS activity rather than relying only on the susceptibility label; {preferred} may or may not be the best fit depending on the full panel.")
+        else:
+            lines.append(f"From the drugs you gave me, {preferred} looks like the clearest active option.")
+    elif result.therapy_notes:
+        lines.append(_clean_mechid_text(result.therapy_notes[0]).rstrip(".") + ".")
+
+    if resistant_agents:
+        avoid = _join_readable(resistant_agents[:3])
+        lines.append(f"Based on this pattern, I would avoid {avoid} unless there is additional data that changes the interpretation.")
+
+    if result.therapy_notes:
+        cleaned_notes = [_clean_mechid_text(note).rstrip(".") for note in result.therapy_notes]
+        selected_note = None
+        if syndrome == "Uncomplicated cystitis":
+            for note in cleaned_notes:
+                note_lower = note.lower()
+                if "oral option" in note_lower or "cystitis" in note_lower:
+                    selected_note = note
+                    break
+        elif syndrome == "Complicated UTI / pyelonephritis":
+            for note in cleaned_notes:
+                note_lower = note.lower()
+                if "oral option" in note_lower or "pyelonephritis" in note_lower or "urinary" in note_lower:
+                    selected_note = note
+                    break
+        if selected_note is None and cleaned_notes:
+            selected_note = cleaned_notes[0]
+        if selected_note:
+            lines.append(f"MechID-specific therapy note: {selected_note}.")
+
+    return " ".join(lines) if lines else "I would match therapy to the susceptible agents and infection source."
+
+
+def _friendly_mechid_oral_options(
+    result: MechIDAnalyzeResponse,
+    parsed: MechIDTextParsedRequest | None,
+) -> str | None:
+    if parsed is None:
+        return None
+
+    syndrome = parsed.tx_context.syndrome
+    oral_preference = parsed.tx_context.oral_preference
+    provided_results = parsed.susceptibility_results or result.final_results
+    susceptible_agents = {
+        antibiotic
+        for antibiotic, call in provided_results.items()
+        if call == "Susceptible"
+    }
+
+    if syndrome == "Uncomplicated cystitis":
+        oral_choices = [
+            agent
+            for agent in (
+                "Nitrofurantoin",
+                "Trimethoprim/Sulfamethoxazole",
+                "Fosfomycin",
+            )
+            if agent in susceptible_agents
+        ]
+        if oral_choices:
+            return (
+                f"For uncomplicated cystitis, oral options that could be considered from your submitted AST are "
+                f"{_join_readable(oral_choices)} if there are no patient-specific contraindications."
+            )
+        return "For uncomplicated cystitis, I would look for a susceptible oral lower-tract option rather than defaulting to a broad IV agent."
+
+    if syndrome == "Complicated UTI / pyelonephritis":
+        oral_choices = [
+            agent
+            for agent in (
+                "Trimethoprim/Sulfamethoxazole",
+                "Ciprofloxacin",
+                "Levofloxacin",
+            )
+            if agent in susceptible_agents
+        ]
+        if oral_choices:
+            return (
+                f"For pyelonephritis or complicated UTI, oral step-down could be considered with "
+                f"{_join_readable(oral_choices)} if the patient is improving and source control is adequate."
+            )
+        return "For pyelonephritis or complicated UTI, I would be more cautious about oral step-down unless a clearly active oral option is available."
+
+    if syndrome == "Bone/joint infection" and oral_preference:
+        oral_choices = [
+            agent
+            for agent in (
+                "Trimethoprim/Sulfamethoxazole",
+                "Ciprofloxacin",
+                "Levofloxacin",
+                "Linezolid",
+                "Doxycycline",
+            )
+            if agent in susceptible_agents
+        ]
+        if oral_choices:
+            return (
+                f"For osteomyelitis, septic arthritis, or another bone/joint infection, oral therapy can sometimes be used with "
+                f"{_join_readable(oral_choices)} once the patient is stable and source control is addressed."
+            )
+        return "For bone or joint infection, I would be cautious about promising an oral option unless the isolate leaves you with a clearly reliable oral agent."
+
+    if syndrome == "Other deep-seated / high-inoculum focus" and oral_preference:
+        oral_choices = [
+            agent
+            for agent in (
+                "Trimethoprim/Sulfamethoxazole",
+                "Ciprofloxacin",
+                "Levofloxacin",
+                "Linezolid",
+                "Doxycycline",
+            )
+            if agent in susceptible_agents
+        ]
+        if oral_choices:
+            return (
+                f"For a diabetic foot or deep wound-type infection, oral step-down might be possible with "
+                f"{_join_readable(oral_choices)} if the patient is improving and the wound has been adequately drained or debrided."
+            )
+        return "For a diabetic foot or other deep wound infection, I would be cautious about oral therapy unless you have a clearly active oral option plus good source control."
+
+    if oral_preference:
+        oral_choices = [
+            agent
+            for agent in (
+                "Trimethoprim/Sulfamethoxazole",
+                "Ciprofloxacin",
+                "Levofloxacin",
+                "Nitrofurantoin",
+                "Fosfomycin",
+                "Linezolid",
+                "Doxycycline",
+            )
+            if agent in susceptible_agents
+        ]
+        if oral_choices:
+            return f"If you are specifically looking for an oral option, the submitted AST suggests {_join_readable(oral_choices)} could be considered depending on source and severity."
+        return "You asked about an oral option, but from the submitted AST I do not see an obvious oral choice I would feel comfortable recommending without more context."
+
+    return None
+
+
+def _friendly_mechid_caution(result: MechIDAnalyzeResponse) -> str | None:
+    if not result.cautions:
+        return None
+    return _clean_mechid_text(result.cautions[0]).rstrip(".") + "."
+
+
+def _friendly_mechid_bottom_line(
+    result: MechIDAnalyzeResponse,
+    parsed: MechIDTextParsedRequest | None,
+) -> str:
+    syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
+    oral_preference = parsed.tx_context.oral_preference if parsed is not None else False
+    provided_results = parsed.susceptibility_results if parsed is not None else {}
+    susceptible_agents = [
+        antibiotic
+        for antibiotic, call in (provided_results or result.final_results).items()
+        if call == "Susceptible"
+    ]
+
+    if syndrome == "Uncomplicated cystitis":
+        for candidate in ("Nitrofurantoin", "Trimethoprim/Sulfamethoxazole", "Fosfomycin"):
+            if candidate in susceptible_agents:
+                return f"This looks like a resistant urinary isolate, but {candidate} remains a reasonable oral option for uncomplicated cystitis if clinically appropriate."
+
+    if "Meropenem" in susceptible_agents and parsed is not None and parsed.tx_context.severity == "Severe / septic shock":
+        return "This looks like an ESBL-type resistant pattern, and for a severe infection I would treat this as a meropenem-favored scenario."
+
+    if oral_preference and syndrome in {"Bone/joint infection", "Other deep-seated / high-inoculum focus"}:
+        return "Oral therapy may be possible in selected bone, joint, or deep wound infections, but I would only consider it after matching the agent to the isolate, the source, and the patient’s clinical stability."
+
+    if result.mechanisms:
+        first = _clean_mechid_text(result.mechanisms[0]).rstrip(".")
+        if susceptible_agents:
+            return f"The main takeaway is {first.lower()}, with {_join_readable(susceptible_agents[:2])} looking like the most usable active option(s) from the submitted AST."
+        return f"The main takeaway is {first.lower()}."
+
+    if susceptible_agents:
+        return f"The main takeaway is that {_join_readable(susceptible_agents[:2])} appears active from the submitted AST."
+
+    return "The main takeaway is that this pattern needs organism-specific interpretation before choosing therapy."
 
 
 def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> str:
@@ -1805,24 +2146,20 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         summary += f" Clinical context: {_join_readable(context_bits)}."
 
     if result.analysis is not None:
-        mechanism_line = (
-            _join_readable(result.analysis.mechanisms[:3])
-            if result.analysis.mechanisms
-            else "no dominant mechanism identified from the submitted AST"
-        )
-        therapy_line = (
-            _join_readable(result.analysis.therapy_notes[:2])
-            if result.analysis.therapy_notes
-            else "no therapy guidance generated yet"
-        )
-        summary += f"\n\nLikely mechanism(s): {mechanism_line}."
-        summary += f"\nPreferred therapy guidance: {therapy_line}."
-        if result.analysis.cautions:
-            summary += f"\nKey caution: {result.analysis.cautions[0]}."
+        summary += "\n\nMy impression:"
+        summary += f"\nBottom line: {_friendly_mechid_bottom_line(result.analysis, parsed)}"
+        summary += f"\nPattern: {_friendly_mechid_mechanism(result.analysis)}"
+        summary += f"\nWhat I would use: {_friendly_mechid_therapy(result.analysis, parsed)}"
+        oral_options = _friendly_mechid_oral_options(result.analysis, parsed)
+        if oral_options:
+            summary += f"\nPossible oral options: {oral_options}"
+        caution = _friendly_mechid_caution(result.analysis)
+        if caution:
+            summary += f"\nWhat I would watch out for: {caution}"
         if final:
-            summary += "\nReview the full interpretation in the analysis panel."
+            summary += "\nI left the more technical mechanism details in the analysis panel below."
         else:
-            summary += "\nIf this looks right, run the interpretation. Otherwise add or correct details."
+            summary += "\nIf that summary matches the case, run the interpretation. Otherwise add or correct details."
         return summary
 
     if result.warnings:
@@ -2018,8 +2355,8 @@ def _assistant_pretest_factor_options(
             )
     options.extend(
         [
-            AssistantOption(value="continue_to_case", label="Next"),
-            AssistantOption(value="restart", label="Start over"),
+            AssistantOption(value="continue_to_case", label="Continue consult"),
+            AssistantOption(value="restart", label="Start new consult"),
         ]
     )
     return options
@@ -2789,8 +3126,8 @@ def _assistant_case_prompt_options(
     options.append(
         AssistantOption(
             value="continue_case_draft",
-            label="Next",
-            description="Send your drafted case details.",
+            label="Continue consult",
+            description="Move on with the case details you have drafted.",
         )
     )
     return options
@@ -2800,15 +3137,6 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
     understood = text_result.understood
     placeholder_tokens = {"none", "none.", "no", "n/a", "na"}
 
-    def _join_readable(items: List[str]) -> str:
-        if not items:
-            return ""
-        if len(items) == 1:
-            return items[0]
-        if len(items) == 2:
-            return f"{items[0]} and {items[1]}"
-        return f"{', '.join(items[:-1])}, and {items[-1]}"
-
     present_findings = [
         finding for finding in understood.findings_present if finding and finding.strip().lower() not in placeholder_tokens
     ]
@@ -2816,24 +3144,24 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
         finding for finding in understood.findings_absent if finding and finding.strip().lower() not in placeholder_tokens
     ]
     present_summary = _join_readable(present_findings) if present_findings else "no clear supporting findings yet"
-    summary = f"For {_assistant_module_label(module)}, I currently have: {present_summary}."
+    summary = f"My impression so far: for {_assistant_module_label(module)}, I currently have {present_summary}."
     if absent_findings:
         summary = (
-            f"For {_assistant_module_label(module)}, I currently have: {present_summary}. "
-            f"I also noted: {_join_readable(absent_findings)} as absent or negative."
+            f"My impression so far: for {_assistant_module_label(module)}, I currently have {present_summary}. "
+            f"I also noted {_join_readable(absent_findings)} as absent or negative."
         )
 
     missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
     if missing_suggestions:
-        summary += " Useful next details to confirm are " + _join_readable(missing_suggestions) + "."
+        summary += " The next details most likely to sharpen the estimate are " + _join_readable(missing_suggestions) + "."
     score_name = _assistant_selected_endo_score_id(state)
     if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state):
-        summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before running the assessment."
+        summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
 
     if text_result.requires_confirmation:
-        summary += " If anything looks off, adjust it or add more details. If this looks right, run the assessment."
+        summary += " If anything looks off, correct it or add more case detail. If this matches the case, ask for my consultant impression."
     else:
-        summary += " If this looks right, run the assessment. Otherwise, add more details."
+        summary += " If this matches the case, ask for my consultant impression. Otherwise, add more case detail."
     return summary
 
 
@@ -2953,8 +3281,8 @@ def _assistant_intake_case_from_text(
         options=_assistant_review_options_for_case(module, text_result, state),
         analysis=text_result,
         tips=[
-            "Review what I extracted, then run the assessment or add more details.",
-            "You can still switch to the step-by-step pathway by choosing Add more details.",
+            "Review what I extracted, then ask for my consultant impression or add another case detail.",
+            "You can still switch to the step-by-step pathway by choosing Add case detail.",
         ],
     )
 
@@ -3110,7 +3438,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         "For example: 'E. coli resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem, bloodstream infection in septic shock.'"
                     ),
                     state=state,
-                    options=[AssistantOption(value="restart", label="Start over")],
+                    options=[AssistantOption(value="restart", label="Start new consult")],
                     tips=[
                         "I can extract the organism, AST pattern, and basic treatment context from free text.",
                         "Ask for likely resistance mechanism, therapy, or both.",
@@ -3136,13 +3464,13 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 options=_assistant_preset_options(module),
                 tips=[
                     "You can click an option or type something like 'ED', 'ICU', or the preset name.",
-                    "Type 'restart' anytime to start over.",
+                    "Type 'restart' anytime to begin a new consult.",
                 ],
             )
 
         return AssistantTurnResponse(
             assistantMessage=(
-                "I’m your Uncertainty Assistant. You can describe a syndrome case in plain language, or choose the resistance mechanism pathway if you want organism plus AST interpretation."
+                "I’m your ID Consultant Assistant. You can describe a syndrome case in plain language, or choose the resistance mechanism pathway if you want organism plus AST interpretation."
             ),
             state=state,
             options=_assistant_module_options(),
@@ -3160,7 +3488,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     "For example: 'Klebsiella pneumoniae resistant to ceftriaxone, susceptible to meropenem and amikacin.'"
                 ),
                 state=state,
-                options=[AssistantOption(value="restart", label="Start over")],
+                options=[AssistantOption(value="restart", label="Start new consult")],
                 tips=[
                     "Mention the organism plus at least a few antibiotics.",
                     "You can also include the syndrome or severity, such as pneumonia or septic shock.",
@@ -3193,7 +3521,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             return AssistantTurnResponse(
                 assistantMessage="Paste the organism and susceptibility pattern, and I’ll interpret the likely mechanism and therapy implications.",
                 state=state,
-                options=[AssistantOption(value="restart", label="Start over")],
+                options=[AssistantOption(value="restart", label="Start new consult")],
                 tips=["Include the organism plus resistant or susceptible calls for named antibiotics."],
             )
 
@@ -3214,7 +3542,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     "Add any other susceptibility details, organism clarifications, or treatment context you want me to factor in."
                 ),
                 state=state,
-                options=[AssistantOption(value="restart", label="Start over")],
+                options=[AssistantOption(value="restart", label="Start new consult")],
                 mechidAnalysis=mechid_result,
                 tips=[
                     "Useful additions are more AST calls, syndrome context, severity, or source information.",
@@ -3236,7 +3564,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             return AssistantTurnResponse(
                 assistantMessage=_build_mechid_review_message(mechid_result, final=True),
                 state=state,
-                options=[AssistantOption(value="restart", label="Start another case")],
+                options=[AssistantOption(value="restart", label="Start new consult")],
                 mechidAnalysis=mechid_result,
                 tips=[
                     "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
@@ -3249,8 +3577,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_mechid_review_options(mechid_result),
             mechidAnalysis=mechid_result,
             tips=[
-                "Run the interpretation if the extracted organism and AST pattern look right.",
-                "Otherwise add more details or restart.",
+                "Ask for my consultant impression if the extracted organism and AST pattern look right.",
+                "Otherwise add more case detail or begin a new consult.",
             ],
         )
 
@@ -3627,13 +3955,13 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 ),
                 state=state,
                 options=[
-                    AssistantOption(value="restart", label="Start over"),
-                    AssistantOption(value="describe_more", label="Add more details"),
+                    AssistantOption(value="restart", label="Start new consult"),
+                    AssistantOption(value="describe_more", label="Add case detail"),
                 ],
                 analysis=text_result,
                 tips=[
                     "Look at `parsedRequest` and `warnings` in the response.",
-                    "You can submit another describe_case turn with more detail, or restart.",
+                    "You can submit another case detail or begin a new consult.",
                 ],
             )
 
@@ -3644,8 +3972,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_review_options_for_case(module, text_result, state),
             analysis=text_result,
             tips=[
-                "Review the parsed request before running the assessment.",
-                "Use the Add buttons to fill in suggested missing findings, or type another detail.",
+                "Review the parsed request before asking for my consultant impression.",
+                "Use the Add buttons to fill in suggested missing findings, or type another case detail.",
             ],
         )
 
@@ -3679,7 +4007,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     analysis=text_result,
                     tips=[
                         "Use the remaining Add buttons or type another detail.",
-                        "Run the assessment when the parsed request looks complete.",
+                        "Ask for my consultant impression when the parsed request looks complete.",
                     ],
                 )
             present_text, _ = _assistant_case_item_text(item, module)
@@ -3694,7 +4022,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     f"I added '{item.label}' to the case and refreshed the review.",
-                    "Use the remaining Add buttons or run the assessment.",
+                    "Use the remaining Add buttons or ask for my consultant impression.",
                 ],
             )
 
@@ -3715,7 +4043,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     f"I added the score component '{score_label}' and refreshed the review.",
-                    "Continue confirming score components, add findings, or run the assessment.",
+                    "Continue confirming score components, add findings, or ask for my consultant impression.",
                 ],
             )
 
@@ -3749,27 +4077,27 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     analysis=text_result,
                     tips=[
                         "Use the parsed request, warnings, and Add buttons as the checklist.",
-                        "You can add more details or restart.",
+                        "You can add another case detail or begin a new consult.",
                     ],
                 )
 
             state.stage = "done"
-            recommendation = text_result.analysis.recommendation
-            probability = round(text_result.analysis.posttest_probability * 100)
-            recommendation_line = text_result.analysis.recommendation_summary or f"Suggested action: '{recommendation}'."
+            missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
             return AssistantTurnResponse(
-                assistantMessage=(
-                    f"Here’s my assessment: {text_result.analysis.module_name} estimated probability is {probability}% "
-                    f"{recommendation_line}"
+                assistantMessage=_build_probid_consult_message(
+                    module,
+                    text_result.analysis,
+                    missing_suggestions=missing_suggestions,
+                    include_panel_note=True,
                 ),
                 state=state,
                 options=[
-                    AssistantOption(value="restart", label="Start another case"),
+                    AssistantOption(value="restart", label="Start new consult"),
                 ],
                 analysis=text_result,
                 tips=[
                     "Review `understood` to confirm what I extracted from your text.",
-                    "If you want to change the case details, start another case and re-run it.",
+                    "If you want to change the case details, begin a new consult and rerun it.",
                 ],
             )
 
@@ -3785,7 +4113,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     "I updated the parsed request with your new detail.",
-                    "Use Present or Absent with the suggestion buttons, or run the assessment when the review looks complete.",
+                    "Use Present or Absent with the suggestion buttons, or ask for my consultant impression when the review looks complete.",
                 ],
             )
 
@@ -3796,8 +4124,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_review_options_for_case(module, text_result, state),
             analysis=text_result,
             tips=[
-                "Run the assessment if the parsed request looks right.",
-                "Otherwise, use Present or Absent with the suggestion buttons, or add more details.",
+                "Ask for my consultant impression if the parsed request looks right.",
+                "Otherwise, use Present or Absent with the suggestion buttons, or add more case detail.",
             ],
         )
 
