@@ -60,6 +60,7 @@ uvicorn app.main:app --reload
 
 Open docs at `http://127.0.0.1:8000/docs`.
 Open the guided web UI at `http://127.0.0.1:8000/assistant`.
+Open the MechID trainer at `http://127.0.0.1:8000/trainer`.
 
 ## Evaluate parser quality
 
@@ -85,6 +86,50 @@ Run the regression smoke test for the recently added syndrome modules and guided
 cd backend
 .venv311/bin/python scripts/smoke_test_new_syndromes.py
 ```
+
+## Evaluate MechID cases
+
+Run the MechID evaluator against the seed labeled cases:
+
+```bash
+cd backend
+.venv311/bin/python scripts/evaluate_mechid.py --show-failures
+```
+
+The starter dataset lives in:
+
+- `backend/app/data/mechid_eval_cases.json`
+
+This is meant to grow with de-identified consults and public cases. It checks:
+
+- organism / syndrome / context extraction
+- AST extraction
+- expected mechanism or therapy-note signals when analysis is available
+- provisional advice behavior when susceptibilities are missing
+
+You can also check assistant wording, but that is most stable when narration is deterministic:
+
+```bash
+cd backend
+unset OPENAI_API_KEY
+.venv311/bin/python scripts/evaluate_mechid.py --check-assistant --show-failures
+```
+
+## MechID trainer workflow
+
+The trainer page is a lightweight internal workbench for creating MechID eval cases:
+
+1. Paste messy case text into `/trainer`
+2. Review the API output and assistant wording
+3. Add a plain-English correction note
+4. Review the generated eval-case JSON
+5. Save it back into `backend/app/data/mechid_eval_cases.json`
+
+If `OPENAI_API_KEY` is set, the correction note can be translated automatically into a structured case patch. Without it, the page still generates a baseline draft and lets you edit the JSON manually before saving.
+
+The trainer also lists existing saved MechID cases so you can load one, edit it, and save it back without opening the JSON file directly.
+It also supports duplicate and delete actions for quick case curation.
+You can also run the evaluator on the current draft before saving it, which is useful for spotting exactly which expected fields still need correction.
 
 ## Enable LLM extraction (optional)
 

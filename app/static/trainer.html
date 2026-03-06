@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MechID Case Trainer</title>
+    <style>
+      :root {
+        --bg: #f4efe8;
+        --panel: rgba(255, 251, 245, 0.95);
+        --ink: #221d17;
+        --muted: #6c6358;
+        --line: #cec1ae;
+        --brand: #0f6c5c;
+        --accent: #9a4c18;
+        --danger: #a43b24;
+        --ok: #2b7a3d;
+        --shadow: 0 18px 44px rgba(27, 23, 18, 0.12);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: var(--ink);
+        font: 14px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(15, 108, 92, 0.10), transparent 35%),
+          radial-gradient(circle at top right, rgba(154, 76, 24, 0.10), transparent 35%),
+          linear-gradient(180deg, #f8f4ec, var(--bg));
+      }
+
+      .page {
+        max-width: 1480px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .hero,
+      .panel {
+        background: var(--panel);
+        border: 1px solid rgba(206, 193, 174, 0.8);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 18px 20px;
+        margin-bottom: 16px;
+      }
+
+      .eyebrow {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 8px 0 6px;
+        font-size: 30px;
+        line-height: 1.02;
+        font-family: "Fraunces", Georgia, serif;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 75ch;
+        color: var(--muted);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: 420px minmax(360px, 1fr) minmax(360px, 1fr);
+        gap: 16px;
+      }
+
+      .panel {
+        padding: 16px;
+        min-height: 72vh;
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+
+      .sub {
+        margin: 0 0 14px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      label {
+        display: block;
+        margin: 0 0 6px;
+        font-weight: 600;
+      }
+
+      textarea,
+      select,
+      input[type="text"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 11px 12px;
+        font: inherit;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.92);
+      }
+
+      textarea {
+        resize: vertical;
+        min-height: 120px;
+      }
+
+      .controls {
+        display: grid;
+        gap: 12px;
+      }
+
+      .case-list {
+        display: grid;
+        gap: 8px;
+        max-height: 260px;
+        overflow: auto;
+        padding-right: 4px;
+      }
+
+      .case-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: start;
+        padding: 10px 11px;
+        border: 1px solid rgba(206, 193, 174, 0.85);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .case-item .case-id {
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      .case-item .case-preview {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+
+      .mini-btn {
+        padding: 8px 10px;
+        font-size: 12px;
+        background: rgba(15, 108, 92, 0.10);
+        color: var(--brand);
+      }
+
+      .mini-btn.warn {
+        background: rgba(164, 59, 36, 0.10);
+        color: var(--danger);
+      }
+
+      .case-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+      }
+
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 14px;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .primary {
+        background: linear-gradient(180deg, var(--brand), #0a584c);
+        color: #f6fff9;
+      }
+
+      .secondary {
+        background: rgba(34, 29, 23, 0.08);
+        color: var(--ink);
+      }
+
+      .status {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        font-size: 13px;
+        display: none;
+      }
+
+      .status.show { display: block; }
+      .status.ok {
+        background: rgba(43, 122, 61, 0.10);
+        border: 1px solid rgba(43, 122, 61, 0.22);
+        color: var(--ok);
+      }
+      .status.warn {
+        background: rgba(164, 59, 36, 0.08);
+        border: 1px solid rgba(164, 59, 36, 0.18);
+        color: var(--danger);
+      }
+
+      .card {
+        border: 1px solid rgba(206, 193, 174, 0.8);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.7);
+        margin-bottom: 12px;
+      }
+
+      .card h3 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      .message {
+        white-space: pre-wrap;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+
+      .meta {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        padding: 5px 9px;
+        font-size: 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .json-editor {
+        min-height: 420px;
+        font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      @media (max-width: 1180px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+        .panel {
+          min-height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <section class="hero">
+        <div class="eyebrow">Internal Trainer</div>
+        <h1>MechID Case Trainer</h1>
+        <p>Paste a messy case, review the MechID output, then describe your correction in plain English. The trainer converts that note into an eval-case draft you can review and save.</p>
+      </section>
+
+      <div class="workspace">
+        <section class="panel">
+          <div class="card">
+            <h3>Saved Cases</h3>
+            <div class="case-list" id="caseList">
+              <div class="case-preview">Loading saved cases...</div>
+            </div>
+          </div>
+          <h2>Case Input</h2>
+          <p class="sub">This first version is MechID-focused. The correction note can be plain English.</p>
+          <div class="controls">
+            <div>
+              <label for="rawText">Raw case text</label>
+              <textarea id="rawText">E. coli cystitis resistant to ceftriaxone and ciprofloxacin, susceptible to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. I would prefer an oral option.</textarea>
+            </div>
+            <div>
+              <label for="correctionText">Correct this in plain English</label>
+              <textarea id="correctionText" placeholder="Example: This should be uncomplicated cystitis. It should mention nitrofurantoin and TMP-SMX as oral options. It should not act like pyelonephritis."></textarea>
+            </div>
+            <div class="row">
+              <div>
+                <label for="parserStrategy">Parser strategy</label>
+                <select id="parserStrategy">
+                  <option value="rule">rule</option>
+                  <option value="auto">auto</option>
+                  <option value="openai">openai</option>
+                </select>
+              </div>
+              <div class="checkbox" style="align-self:end;">
+                <input type="checkbox" id="allowFallback" checked />
+                <label for="allowFallback" style="margin:0; font-weight:400;">Allow parser fallback</label>
+              </div>
+            </div>
+            <div class="row">
+              <button class="primary" id="previewBtn">Run Preview</button>
+              <button class="secondary" id="saveBtn">Save Draft Case</button>
+            </div>
+            <div class="row">
+              <button class="secondary" id="evaluateBtn">Evaluate Draft</button>
+              <div class="checkbox" style="align-self:end;">
+                <input type="checkbox" id="checkAssistant" />
+                <label for="checkAssistant" style="margin:0; font-weight:400;">Include assistant checks</label>
+              </div>
+            </div>
+            <div class="status" id="statusBox"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Extraction Output</h2>
+          <div class="meta">
+            <span class="pill" id="parserPill">parser: -</span>
+            <span class="pill" id="confirmPill">confirmation: -</span>
+            <span class="pill" id="narrationPill">narration: -</span>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>What The API Extracted</h3>
+              <div class="message" id="extractionSummary">Run a preview to see what the API extracted from the case text.</div>
+            </div>
+            <div class="card">
+              <h3>Structured MechID Result</h3>
+              <pre id="rawResult">{}</pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Eval Draft</h2>
+          <p class="sub">This is what gets written to the MechID evaluator dataset. You can edit the JSON directly before saving.</p>
+          <div class="card">
+            <h3>Draft JSON</h3>
+            <textarea class="json-editor" id="draftEditor">{}</textarea>
+          </div>
+          <div class="card">
+            <h3>Save Result</h3>
+            <div class="message" id="saveMessage">Nothing saved yet.</div>
+          </div>
+          <div class="card">
+            <h3>Evaluation Result</h3>
+            <div class="message" id="evalMessage">No evaluation run yet.</div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const rawTextEl = document.getElementById("rawText");
+      const correctionTextEl = document.getElementById("correctionText");
+      const parserStrategyEl = document.getElementById("parserStrategy");
+      const allowFallbackEl = document.getElementById("allowFallback");
+      const previewBtn = document.getElementById("previewBtn");
+      const saveBtn = document.getElementById("saveBtn");
+      const evaluateBtn = document.getElementById("evaluateBtn");
+      const checkAssistantEl = document.getElementById("checkAssistant");
+      const statusBox = document.getElementById("statusBox");
+      const caseListEl = document.getElementById("caseList");
+      const extractionSummaryEl = document.getElementById("extractionSummary");
+      const rawResultEl = document.getElementById("rawResult");
+      const draftEditorEl = document.getElementById("draftEditor");
+      const saveMessageEl = document.getElementById("saveMessage");
+      const evalMessageEl = document.getElementById("evalMessage");
+      const parserPill = document.getElementById("parserPill");
+      const confirmPill = document.getElementById("confirmPill");
+      const narrationPill = document.getElementById("narrationPill");
+
+      function setStatus(text, tone = "ok") {
+        statusBox.textContent = text;
+        statusBox.className = `status show ${tone}`;
+      }
+
+      function clearStatus() {
+        statusBox.textContent = "";
+        statusBox.className = "status";
+      }
+
+      function pretty(value) {
+        return JSON.stringify(value, null, 2);
+      }
+
+      function joinReadable(values) {
+        if (!values || !values.length) return "";
+        if (values.length === 1) return values[0];
+        if (values.length === 2) return `${values[0]} and ${values[1]}`;
+        return `${values.slice(0, -1).join(", ")}, and ${values[values.length - 1]}`;
+      }
+
+      function buildExtractionSummary(result) {
+        const parsed = result?.parsedRequest;
+        if (!parsed) {
+          const warnings = result?.warnings || [];
+          if (warnings.length) return warnings.join(" ");
+          return "The API could not confidently parse an organism or susceptibility pattern from this text.";
+        }
+
+        const lines = [];
+        const organisms = parsed.organism
+          ? [parsed.organism]
+          : (parsed.mentionedOrganisms || []);
+        if (organisms.length) {
+          lines.push(`Organism(s): ${joinReadable(organisms)}.`);
+        } else {
+          lines.push("Organism(s): not confidently identified yet.");
+        }
+
+        const contextBits = [];
+        if (parsed.txContext?.focusDetail && parsed.txContext.focusDetail !== "Not specified") {
+          contextBits.push(parsed.txContext.focusDetail);
+        }
+        if (parsed.txContext?.syndrome && parsed.txContext.syndrome !== "Not specified") {
+          contextBits.push(parsed.txContext.syndrome);
+        }
+        if (parsed.txContext?.severity && parsed.txContext.severity !== "Not specified") {
+          contextBits.push(parsed.txContext.severity);
+        }
+        if (contextBits.length) {
+          lines.push(`Clinical context: ${joinReadable(contextBits)}.`);
+        }
+
+        const phenotypeHints = parsed.resistancePhenotypes || [];
+        if (phenotypeHints.length) {
+          lines.push(`Resistance labels noted: ${joinReadable(phenotypeHints)}.`);
+        }
+
+        const susc = parsed.susceptibilityResults || {};
+        const suscParts = Object.entries(susc).map(([drug, call]) => `${drug} ${String(call).toLowerCase()}`);
+        if (suscParts.length) {
+          lines.push(`Extracted AST: ${joinReadable(suscParts)}.`);
+        } else {
+          lines.push("Extracted AST: no susceptibility calls captured yet.");
+        }
+
+        if (result.analysis) {
+          lines.push("Full MechID analysis is available for this case.");
+        } else if (result.provisionalAdvice) {
+          lines.push("This case is still in provisional mode because more susceptibility data are needed.");
+        }
+
+        const warnings = result.warnings || [];
+        if (warnings.length) {
+          lines.push(`Warnings: ${warnings.join(" ")}`);
+        }
+
+        return lines.join("\n");
+      }
+
+      function renderCaseList(cases) {
+        if (!cases.length) {
+          caseListEl.innerHTML = '<div class="case-preview">No saved cases yet.</div>';
+          return;
+        }
+        caseListEl.innerHTML = "";
+        for (const item of cases) {
+          const row = document.createElement("div");
+          row.className = "case-item";
+
+          const meta = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "case-id";
+          title.textContent = item.id;
+          const preview = document.createElement("div");
+          preview.className = "case-preview";
+          preview.textContent = item.textPreview || "";
+          meta.appendChild(title);
+          meta.appendChild(preview);
+
+          const actions = document.createElement("div");
+          actions.className = "case-actions";
+
+          const loadBtn = document.createElement("button");
+          loadBtn.className = "mini-btn";
+          loadBtn.textContent = "Load";
+          loadBtn.addEventListener("click", () => loadCase(item.id));
+
+          const duplicateBtn = document.createElement("button");
+          duplicateBtn.className = "mini-btn";
+          duplicateBtn.textContent = "Duplicate";
+          duplicateBtn.addEventListener("click", () => duplicateCase(item.id));
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.className = "mini-btn warn";
+          deleteBtn.textContent = "Delete";
+          deleteBtn.addEventListener("click", () => deleteCase(item.id));
+
+          row.appendChild(meta);
+          actions.appendChild(loadBtn);
+          actions.appendChild(duplicateBtn);
+          actions.appendChild(deleteBtn);
+          row.appendChild(actions);
+          caseListEl.appendChild(row);
+        }
+      }
+
+      async function refreshCaseList() {
+        try {
+          const resp = await fetch("/v1/trainer/mechid/cases");
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Could not load saved cases");
+          }
+          renderCaseList(body.cases || []);
+        } catch (err) {
+          caseListEl.innerHTML = `<div class="case-preview">${err.message || "Could not load saved cases."}</div>`;
+        }
+      }
+
+      async function loadCase(caseId) {
+        clearStatus();
+        try {
+          const resp = await fetch(`/v1/trainer/mechid/cases/${encodeURIComponent(caseId)}`);
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Could not load case");
+          }
+          rawTextEl.value = body.text || "";
+          correctionTextEl.value = "";
+          parserStrategyEl.value = body.parserStrategy || "rule";
+          draftEditorEl.value = pretty(body);
+          saveMessageEl.textContent = `Loaded ${body.id}. Click Run Preview to regenerate API output from the saved text, or edit the draft JSON directly.`;
+          setStatus(`Loaded ${body.id}.`, "ok");
+        } catch (err) {
+          setStatus(err.message || "Could not load case.", "warn");
+        }
+      }
+
+      async function duplicateCase(caseId) {
+        clearStatus();
+        try {
+          const resp = await fetch(`/v1/trainer/mechid/cases/${encodeURIComponent(caseId)}/duplicate`, {
+            method: "POST"
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Could not duplicate case");
+          }
+          setStatus(`Duplicated ${caseId} as ${body.caseId}.`, "ok");
+          await refreshCaseList();
+          await loadCase(body.caseId);
+        } catch (err) {
+          setStatus(err.message || "Could not duplicate case.", "warn");
+        }
+      }
+
+      async function deleteCase(caseId) {
+        clearStatus();
+        if (!window.confirm(`Delete ${caseId}? This removes it from the evaluator dataset.`)) {
+          return;
+        }
+        try {
+          const resp = await fetch(`/v1/trainer/mechid/cases/${encodeURIComponent(caseId)}`, {
+            method: "DELETE"
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Could not delete case");
+          }
+          setStatus(`Deleted ${body.caseId}.`, "ok");
+          saveMessageEl.textContent = `Deleted ${body.caseId}. Total cases: ${body.totalCases}.`;
+          await refreshCaseList();
+        } catch (err) {
+          setStatus(err.message || "Could not delete case.", "warn");
+        }
+      }
+
+      async function runPreview() {
+        clearStatus();
+        extractionSummaryEl.textContent = "Working...";
+        rawResultEl.textContent = "{}";
+        try {
+          const resp = await fetch("/v1/trainer/mechid/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: rawTextEl.value,
+              correctionText: correctionTextEl.value,
+              parserStrategy: parserStrategyEl.value,
+              allowFallback: allowFallbackEl.checked
+            })
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Preview failed");
+          }
+
+          extractionSummaryEl.textContent = buildExtractionSummary(body.mechidResult || {});
+          rawResultEl.textContent = pretty(body.mechidResult || {});
+          draftEditorEl.value = pretty(body.draftCase || {});
+          parserPill.textContent = `parser: ${body.mechidResult?.parser || "-"}`;
+          confirmPill.textContent = `confirmation: ${body.mechidResult?.requiresConfirmation ? "yes" : "no"}`;
+          narrationPill.textContent = `narration: review ${body.assistantReviewRefined ? "refined" : "deterministic"} / final ${body.assistantFinalRefined ? "refined" : "deterministic"}`;
+
+          if (body.correctionWarning) {
+            setStatus(body.correctionWarning, "warn");
+          } else if (body.correctionApplied) {
+            setStatus("Correction note translated into the draft case.", "ok");
+          } else {
+            setStatus("Preview updated from the current API result.", "ok");
+          }
+        } catch (err) {
+          extractionSummaryEl.textContent = "Preview failed.";
+          setStatus(err.message || "Preview failed.", "warn");
+        }
+      }
+
+      async function saveDraft() {
+        clearStatus();
+        let draft;
+        try {
+          draft = JSON.parse(draftEditorEl.value);
+        } catch (err) {
+          setStatus(`Draft JSON is invalid: ${err.message}`, "warn");
+          return;
+        }
+
+        try {
+          const resp = await fetch("/v1/trainer/mechid/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ draftCase: draft })
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Save failed");
+          }
+          saveMessageEl.textContent = `Saved ${body.caseId} to ${body.path}. Total cases: ${body.totalCases}.`;
+          setStatus(`Saved ${body.caseId}.`, "ok");
+          await refreshCaseList();
+        } catch (err) {
+          setStatus(err.message || "Save failed.", "warn");
+        }
+      }
+
+      async function evaluateDraft() {
+        clearStatus();
+        let draft;
+        try {
+          draft = JSON.parse(draftEditorEl.value);
+        } catch (err) {
+          setStatus(`Draft JSON is invalid: ${err.message}`, "warn");
+          return;
+        }
+
+        evalMessageEl.textContent = "Evaluating...";
+        try {
+          const resp = await fetch("/v1/trainer/mechid/evaluate-case", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              draftCase: draft,
+              checkAssistant: checkAssistantEl.checked
+            })
+          });
+          const body = await resp.json();
+          if (!resp.ok) {
+            throw new Error(body.detail || "Evaluation failed");
+          }
+
+          const summary = [
+            body.passed ? `Passed: ${body.caseId}` : `Needs correction: ${body.caseId}`,
+            `Parsed checks: ${body.parsedPasses}/${body.parsedChecks}`,
+            `Analysis checks: ${body.analysisPasses}/${body.analysisChecks}`,
+            `Provisional checks: ${body.provisionalPasses}/${body.provisionalChecks}`,
+          ];
+          if (body.assistantChecks) {
+            summary.push(`Assistant checks: ${body.assistantPasses}/${body.assistantChecks}`);
+          }
+          if (body.failures && body.failures.length) {
+            summary.push("");
+            summary.push("Failures:");
+            for (const line of body.failures) {
+              summary.push(`- ${line}`);
+            }
+          }
+          evalMessageEl.textContent = summary.join("\n");
+          setStatus(body.passed ? `Case ${body.caseId} passed.` : `Case ${body.caseId} needs correction.`, body.passed ? "ok" : "warn");
+        } catch (err) {
+          evalMessageEl.textContent = "Evaluation failed.";
+          setStatus(err.message || "Evaluation failed.", "warn");
+        }
+      }
+
+      previewBtn.addEventListener("click", runPreview);
+      saveBtn.addEventListener("click", saveDraft);
+      evaluateBtn.addEventListener("click", evaluateDraft);
+      refreshCaseList();
+      runPreview();
+    </script>
+  </body>
+</html>

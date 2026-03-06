@@ -426,3 +426,142 @@ class MechIDTextAnalyzeResponse(BaseModel):
     provisional_advice: Optional[MechIDProvisionalAdvice] = Field(default=None, alias="provisionalAdvice")
 
     model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerParsedExpectation(BaseModel):
+    organism: Optional[str] = None
+    syndrome: Optional[str] = None
+    severity: Optional[str] = None
+    focus_detail: Optional[str] = Field(default=None, alias="focusDetail")
+    oral_preference: Optional[bool] = Field(default=None, alias="oralPreference")
+    mentioned_organisms_contains: List[str] = Field(default_factory=list, alias="mentionedOrganismsContains")
+    resistance_phenotypes_contains: List[str] = Field(default_factory=list, alias="resistancePhenotypesContains")
+    susceptibility_results_subset: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResultsSubset")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerEvalCase(BaseModel):
+    id: str
+    text: str
+    parser_strategy: str = Field(default="rule", alias="parserStrategy")
+    expected_requires_confirmation: Optional[bool] = Field(default=None, alias="expectedRequiresConfirmation")
+    expected_parsed: Optional[MechIDTrainerParsedExpectation] = Field(default=None, alias="expectedParsed")
+    expected_analysis_present: Optional[bool] = Field(default=None, alias="expectedAnalysisPresent")
+    expected_provisional_present: Optional[bool] = Field(default=None, alias="expectedProvisionalPresent")
+    expected_mechanisms_contains: List[str] = Field(default_factory=list, alias="expectedMechanismsContains")
+    expected_therapy_notes_contains: List[str] = Field(default_factory=list, alias="expectedTherapyNotesContains")
+    expected_final_results_subset: Dict[str, ASTResult] = Field(default_factory=dict, alias="expectedFinalResultsSubset")
+    expected_recommended_options_contains: List[str] = Field(default_factory=list, alias="expectedRecommendedOptionsContains")
+    expected_oral_options_contains: List[str] = Field(default_factory=list, alias="expectedOralOptionsContains")
+    expected_missing_susceptibilities_contains: List[str] = Field(default_factory=list, alias="expectedMissingSusceptibilitiesContains")
+    assistant_review_contains: List[str] = Field(default_factory=list, alias="assistantReviewContains")
+    assistant_final_contains: List[str] = Field(default_factory=list, alias="assistantFinalContains")
+    notes: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerEvalPatch(BaseModel):
+    id: Optional[str] = None
+    parser_strategy: Optional[str] = Field(default=None, alias="parserStrategy")
+    expected_requires_confirmation: Optional[bool] = Field(default=None, alias="expectedRequiresConfirmation")
+    expected_parsed: Optional[MechIDTrainerParsedExpectation] = Field(default=None, alias="expectedParsed")
+    expected_analysis_present: Optional[bool] = Field(default=None, alias="expectedAnalysisPresent")
+    expected_provisional_present: Optional[bool] = Field(default=None, alias="expectedProvisionalPresent")
+    expected_mechanisms_contains: Optional[List[str]] = Field(default=None, alias="expectedMechanismsContains")
+    expected_therapy_notes_contains: Optional[List[str]] = Field(default=None, alias="expectedTherapyNotesContains")
+    expected_final_results_subset: Optional[Dict[str, ASTResult]] = Field(default=None, alias="expectedFinalResultsSubset")
+    expected_recommended_options_contains: Optional[List[str]] = Field(default=None, alias="expectedRecommendedOptionsContains")
+    expected_oral_options_contains: Optional[List[str]] = Field(default=None, alias="expectedOralOptionsContains")
+    expected_missing_susceptibilities_contains: Optional[List[str]] = Field(default=None, alias="expectedMissingSusceptibilitiesContains")
+    assistant_review_contains: Optional[List[str]] = Field(default=None, alias="assistantReviewContains")
+    assistant_final_contains: Optional[List[str]] = Field(default=None, alias="assistantFinalContains")
+    notes: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerPreviewRequest(BaseModel):
+    text: str = Field(min_length=1)
+    correction_text: Optional[str] = Field(default=None, alias="correctionText")
+    parser_strategy: Literal["auto", "rule", "openai"] = Field(default="rule", alias="parserStrategy")
+    parser_model: Optional[str] = Field(default=None, alias="parserModel")
+    allow_fallback: bool = Field(default=True, alias="allowFallback")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerPreviewResponse(BaseModel):
+    mechid_result: MechIDTextAnalyzeResponse = Field(alias="mechidResult")
+    assistant_review_message: str = Field(alias="assistantReviewMessage")
+    assistant_review_refined: bool = Field(default=False, alias="assistantReviewRefined")
+    assistant_final_message: str = Field(alias="assistantFinalMessage")
+    assistant_final_refined: bool = Field(default=False, alias="assistantFinalRefined")
+    draft_case: MechIDTrainerEvalCase = Field(alias="draftCase")
+    correction_applied: bool = Field(default=False, alias="correctionApplied")
+    correction_warning: Optional[str] = Field(default=None, alias="correctionWarning")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerSaveRequest(BaseModel):
+    draft_case: MechIDTrainerEvalCase = Field(alias="draftCase")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerSaveResponse(BaseModel):
+    saved: bool = True
+    path: str
+    case_id: str = Field(alias="caseId")
+    total_cases: int = Field(alias="totalCases")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerCaseSummary(BaseModel):
+    id: str
+    text_preview: str = Field(alias="textPreview")
+    parser_strategy: str = Field(alias="parserStrategy")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerCaseListResponse(BaseModel):
+    cases: List[MechIDTrainerCaseSummary] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerDeleteResponse(BaseModel):
+    deleted: bool = True
+    case_id: str = Field(alias="caseId")
+    total_cases: int = Field(alias="totalCases")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerEvaluateRequest(BaseModel):
+    draft_case: MechIDTrainerEvalCase = Field(alias="draftCase")
+    check_assistant: bool = Field(default=False, alias="checkAssistant")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDTrainerEvaluateResponse(BaseModel):
+    passed: bool
+    case_id: str = Field(alias="caseId")
+    failures: List[str] = Field(default_factory=list)
+    success: int
+    total: int
+    parsed_checks: int = Field(alias="parsedChecks")
+    parsed_passes: int = Field(alias="parsedPasses")
+    analysis_checks: int = Field(alias="analysisChecks")
+    analysis_passes: int = Field(alias="analysisPasses")
+    provisional_checks: int = Field(alias="provisionalChecks")
+    provisional_passes: int = Field(alias="provisionalPasses")
+    assistant_checks: int = Field(alias="assistantChecks")
+    assistant_passes: int = Field(alias="assistantPasses")
+
+    model_config = {"populate_by_name": True}

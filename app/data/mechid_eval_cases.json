@@ -1,0 +1,191 @@
+[
+  {
+    "id": "ecoli_cystitis_oral_options",
+    "text": "E. coli cystitis resistant to ceftriaxone and ciprofloxacin, susceptible to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. I would prefer an oral option.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Escherichia coli",
+      "syndrome": "Uncomplicated cystitis",
+      "focusDetail": "Cystitis",
+      "oralPreference": true,
+      "susceptibilityResultsSubset": {
+        "Ceftriaxone": "Resistant",
+        "Ciprofloxacin": "Resistant",
+        "Nitrofurantoin": "Susceptible",
+        "Trimethoprim/Sulfamethoxazole": "Susceptible",
+        "Meropenem": "Susceptible"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "ESBL"
+    ],
+    "expectedTherapyNotesContains": [
+      "carbapenem"
+    ],
+    "expectedFinalResultsSubset": {
+      "Ceftriaxone": "Resistant",
+      "Meropenem": "Susceptible"
+    }
+  },
+  {
+    "id": "ecoli_pyelo_septic_shock",
+    "text": "E. coli pyelonephritis with septic shock, resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Escherichia coli",
+      "syndrome": "Complicated UTI / pyelonephritis",
+      "severity": "Severe / septic shock",
+      "focusDetail": "Pyelonephritis",
+      "susceptibilityResultsSubset": {
+        "Ceftriaxone": "Resistant",
+        "Ciprofloxacin": "Resistant",
+        "Meropenem": "Susceptible"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "ESBL"
+    ],
+    "expectedTherapyNotesContains": [
+      "carbapenem"
+    ],
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Susceptible"
+    }
+  },
+  {
+    "id": "mrsa_gbs_diabetic_foot_provisional",
+    "text": "Diabetic foot infection with cultures positive for MRSA and Streptococcus agalactiae. I would prefer an oral option if possible.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": true,
+    "expectedParsed": {
+      "mentionedOrganismsContains": [
+        "Staphylococcus aureus",
+        "beta-hemolytic Streptococcus"
+      ],
+      "resistancePhenotypesContains": [
+        "MRSA"
+      ],
+      "syndrome": "Other deep-seated / high-inoculum focus",
+      "focusDetail": "Diabetic foot infection",
+      "oralPreference": true
+    },
+    "expectedAnalysisPresent": false,
+    "expectedProvisionalPresent": true,
+    "expectedRecommendedOptionsContains": [
+      "Vancomycin",
+      "Linezolid"
+    ],
+    "expectedOralOptionsContains": [
+      "Linezolid"
+    ],
+    "expectedMissingSusceptibilitiesContains": [
+      "MRSA: clindamycin",
+      "Group B streptococcus: clindamycin"
+    ]
+  },
+  {
+    "id": "mrsa_septic_arthritis_provisional",
+    "text": "Septic arthritis growing MRSA. Could there be an oral option later?",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": true,
+    "expectedParsed": {
+      "mentionedOrganismsContains": [
+        "Staphylococcus aureus"
+      ],
+      "resistancePhenotypesContains": [
+        "MRSA"
+      ],
+      "syndrome": "Bone/joint infection",
+      "focusDetail": "Septic arthritis",
+      "oralPreference": true
+    },
+    "expectedAnalysisPresent": false,
+    "expectedProvisionalPresent": true,
+    "expectedRecommendedOptionsContains": [
+      "Vancomycin",
+      "Linezolid"
+    ],
+    "expectedOralOptionsContains": [
+      "Linezolid"
+    ],
+    "expectedMissingSusceptibilitiesContains": [
+      "clindamycin",
+      "linezolid"
+    ]
+  },
+  {
+    "id": "pseudomonas_pneumonia_ast",
+    "text": "Pseudomonas pneumonia susceptible to cefepime and piperacillin/tazobactam, resistant to levofloxacin.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Pseudomonas aeruginosa",
+      "syndrome": "Pneumonia (HAP/VAP or severe CAP)",
+      "focusDetail": "Pneumonia",
+      "susceptibilityResultsSubset": {
+        "Cefepime": "Susceptible",
+        "Piperacillin/Tazobactam": "Susceptible",
+        "Levofloxacin": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedFinalResultsSubset": {
+      "Cefepime": "Susceptible",
+      "Piperacillin/Tazobactam": "Susceptible",
+      "Levofloxacin": "Resistant"
+    }
+  },
+  {
+    "id": "escherichia_coli_cystitis",
+    "text": "E. coli cystitis resistant to ceftriaxone and ciprofloxacin, susceptible to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. I would prefer an oral option.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Escherichia coli",
+      "syndrome": "Uncomplicated cystitis",
+      "focusDetail": "Cystitis",
+      "oralPreference": true,
+      "mentionedOrganismsContains": [
+        "Escherichia coli"
+      ],
+      "resistancePhenotypesContains": [],
+      "susceptibilityResultsSubset": {
+        "Ceftriaxone": "Resistant",
+        "Ciprofloxacin": "Resistant",
+        "Meropenem": "Susceptible",
+        "Nitrofurantoin": "Susceptible",
+        "Trimethoprim/Sulfamethoxazole": "Susceptible"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "ESBL pattern (third-generation cephalosporin resistance).",
+      "Fluoroquinolone resistance: typically **QRDR mutations** in **gyrA/parC** ± **efflux upregulation** (AcrAB–TolC / OqxAB) and sometimes **plasmid-mediated qnr / AAC(6')-Ib-cr**."
+    ],
+    "expectedTherapyNotesContains": [
+      "**Fluoroquinolone Resistant but beta-lactam Susceptible** → prefer a **β-lactam** that is susceptible.",
+      "**ESBL pattern** → use a **carbapenem** for serious infections."
+    ],
+    "expectedFinalResultsSubset": {
+      "Cefpodoxime": "Resistant",
+      "Ceftriaxone": "Resistant",
+      "Ciprofloxacin": "Resistant",
+      "Meropenem": "Susceptible",
+      "Nitrofurantoin": "Susceptible",
+      "Trimethoprim/Sulfamethoxazole": "Susceptible"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [],
+    "assistantFinalContains": []
+  }
+]

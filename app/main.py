@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.testclient import TestClient
 
 from .engine import (
     applied_finding_summaries,
@@ -37,6 +39,18 @@ from .schemas import (
     MechIDTextAnalyzeRequest,
     MechIDTextAnalyzeResponse,
     MechIDTextParsedRequest,
+    MechIDTrainerEvalCase,
+    MechIDTrainerCaseListResponse,
+    MechIDTrainerCaseSummary,
+    MechIDTrainerDeleteResponse,
+    MechIDTrainerEvaluateRequest,
+    MechIDTrainerEvaluateResponse,
+    MechIDTrainerEvalPatch,
+    MechIDTrainerParsedExpectation,
+    MechIDTrainerPreviewRequest,
+    MechIDTrainerPreviewResponse,
+    MechIDTrainerSaveRequest,
+    MechIDTrainerSaveResponse,
     PretestSummary,
     ProbIDControlsInput,
     ReferenceEntry,
@@ -47,11 +61,18 @@ from .schemas import (
     TextAnalyzeResponse,
 )
 from .services.module_store import InMemoryModuleStore
-from .services.consult_narrator import narrate_mechid_assistant_message, narrate_probid_assistant_message
+from .services.consult_narrator import (
+    narrate_mechid_assistant_message,
+    narrate_mechid_review_message,
+    narrate_probid_assistant_message,
+    narrate_probid_review_message,
+)
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
+from .services.mechid_eval import EvalStats, evaluate_mechid_case
 from .services.mechid_llm_parser import parse_mechid_text_with_openai
 from .services.mechid_text_parser import parse_mechid_text
+from .services.mechid_trainer_parser import MechIDTrainerParseError, parse_mechid_trainer_correction
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
 from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
 
@@ -72,6 +93,7 @@ app.add_middleware(
 
 store = InMemoryModuleStore()
 APP_DIR = Path(__file__).resolve().parent
+MECHID_EVAL_DATASET_PATH = APP_DIR / "data" / "mechid_eval_cases.json"
 
 ASSISTANT_MODULE_LABELS = {
     "cap": "Community-acquired pneumonia (CAP)",
@@ -983,6 +1005,262 @@ def health() -> dict:
 @app.get("/assistant")
 def assistant_web() -> FileResponse:
     return FileResponse(APP_DIR / "static" / "assistant.html")
+
+
+@app.get("/trainer")
+def trainer_web() -> FileResponse:
+    return FileResponse(APP_DIR / "static" / "trainer.html")
+
+
+def _slugify_case_id(text: str, fallback: str = "mechid_case") -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    if not slug:
+        return fallback
+    parts = [part for part in slug.split("_") if part][:8]
+    return "_".join(parts) or fallback
+
+
+def _base_trainer_case_id(text: str, result: MechIDTextAnalyzeResponse) -> str:
+    parsed = result.parsed_request
+    if parsed is not None:
+        parts: List[str] = []
+        if parsed.organism:
+            parts.append(parsed.organism)
+        elif parsed.mentioned_organisms:
+            parts.extend(parsed.mentioned_organisms[:2])
+        focus = parsed.tx_context.focus_detail
+        if focus and focus != "Not specified":
+            parts.append(focus)
+        if parts:
+            return _slugify_case_id("_".join(parts))
+    return _slugify_case_id(text)
+
+
+def _build_mechid_trainer_base_draft(
+    *,
+    text: str,
+    parser_strategy: str,
+    result: MechIDTextAnalyzeResponse,
+) -> MechIDTrainerEvalCase:
+    expected_parsed = None
+    if result.parsed_request is not None:
+        parsed = result.parsed_request
+        expected_parsed = MechIDTrainerParsedExpectation(
+            organism=parsed.organism,
+            syndrome=parsed.tx_context.syndrome if parsed.tx_context.syndrome != "Not specified" else None,
+            severity=parsed.tx_context.severity if parsed.tx_context.severity != "Not specified" else None,
+            focusDetail=parsed.tx_context.focus_detail if parsed.tx_context.focus_detail != "Not specified" else None,
+            oralPreference=parsed.tx_context.oral_preference if parsed.tx_context.oral_preference else None,
+            mentionedOrganismsContains=list(parsed.mentioned_organisms),
+            resistancePhenotypesContains=list(parsed.resistance_phenotypes),
+            susceptibilityResultsSubset=dict(parsed.susceptibility_results),
+        )
+
+    analysis = result.analysis
+    provisional = result.provisional_advice
+    return MechIDTrainerEvalCase(
+        id=_base_trainer_case_id(text, result),
+        text=text,
+        parserStrategy=parser_strategy,
+        expectedRequiresConfirmation=result.requires_confirmation,
+        expectedParsed=expected_parsed,
+        expectedAnalysisPresent=analysis is not None,
+        expectedProvisionalPresent=provisional is not None,
+        expectedMechanismsContains=list((analysis.mechanisms[:2] if analysis is not None else [])),
+        expectedTherapyNotesContains=list((analysis.therapy_notes[:2] if analysis is not None else [])),
+        expectedFinalResultsSubset=dict((analysis.final_results if analysis is not None else {})),
+        expectedRecommendedOptionsContains=list((provisional.recommended_options if provisional is not None else [])),
+        expectedOralOptionsContains=list((provisional.oral_options if provisional is not None else [])),
+        expectedMissingSusceptibilitiesContains=list((provisional.missing_susceptibilities if provisional is not None else [])),
+        notes=_join_readable(result.warnings) if result.warnings else None,
+    )
+
+
+def _deep_merge_dict(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _apply_trainer_patch(base: MechIDTrainerEvalCase, patch: MechIDTrainerEvalPatch) -> MechIDTrainerEvalCase:
+    merged = _deep_merge_dict(
+        base.model_dump(by_alias=True),
+        patch.model_dump(by_alias=True, exclude_none=True),
+    )
+    return MechIDTrainerEvalCase.model_validate(merged)
+
+
+def _load_mechid_eval_cases() -> List[Dict[str, Any]]:
+    if not MECHID_EVAL_DATASET_PATH.exists():
+        return []
+    return json.loads(MECHID_EVAL_DATASET_PATH.read_text())
+
+
+def _write_mechid_eval_cases(cases: List[Dict[str, Any]]) -> None:
+    MECHID_EVAL_DATASET_PATH.write_text(json.dumps(cases, indent=2, ensure_ascii=False) + "\n")
+
+
+def _mechid_case_summary(payload: Dict[str, Any]) -> MechIDTrainerCaseSummary:
+    text = str(payload.get("text") or "")
+    preview = text if len(text) <= 110 else text[:107].rstrip() + "..."
+    return MechIDTrainerCaseSummary(
+        id=str(payload.get("id") or ""),
+        textPreview=preview,
+        parserStrategy=str(payload.get("parserStrategy") or "rule"),
+    )
+
+
+@app.get("/v1/trainer/mechid/cases", response_model=MechIDTrainerCaseListResponse)
+def mechid_trainer_list_cases() -> MechIDTrainerCaseListResponse:
+    cases = _load_mechid_eval_cases()
+    summaries = [_mechid_case_summary(case) for case in cases if case.get("id")]
+    summaries.sort(key=lambda item: item.id)
+    return MechIDTrainerCaseListResponse(cases=summaries)
+
+
+@app.get("/v1/trainer/mechid/cases/{case_id}", response_model=MechIDTrainerEvalCase)
+def mechid_trainer_get_case(case_id: str) -> MechIDTrainerEvalCase:
+    for payload in _load_mechid_eval_cases():
+        if payload.get("id") == case_id:
+            return MechIDTrainerEvalCase.model_validate(payload)
+    raise HTTPException(status_code=404, detail=f"Trainer case '{case_id}' not found")
+
+
+@app.post("/v1/trainer/mechid/cases/{case_id}/duplicate", response_model=MechIDTrainerSaveResponse)
+def mechid_trainer_duplicate_case(case_id: str) -> MechIDTrainerSaveResponse:
+    cases = _load_mechid_eval_cases()
+    for payload in cases:
+        if payload.get("id") != case_id:
+            continue
+        draft = MechIDTrainerEvalCase.model_validate(payload)
+        base_id = f"{draft.id}_copy"
+        candidate_id = base_id
+        used_ids = {str(case.get("id") or "") for case in cases}
+        suffix = 2
+        while candidate_id in used_ids:
+            candidate_id = f"{base_id}_{suffix}"
+            suffix += 1
+        duplicated = draft.model_copy(update={"id": candidate_id})
+        cases.append(duplicated.model_dump(by_alias=True, exclude_none=True))
+        _write_mechid_eval_cases(cases)
+        return MechIDTrainerSaveResponse(
+            saved=True,
+            path=str(MECHID_EVAL_DATASET_PATH),
+            caseId=candidate_id,
+            totalCases=len(cases),
+        )
+    raise HTTPException(status_code=404, detail=f"Trainer case '{case_id}' not found")
+
+
+@app.delete("/v1/trainer/mechid/cases/{case_id}", response_model=MechIDTrainerDeleteResponse)
+def mechid_trainer_delete_case(case_id: str) -> MechIDTrainerDeleteResponse:
+    cases = _load_mechid_eval_cases()
+    remaining = [case for case in cases if case.get("id") != case_id]
+    if len(remaining) == len(cases):
+        raise HTTPException(status_code=404, detail=f"Trainer case '{case_id}' not found")
+    _write_mechid_eval_cases(remaining)
+    return MechIDTrainerDeleteResponse(
+        deleted=True,
+        caseId=case_id,
+        totalCases=len(remaining),
+    )
+
+
+@app.post("/v1/trainer/mechid/evaluate-case", response_model=MechIDTrainerEvaluateResponse)
+def mechid_trainer_evaluate_case(req: MechIDTrainerEvaluateRequest) -> MechIDTrainerEvaluateResponse:
+    stats = EvalStats()
+    client = TestClient(app)
+    evaluate_mechid_case(
+        client=client,
+        case=req.draft_case.model_dump(by_alias=True, exclude_none=True),
+        stats=stats,
+        check_assistant=req.check_assistant,
+    )
+    return MechIDTrainerEvaluateResponse(
+        passed=not stats.failures,
+        caseId=req.draft_case.id,
+        failures=stats.failures,
+        success=stats.success,
+        total=stats.total,
+        parsedChecks=stats.parsed_checks,
+        parsedPasses=stats.parsed_passes,
+        analysisChecks=stats.analysis_checks,
+        analysisPasses=stats.analysis_passes,
+        provisionalChecks=stats.provisional_checks,
+        provisionalPasses=stats.provisional_passes,
+        assistantChecks=stats.assistant_checks,
+        assistantPasses=stats.assistant_passes,
+    )
+
+
+@app.post("/v1/trainer/mechid/preview", response_model=MechIDTrainerPreviewResponse)
+def mechid_trainer_preview(req: MechIDTrainerPreviewRequest) -> MechIDTrainerPreviewResponse:
+    result = _build_mechid_text_response(
+        req.text,
+        parser_strategy=req.parser_strategy,
+        parser_model=req.parser_model,
+        allow_fallback=req.allow_fallback,
+    )
+    review_message, review_refined = _assistant_mechid_review_message(result, final=False)
+    final_message, final_refined = _assistant_mechid_review_message(result, final=True)
+    draft_case = _build_mechid_trainer_base_draft(
+        text=req.text,
+        parser_strategy=req.parser_strategy,
+        result=result,
+    )
+
+    correction_applied = False
+    correction_warning = None
+    correction_text = (req.correction_text or "").strip()
+    if correction_text:
+        try:
+            patch, correction_warning = parse_mechid_trainer_correction(
+                raw_text=req.text,
+                correction_text=correction_text,
+                mechid_result=result,
+                base_draft=draft_case,
+                parser_model=req.parser_model,
+            )
+            if patch is not None:
+                draft_case = _apply_trainer_patch(draft_case, patch)
+                correction_applied = True
+        except MechIDTrainerParseError as exc:
+            correction_warning = str(exc)
+
+    return MechIDTrainerPreviewResponse(
+        mechidResult=result,
+        assistantReviewMessage=review_message,
+        assistantReviewRefined=review_refined,
+        assistantFinalMessage=final_message,
+        assistantFinalRefined=final_refined,
+        draftCase=draft_case,
+        correctionApplied=correction_applied,
+        correctionWarning=correction_warning,
+    )
+
+
+@app.post("/v1/trainer/mechid/save", response_model=MechIDTrainerSaveResponse)
+def mechid_trainer_save(req: MechIDTrainerSaveRequest) -> MechIDTrainerSaveResponse:
+    draft = req.draft_case
+    cases = _load_mechid_eval_cases()
+    payload = draft.model_dump(by_alias=True, exclude_none=True)
+    for index, existing in enumerate(cases):
+        if existing.get("id") == draft.id:
+            cases[index] = payload
+            break
+    else:
+        cases.append(payload)
+    _write_mechid_eval_cases(cases)
+    return MechIDTrainerSaveResponse(
+        saved=True,
+        path=str(MECHID_EVAL_DATASET_PATH),
+        caseId=draft.id,
+        totalCases=len(cases),
+    )
 
 
 @app.get("/v1/modules")
@@ -2191,17 +2469,12 @@ def _friendly_mechid_therapy(
     result: MechIDAnalyzeResponse,
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
-    def _site_specific_oral_addendum() -> str | None:
-        if parsed is None:
-            return None
-        syndrome_local = parsed.tx_context.syndrome
-        focus_local = parsed.tx_context.focus_detail
-        provided = parsed.susceptibility_results or result.final_results
-        susceptible = {
-            antibiotic
-            for antibiotic, call in provided.items()
-            if call == "Susceptible"
-        }
+    def _option_overview(
+        syndrome_local: str,
+        focus_local: str,
+        susceptible_agents: list[str],
+    ) -> str | None:
+        susceptible = set(susceptible_agents)
 
         if syndrome_local == "Uncomplicated cystitis":
             oral_choices = [
@@ -2217,10 +2490,13 @@ def _friendly_mechid_therapy(
             ]
             if oral_choices:
                 return (
-                    f"For uncomplicated cystitis, I would especially consider oral options such as "
-                    f"{_join_readable(oral_choices)} when clinically appropriate."
+                    "For cystitis, the practical options from the susceptibilities you gave me are "
+                    f"{_join_readable(oral_choices)}."
                 )
-            return "For uncomplicated cystitis, I would look for a susceptible oral lower-tract option rather than defaulting to a broad IV agent."
+            return (
+                "For cystitis, I would mainly look for a susceptible oral lower-tract option such as "
+                "nitrofurantoin, trimethoprim/sulfamethoxazole, or fosfomycin before defaulting to a broad IV agent."
+            )
 
         if syndrome_local == "Complicated UTI / pyelonephritis":
             oral_choices = [
@@ -2234,30 +2510,24 @@ def _friendly_mechid_therapy(
             ]
             if oral_choices:
                 return (
-                    f"For pyelonephritis or complicated UTI, oral step-down could be considered with "
-                    f"{_join_readable(oral_choices)} once the patient is improving and source control is adequate."
+                    "For pyelonephritis or complicated UTI, I would think in terms of a reliably active upfront agent, "
+                    f"with possible oral step-down later using {_join_readable(oral_choices)} if the patient improves."
                 )
-            return "For pyelonephritis or complicated UTI, I would be more cautious about oral step-down unless there is a clearly active oral option."
+            return (
+                "For pyelonephritis or complicated UTI, I would usually start with a reliably active agent and only think about oral step-down later if the isolate leaves a clearly active oral choice."
+            )
 
         if syndrome_local == "Bloodstream infection":
-            oral_choices = [
-                agent
-                for agent in (
-                    "Linezolid",
-                    "Trimethoprim/Sulfamethoxazole",
-                    "Ciprofloxacin",
-                    "Levofloxacin",
-                )
-                if agent in susceptible
-            ]
             if focus_local == "Endocarditis":
-                return "For endocarditis, I would treat this as an IV-first problem and would not usually frame the answer around oral options unless there is a very specific validated step-down plan."
-            if oral_choices:
                 return (
-                    f"For bacteremia, I would usually start with a reliably active IV agent. "
-                    f"Oral step-down might be reasonable later in selected uncomplicated cases with {_join_readable(oral_choices)} once blood cultures clear, source control is in place, and the patient is improving."
+                    "For endocarditis, I would treat this as an IV-first problem and would not usually frame the answer around oral options unless there is a very specific validated step-down plan."
                 )
-            return "For bacteremia, I would usually start with a reliably active IV agent and only think about oral step-down later in selected uncomplicated cases after blood culture clearance and source control."
+            if susceptible_agents:
+                return (
+                    "For bacteremia, I would usually start with dependable IV therapy. "
+                    f"The susceptible drugs you gave me that look potentially usable are {_join_readable(susceptible_agents[:3])}."
+                )
+            return "For bacteremia, I would usually start with dependable IV therapy and only think about oral step-down much later in selected uncomplicated cases."
 
         if syndrome_local == "Bone/joint infection":
             oral_choices = [
@@ -2273,10 +2543,12 @@ def _friendly_mechid_therapy(
             ]
             if oral_choices:
                 return (
-                    f"For osteomyelitis or septic arthritis, I would mainly think about reliable IV therapy up front, "
-                    f"but oral step-down could sometimes be considered with {_join_readable(oral_choices)} once the patient is improving and source control has been addressed."
+                    "For osteomyelitis or septic arthritis, I would mainly think about reliable upfront therapy, "
+                    f"with oral step-down later sometimes possible using {_join_readable(oral_choices)} once source control is addressed."
                 )
-            return "For osteomyelitis or septic arthritis, I would usually start with dependable IV therapy and only think about oral step-down later if source control is in place and the isolate leaves a clearly reliable oral option."
+            return (
+                "For osteomyelitis or septic arthritis, I would usually start with dependable therapy and only think about oral step-down later if source control is in place and the isolate leaves a clearly reliable oral option."
+            )
 
         if syndrome_local == "Other deep-seated / high-inoculum focus":
             oral_choices = [
@@ -2292,11 +2564,59 @@ def _friendly_mechid_therapy(
             ]
             if oral_choices:
                 return (
-                    f"For a diabetic foot or deep wound infection, I would first make sure drainage or debridement is adequate, "
-                    f"and then oral step-down might be possible with {_join_readable(oral_choices)} if the patient is improving."
+                    "For a diabetic foot or other deep wound infection, I would first make sure drainage or debridement is adequate, "
+                    f"then think about step-down options such as {_join_readable(oral_choices)} if the patient is improving."
                 )
-            return "For a diabetic foot or deep wound infection, I would usually start with reliable IV coverage when the infection is deep or severe, then reassess for oral step-down only after source control and AST review."
+            return (
+                "For a diabetic foot or other deep wound infection, I would usually start with reliable therapy for a deep or severe infection and then reassess after source control and AST review."
+            )
 
+        if syndrome_local == "Pneumonia (HAP/VAP or severe CAP)":
+            return "For pneumonia, I would usually prioritize a reliably active IV option first and only think about narrowing once the isolate, site, and clinical trajectory are clearer."
+
+        if syndrome_local == "Intra-abdominal infection":
+            return "For intra-abdominal infection, I would think about a reliably active regimen plus source control rather than chasing an oral option up front."
+
+        if syndrome_local == "CNS infection":
+            return "For CNS infection, I would prioritize an agent with reliable CNS activity rather than relying only on the susceptibility label."
+
+        return None
+
+    def _select_preferred_agent(susceptible_agents: list[str]) -> str | None:
+        for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
+            if candidate in susceptible_agents:
+                return candidate
+        return susceptible_agents[0] if susceptible_agents else None
+
+    def _recommendation_sentence(
+        selected_note_local: str | None,
+        preferred_local: str | None,
+        syndrome_local: str,
+        severity_local: str,
+        resistant_agents_local: list[str],
+    ) -> str | None:
+        if selected_note_local is not None:
+            lead, sep, rest = selected_note_local.partition(":")
+            if sep and rest.strip():
+                return (
+                    f"Based on the susceptibilities you gave me, this fits {lead.strip().lower()}, "
+                    f"so I would {rest.strip().rstrip('.')}."
+                )
+            return (
+                "Based on the susceptibilities you gave me, "
+                f"{selected_note_local[0].lower() + selected_note_local[1:].rstrip('.') }."
+            )
+        if preferred_local is not None:
+            if severity_local == "Severe / septic shock":
+                return f"Based on this severity, I would lean toward {preferred_local} if it fits the infection source and patient factors."
+            if syndrome_local == "CNS infection":
+                return (
+                    f"Based on the drugs you gave me, {preferred_local} looks active, but I would still choose based on CNS penetration rather than the susceptibility label alone."
+                )
+            return f"Based on the susceptibilities you gave me, I would lean toward {preferred_local}."
+        if resistant_agents_local:
+            avoid = _join_readable(resistant_agents_local[:3])
+            return f"Based on this pattern, I would avoid {avoid} unless there is additional data that changes the interpretation."
         return None
 
     def _select_mechid_therapy_note() -> str | None:
@@ -2346,34 +2666,23 @@ def _friendly_mechid_therapy(
     ]
     syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
     severity = parsed.tx_context.severity if parsed is not None else "Not specified"
+    focus = parsed.tx_context.focus_detail if parsed is not None else "Not specified"
     selected_note = _select_mechid_therapy_note()
-    oral_addendum = _site_specific_oral_addendum()
-
-    preferred = None
-    for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
-        if candidate in susceptible_agents:
-            preferred = candidate
-            break
-    if preferred is None and susceptible_agents:
-        preferred = susceptible_agents[0]
+    preferred = _select_preferred_agent(susceptible_agents)
+    option_overview = _option_overview(syndrome, focus, susceptible_agents)
+    recommendation = _recommendation_sentence(
+        selected_note,
+        preferred,
+        syndrome,
+        severity,
+        resistant_agents,
+    )
 
     lines: List[str] = []
-    if selected_note is not None:
-        lines.append(selected_note + ".")
-    elif preferred is not None:
-        if severity == "Severe / septic shock":
-            lines.append(f"For this severity, I would lean toward {preferred} if it fits the infection source and patient factors.")
-        elif syndrome == "CNS infection":
-            lines.append(f"For a CNS infection, I would prioritize an agent with reliable CNS activity rather than relying only on the susceptibility label; {preferred} may or may not be the best fit depending on the full panel.")
-        else:
-            lines.append(f"From the drugs you gave me, {preferred} looks like the clearest active option.")
-
-    if resistant_agents and selected_note is None:
-        avoid = _join_readable(resistant_agents[:3])
-        lines.append(f"Based on this pattern, I would avoid {avoid} unless there is additional data that changes the interpretation.")
-
-    if oral_addendum is not None:
-        lines.append(oral_addendum)
+    if option_overview is not None:
+        lines.append(option_overview)
+    if recommendation is not None:
+        lines.append(recommendation)
 
     return " ".join(lines) if lines else "I would match therapy to the susceptible agents and infection source."
 
@@ -2499,6 +2808,9 @@ def _friendly_mechid_bottom_line(
 ) -> str:
     therapy_line = _friendly_mechid_therapy(result, parsed)
     if therapy_line and therapy_line != "I would match therapy to the susceptible agents and infection source.":
+        sentences = [part.strip() for part in re.split(r"(?<=[.?!])\s+", therapy_line) if part.strip()]
+        if sentences:
+            return sentences[-1]
         return therapy_line
 
     provided_results = parsed.susceptibility_results if parsed is not None else {}
@@ -2546,11 +2858,47 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
     if context_bits:
         summary += f" Clinical context: {_join_readable(context_bits)}."
 
+    if not final:
+        if result.analysis is not None:
+            summary += "\n\nWhat this supports so far:"
+            summary += f"\nLikely resistance pattern captured: {_friendly_mechid_mechanism(result.analysis)}"
+            summary += f"\nTreatment-relevant signal captured: {_friendly_mechid_therapy(result.analysis, parsed)}"
+            oral_options = _friendly_mechid_oral_options(result.analysis, parsed)
+            if oral_options:
+                summary += f"\nPossible oral options captured: {oral_options}"
+            caution = _friendly_mechid_caution(result.analysis)
+            if caution:
+                summary += f"\nImportant caution captured: {caution}"
+            summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
+            return summary
+
+        if result.provisional_advice is not None:
+            advice = result.provisional_advice
+            summary += "\n\nWhat this supports so far:"
+            summary += f"\nCurrent treatment direction captured: {advice.summary}"
+            if advice.recommended_options:
+                summary += f"\nOptions already supported by the current data: {_join_readable(advice.recommended_options)}."
+            if advice.oral_options:
+                summary += f"\nPossible oral options already supported: {_join_readable(advice.oral_options)}."
+            if advice.notes:
+                summary += f"\nImportant context captured: {advice.notes[0]}"
+            if advice.missing_susceptibilities:
+                summary += (
+                    f"\nWhat still needs confirmation: susceptibilities for {_join_readable(advice.missing_susceptibilities[:5])}."
+                )
+            summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
+            return summary
+
+        if result.warnings:
+            summary += " " + _join_readable(result.warnings[:2])
+        summary += " Add or correct susceptibility details so I can infer a mechanism and therapy plan."
+        return summary
+
     if result.analysis is not None:
         summary += "\n\nMy impression:"
         summary += f"\nBottom line: {_friendly_mechid_bottom_line(result.analysis, parsed)}"
         summary += f"\nPattern: {_friendly_mechid_mechanism(result.analysis)}"
-        summary += f"\nWhat I would use: {_friendly_mechid_therapy(result.analysis, parsed)}"
+        summary += f"\nTreatment approach: {_friendly_mechid_therapy(result.analysis, parsed)}"
         oral_options = _friendly_mechid_oral_options(result.analysis, parsed)
         if oral_options:
             summary += f"\nPossible oral options: {oral_options}"
@@ -2588,6 +2936,19 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         summary += " " + _join_readable(result.warnings[:2])
     summary += " Add or correct susceptibility details so I can infer a mechanism and therapy plan."
     return summary
+
+
+def _assistant_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> tuple[str, bool]:
+    fallback = _build_mechid_review_message(result, final=final)
+    if final:
+        return narrate_mechid_assistant_message(
+            mechid_result=result,
+            fallback_message=fallback,
+        )
+    return narrate_mechid_review_message(
+        mechid_result=result,
+        fallback_message=fallback,
+    )
 
 
 def _assistant_review_options_for_case(
@@ -3566,11 +3927,11 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
         finding for finding in understood.findings_absent if finding and finding.strip().lower() not in placeholder_tokens
     ]
     present_summary = _join_readable(present_findings) if present_findings else "no clear supporting findings yet"
-    summary = f"My impression so far: for {_assistant_module_label(module)}, I currently have {present_summary}."
+    summary = f"What I extracted so far for {_assistant_module_label(module)}: {present_summary}."
     if absent_findings:
         summary = (
-            f"My impression so far: for {_assistant_module_label(module)}, I currently have {present_summary}. "
-            f"I also noted {_join_readable(absent_findings)} as absent or negative."
+            f"What I extracted so far for {_assistant_module_label(module)}: {present_summary}. "
+            f"I also captured {_join_readable(absent_findings)} as absent or negative."
         )
 
     missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
@@ -3581,10 +3942,25 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
         summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
 
     if text_result.requires_confirmation:
-        summary += " If anything looks off, correct it or add more case detail. If this matches the case, ask for my consultant impression."
+        summary += " If anything looks off, correct it or add more case detail. If this extraction matches the case, ask for my consultant impression."
     else:
-        summary += " If this matches the case, ask for my consultant impression. Otherwise, add more case detail."
+        summary += " If this extraction matches the case, ask for my consultant impression. Otherwise, add more case detail."
     return summary
+
+
+def _assistant_probid_review_message(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+    *,
+    prefix: str | None = None,
+) -> tuple[str, bool]:
+    fallback = (prefix or "") + _build_case_review_message(module, text_result, state)
+    return narrate_probid_review_message(
+        text_result=text_result,
+        fallback_message=fallback,
+        module_label=_assistant_module_label(module),
+    )
 
 
 def _assistant_parse_case_text(module: SyndromeModule, state: AssistantState) -> TextAnalyzeResponse:
@@ -3694,11 +4070,15 @@ def _assistant_intake_case_from_text(
         selected_pretest_factor_ids=state.pretest_factor_ids,
     )
     state.stage = "confirm_case"
+    review_message, narration_refined = _assistant_probid_review_message(
+        module,
+        text_result,
+        state,
+        prefix="I parsed your case description and pre-populated the calculator inputs. ",
+    )
     return AssistantTurnResponse(
-        assistantMessage=(
-            "I parsed your case description and pre-populated the calculator inputs. "
-            + _build_case_review_message(module, text_result, state)
-        ),
+        assistantMessage=review_message,
+        assistantNarrationRefined=narration_refined,
         state=state,
         options=_assistant_review_options_for_case(module, text_result, state),
         analysis=text_result,
@@ -3751,8 +4131,10 @@ def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: Assista
         parser_model=state.parser_model,
         allow_fallback=state.allow_fallback,
     )
+    review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
     return AssistantTurnResponse(
-        assistantMessage=_build_mechid_review_message(mechid_result),
+        assistantMessage=review_message,
+        assistantNarrationRefined=narration_refined,
         state=state,
         options=_assistant_mechid_review_options(mechid_result),
         mechidAnalysis=mechid_result,
@@ -3938,8 +4320,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             parser_model=state.parser_model,
             allow_fallback=state.allow_fallback,
         )
+        review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
         return AssistantTurnResponse(
-            assistantMessage=_build_mechid_review_message(mechid_result),
+            assistantMessage=review_message,
+            assistantNarrationRefined=narration_refined,
             state=state,
             options=_assistant_mechid_review_options(mechid_result),
             mechidAnalysis=mechid_result,
@@ -3985,8 +4369,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         if _is_ready_to_assess(req):
             if mechid_result.analysis is None and mechid_result.provisional_advice is None:
+                review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
                 return AssistantTurnResponse(
-                    assistantMessage=_build_mechid_review_message(mechid_result),
+                    assistantMessage=review_message,
+                    assistantNarrationRefined=narration_refined,
                     state=state,
                     options=_assistant_mechid_review_options(mechid_result),
                     mechidAnalysis=mechid_result,
@@ -3995,11 +4381,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
             state.stage = "done"
-            final_message = _build_mechid_review_message(mechid_result, final=True)
-            narrated_message, narration_refined = narrate_mechid_assistant_message(
-                mechid_result=mechid_result,
-                fallback_message=final_message,
-            )
+            narrated_message, narration_refined = _assistant_mechid_review_message(mechid_result, final=True)
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -4011,8 +4393,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 ],
             )
 
+        review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
         return AssistantTurnResponse(
-            assistantMessage=_build_mechid_review_message(mechid_result),
+            assistantMessage=review_message,
+            assistantNarrationRefined=narration_refined,
             state=state,
             options=_assistant_mechid_review_options(mechid_result),
             mechidAnalysis=mechid_result,
@@ -4406,8 +4790,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             )
 
         state.stage = "confirm_case"
+        review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
         return AssistantTurnResponse(
-            assistantMessage=_build_case_review_message(module, text_result, state),
+            assistantMessage=review_message,
+            assistantNarrationRefined=narration_refined,
             state=state,
             options=_assistant_review_options_for_case(module, text_result, state),
             analysis=text_result,
@@ -4455,8 +4841,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if present_text.strip().lower() not in existing_lines:
                 state.case_text = _append_case_text(state.case_text, present_text)
             text_result = _assistant_parse_case_text(module, state)
+            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=_build_case_review_message(module, text_result, state),
+                assistantMessage=review_message,
+                assistantNarrationRefined=narration_refined,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
@@ -4476,8 +4864,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 (entry_label for entry_id, entry_label in _assistant_endo_score_component_entries(state) if entry_id == score_factor_id),
                 score_factor_id.replace("_", " "),
             )
+            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=_build_case_review_message(module, text_result, state),
+                assistantMessage=review_message,
+                assistantNarrationRefined=narration_refined,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
@@ -4553,8 +4943,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if module.id == "endo":
                 _assistant_merge_endo_score_factor_ids(state, _assistant_infer_endo_score_factor_ids_from_text(state, req.message))
             text_result = _assistant_parse_case_text(module, state)
+            review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
             return AssistantTurnResponse(
-                assistantMessage=_build_case_review_message(module, text_result, state),
+                assistantMessage=review_message,
+                assistantNarrationRefined=narration_refined,
                 state=state,
                 options=_assistant_review_options_for_case(module, text_result, state),
                 analysis=text_result,
@@ -4565,8 +4957,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             )
 
         text_result = _assistant_parse_case_text(module, state)
+        review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
         return AssistantTurnResponse(
-            assistantMessage=_build_case_review_message(module, text_result, state),
+            assistantMessage=review_message,
+            assistantNarrationRefined=narration_refined,
             state=state,
             options=_assistant_review_options_for_case(module, text_result, state),
             analysis=text_result,

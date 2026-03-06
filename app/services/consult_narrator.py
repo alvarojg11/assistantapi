@@ -77,6 +77,40 @@ def narrate_probid_assistant_message(
         return fallback_message, False
 
 
+def narrate_probid_review_message(
+    *,
+    text_result: TextAnalyzeResponse,
+    fallback_message: str,
+    module_label: str,
+) -> Tuple[str, bool]:
+    if not consult_narration_enabled() or text_result.parsed_request is None:
+        return fallback_message, False
+
+    payload = {
+        "moduleLabel": module_label,
+        "fallbackMessage": fallback_message,
+        "parsedRequest": text_result.parsed_request.model_dump(by_alias=True),
+        "understood": text_result.understood.model_dump(by_alias=True),
+        "warnings": text_result.warnings,
+        "requiresConfirmation": text_result.requires_confirmation,
+    }
+    prompt = (
+        "You are rewriting a deterministic ProbID review-stage message before the final assessment has been run.\n"
+        "The JSON input is the full source of truth. Do not invent probabilities, treatment recommendations, or findings that are not present.\n"
+        "Your job is only to summarize what was extracted, what negatives were captured, and what details are still worth confirming.\n"
+        "If the JSON says clarification is needed, say that plainly.\n"
+        "Do not imply that a final assessment has already been made.\n"
+        "Keep the tone conversational and clinically precise, but frame this as an extraction summary rather than a consultant impression.\n"
+        "Prefer wording like 'What I extracted so far' or 'What still needs confirmation' instead of 'My impression'.\n"
+        "Do not use markdown bullets, asterisks, or arrow symbols.\n"
+        "Prefer 1 to 2 short paragraphs. Plain text only."
+    )
+    try:
+        return _call_consult_model(prompt=prompt, payload=payload), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
 def narrate_mechid_assistant_message(
     *,
     mechid_result: MechIDTextAnalyzeResponse,
@@ -100,9 +134,43 @@ def narrate_mechid_assistant_message(
         "Do not invent organisms, susceptibilities, mechanisms, or treatment claims.\n"
         "If the deterministic output says more data are needed, state exactly what is needed and do not pretend certainty.\n"
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
+        "When treatment options are available, lead with practical syndrome-specific options first, then say which option you would lean toward based on the submitted susceptibilities.\n"
         "If oral options are supported in the JSON, mention them in a clinically appropriate way. If the JSON implies IV-first treatment, keep that framing.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
+    )
+    try:
+        return _call_consult_model(prompt=prompt, payload=payload), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_mechid_review_message(
+    *,
+    mechid_result: MechIDTextAnalyzeResponse,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    if not consult_narration_enabled() or mechid_result.parsed_request is None:
+        return fallback_message, False
+
+    payload = {
+        "fallbackMessage": fallback_message,
+        "parsedRequest": mechid_result.parsed_request.model_dump(by_alias=True),
+        "analysis": mechid_result.analysis.model_dump(by_alias=True) if mechid_result.analysis else None,
+        "provisionalAdvice": mechid_result.provisional_advice.model_dump(by_alias=True) if mechid_result.provisional_advice else None,
+        "warnings": mechid_result.warnings,
+        "requiresConfirmation": mechid_result.requires_confirmation,
+    }
+    prompt = (
+        "You are rewriting a deterministic MechID review-stage message before the user has asked for the final interpretation.\n"
+        "The JSON input is the full source of truth. Do not invent organisms, susceptibilities, mechanisms, or treatment claims.\n"
+        "Your job is to summarize what was extracted, what pattern is already recognized if provided in the JSON, and what extra AST or context would make the interpretation more definitive.\n"
+        "Do not imply more certainty than the JSON supports.\n"
+        "Keep the tone conversational and clinically precise, but frame this as an extraction summary rather than a consultant impression.\n"
+        "Prefer wording like 'What I extracted so far' or 'What still needs confirmation' instead of 'My impression'.\n"
+        "When the JSON already supports practical treatment options, frame them as treatment-relevant signals captured from the input rather than as a final recommendation.\n"
+        "Do not use markdown bullets, asterisks, or arrow symbols.\n"
+        "Prefer 1 to 2 short paragraphs. Plain text only."
     )
     try:
         return _call_consult_model(prompt=prompt, payload=payload), True
