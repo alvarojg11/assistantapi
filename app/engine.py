@@ -434,7 +434,7 @@ def prepare_probid_inputs(module: SyndromeModule, req: AnalyzeRequest) -> ProbID
     )
 
 
-def _evidence(short: str, url: str) -> HarmEvidence:
+def _evidence(short: str, url: str | None = None) -> HarmEvidence:
     return HarmEvidence(short=short, url=url)
 
 
