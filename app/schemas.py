@@ -336,6 +336,7 @@ class AssistantTurnRequest(BaseModel):
 class AssistantTurnResponse(BaseModel):
     assistant_name: str = Field(default="ID Consultant Assistant", alias="assistantName")
     assistant_message: str = Field(alias="assistantMessage")
+    assistant_narration_refined: bool = Field(default=False, alias="assistantNarrationRefined")
     state: AssistantState
     options: List[AssistantOption] = Field(default_factory=list)
     analysis: Optional[TextAnalyzeResponse] = None

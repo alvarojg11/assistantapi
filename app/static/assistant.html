@@ -526,7 +526,10 @@
         <aside class="side-card">
           <div class="side-head">
             <div class="side-title">What I Understood</div>
-            <span id="parserBadge" class="badge">parser: —</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span id="narrationBadge" class="badge">narrative: deterministic</span>
+              <span id="parserBadge" class="badge">parser: —</span>
+            </div>
           </div>
 
           <section class="panel-block">
@@ -590,6 +593,7 @@
         summaryPreset: document.getElementById("summaryPreset"),
         summaryCaseSection: document.getElementById("summaryCaseSection"),
         summaryFactors: document.getElementById("summaryFactors"),
+        narrationBadge: document.getElementById("narrationBadge"),
         parserBadge: document.getElementById("parserBadge"),
         analysisSummary: document.getElementById("analysisSummary"),
         parsedPanel: document.getElementById("parsedPanel"),
@@ -877,6 +881,10 @@
       }
 
       function renderAnalysis(resp) {
+        const narrationRefined = !!resp?.assistantNarrationRefined;
+        els.narrationBadge.textContent = narrationRefined ? "narrative: gpt-4.1-mini" : "narrative: deterministic";
+        els.narrationBadge.className = `badge ${narrationRefined ? "good" : "warn"}`;
+
         const mechidResult = resp?.mechidAnalysis;
         if (mechidResult) {
           const parsed = mechidResult.parsedRequest;
@@ -888,10 +896,10 @@
           els.parserBadge.className = `badge ${(warnings.length || fallback) ? "warn" : "good"}`;
 
           if (analysis) {
-            const mechanisms = (analysis.mechanisms || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-            const cautions = (analysis.cautions || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-            const signals = (analysis.favorableSignals || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-            const therapyNotes = (analysis.therapyNotes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const mechanisms = (analysis.mechanisms || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
+            const cautions = (analysis.cautions || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
+            const signals = (analysis.favorableSignals || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
+            const therapyNotes = (analysis.therapyNotes || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
             const references = (analysis.references || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
             const finalResults = Object.entries(analysis.finalResults || {})
               .map(([drug, call]) => `<li>${escapeHtml(drug)}: ${escapeHtml(call)}</li>`)
@@ -1063,6 +1071,14 @@
           .replace(/&/g, "&amp;")
           .replace(/</g, "&lt;")
           .replace(/>/g, "&gt;");
+      }
+
+      function cleanMechidDisplayText(str) {
+        return String(str)
+          .replace(/\*\*/g, "")
+          .replace(/→/g, ": ")
+          .replace(/\s+/g, " ")
+          .trim();
       }
 
       async function callAssistantTurn(payload) {

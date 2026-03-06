@@ -46,6 +46,9 @@ PHENOTYPE_HINTS = {
 }
 
 SYNDROME_HINTS = (
+    ("infective endocarditis", "Bloodstream infection", "Endocarditis"),
+    ("endocarditis", "Bloodstream infection", "Endocarditis"),
+    ("valve infection", "Bloodstream infection", "Endocarditis"),
     ("cystitis", "Uncomplicated cystitis", "Cystitis"),
     ("uti", "Complicated UTI / pyelonephritis", "UTI / pyelonephritis"),
     ("pyelo", "Complicated UTI / pyelonephritis", "Pyelonephritis"),

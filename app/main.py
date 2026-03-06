@@ -47,6 +47,7 @@ from .schemas import (
     TextAnalyzeResponse,
 )
 from .services.module_store import InMemoryModuleStore
+from .services.consult_narrator import narrate_mechid_assistant_message, narrate_probid_assistant_message
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
 from .services.mechid_llm_parser import parse_mechid_text_with_openai
@@ -2157,7 +2158,7 @@ def _assistant_mechid_review_options(result: MechIDTextAnalyzeResponse) -> List[
 
 def _clean_mechid_text(text: str) -> str:
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
-    cleaned = cleaned.replace("→", " -> ").replace("β", "beta")
+    cleaned = cleaned.replace("→", ": ").replace("β", "beta")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
 
@@ -2190,6 +2191,114 @@ def _friendly_mechid_therapy(
     result: MechIDAnalyzeResponse,
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
+    def _site_specific_oral_addendum() -> str | None:
+        if parsed is None:
+            return None
+        syndrome_local = parsed.tx_context.syndrome
+        focus_local = parsed.tx_context.focus_detail
+        provided = parsed.susceptibility_results or result.final_results
+        susceptible = {
+            antibiotic
+            for antibiotic, call in provided.items()
+            if call == "Susceptible"
+        }
+
+        if syndrome_local == "Uncomplicated cystitis":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Nitrofurantoin",
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Fosfomycin",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible
+            ]
+            if oral_choices:
+                return (
+                    f"For uncomplicated cystitis, I would especially consider oral options such as "
+                    f"{_join_readable(oral_choices)} when clinically appropriate."
+                )
+            return "For uncomplicated cystitis, I would look for a susceptible oral lower-tract option rather than defaulting to a broad IV agent."
+
+        if syndrome_local == "Complicated UTI / pyelonephritis":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible
+            ]
+            if oral_choices:
+                return (
+                    f"For pyelonephritis or complicated UTI, oral step-down could be considered with "
+                    f"{_join_readable(oral_choices)} once the patient is improving and source control is adequate."
+                )
+            return "For pyelonephritis or complicated UTI, I would be more cautious about oral step-down unless there is a clearly active oral option."
+
+        if syndrome_local == "Bloodstream infection":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Linezolid",
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible
+            ]
+            if focus_local == "Endocarditis":
+                return "For endocarditis, I would treat this as an IV-first problem and would not usually frame the answer around oral options unless there is a very specific validated step-down plan."
+            if oral_choices:
+                return (
+                    f"For bacteremia, I would usually start with a reliably active IV agent. "
+                    f"Oral step-down might be reasonable later in selected uncomplicated cases with {_join_readable(oral_choices)} once blood cultures clear, source control is in place, and the patient is improving."
+                )
+            return "For bacteremia, I would usually start with a reliably active IV agent and only think about oral step-down later in selected uncomplicated cases after blood culture clearance and source control."
+
+        if syndrome_local == "Bone/joint infection":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Linezolid",
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Doxycycline",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible
+            ]
+            if oral_choices:
+                return (
+                    f"For osteomyelitis or septic arthritis, I would mainly think about reliable IV therapy up front, "
+                    f"but oral step-down could sometimes be considered with {_join_readable(oral_choices)} once the patient is improving and source control has been addressed."
+                )
+            return "For osteomyelitis or septic arthritis, I would usually start with dependable IV therapy and only think about oral step-down later if source control is in place and the isolate leaves a clearly reliable oral option."
+
+        if syndrome_local == "Other deep-seated / high-inoculum focus":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Linezolid",
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Doxycycline",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible
+            ]
+            if oral_choices:
+                return (
+                    f"For a diabetic foot or deep wound infection, I would first make sure drainage or debridement is adequate, "
+                    f"and then oral step-down might be possible with {_join_readable(oral_choices)} if the patient is improving."
+                )
+            return "For a diabetic foot or deep wound infection, I would usually start with reliable IV coverage when the infection is deep or severe, then reassess for oral step-down only after source control and AST review."
+
+        return None
+
     def _select_mechid_therapy_note() -> str | None:
         if not result.therapy_notes:
             return None
@@ -2238,6 +2347,7 @@ def _friendly_mechid_therapy(
     syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
     severity = parsed.tx_context.severity if parsed is not None else "Not specified"
     selected_note = _select_mechid_therapy_note()
+    oral_addendum = _site_specific_oral_addendum()
 
     preferred = None
     for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
@@ -2261,6 +2371,9 @@ def _friendly_mechid_therapy(
     if resistant_agents and selected_note is None:
         avoid = _join_readable(resistant_agents[:3])
         lines.append(f"Based on this pattern, I would avoid {avoid} unless there is additional data that changes the interpretation.")
+
+    if oral_addendum is not None:
+        lines.append(oral_addendum)
 
     return " ".join(lines) if lines else "I would match therapy to the susceptible agents and infection source."
 
@@ -3882,8 +3995,14 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
             state.stage = "done"
+            final_message = _build_mechid_review_message(mechid_result, final=True)
+            narrated_message, narration_refined = narrate_mechid_assistant_message(
+                mechid_result=mechid_result,
+                fallback_message=final_message,
+            )
             return AssistantTurnResponse(
-                assistantMessage=_build_mechid_review_message(mechid_result, final=True),
+                assistantMessage=narrated_message,
+                assistantNarrationRefined=narration_refined,
                 state=state,
                 options=[AssistantOption(value="restart", label="Start new consult")],
                 mechidAnalysis=mechid_result,
@@ -4404,13 +4523,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
             state.stage = "done"
             missing_suggestions = _top_missing_tests(module, text_result.parsed_request, limit=3, state=state)
+            final_message = _build_probid_consult_message(
+                module,
+                text_result.analysis,
+                missing_suggestions=missing_suggestions,
+                include_panel_note=True,
+            )
+            narrated_message, narration_refined = narrate_probid_assistant_message(
+                text_result=text_result,
+                fallback_message=final_message,
+                module_label=_assistant_module_label(module),
+            )
             return AssistantTurnResponse(
-                assistantMessage=_build_probid_consult_message(
-                    module,
-                    text_result.analysis,
-                    missing_suggestions=missing_suggestions,
-                    include_panel_note=True,
-                ),
+                assistantMessage=narrated_message,
+                assistantNarrationRefined=narration_refined,
                 state=state,
                 options=[
                     AssistantOption(value="restart", label="Start new consult"),
