@@ -121,8 +121,8 @@ The trainer page is a lightweight internal workbench for creating MechID eval ca
 
 1. Paste messy case text into `/trainer`
 2. Review the API output and assistant wording
-3. Add a plain-English correction note
-4. Review the generated eval-case JSON
+3. Add a plain-English correction note and optional recommendation guidance
+4. Review the generated eval-case JSON plus any saved assistant review/final targets
 5. Save it back into `backend/app/data/mechid_eval_cases.json`
 
 If `OPENAI_API_KEY` is set, the correction note can be translated automatically into a structured case patch. Without it, the page still generates a baseline draft and lets you edit the JSON manually before saving.
@@ -130,6 +130,7 @@ If `OPENAI_API_KEY` is set, the correction note can be translated automatically 
 The trainer also lists existing saved MechID cases so you can load one, edit it, and save it back without opening the JSON file directly.
 It also supports duplicate and delete actions for quick case curation.
 You can also run the evaluator on the current draft before saving it, which is useful for spotting exactly which expected fields still need correction.
+If `OPENAI_API_KEY` is set, recommendation guidance can also be turned into saved assistant review/final targets, and the MechID assistant narrator can reuse those saved examples later as style references for similar cases.
 
 ## Enable LLM extraction (optional)
 

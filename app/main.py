@@ -72,6 +72,7 @@ from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mech
 from .services.mechid_eval import EvalStats, evaluate_mechid_case
 from .services.mechid_llm_parser import parse_mechid_text_with_openai
 from .services.mechid_text_parser import parse_mechid_text
+from .services.mechid_trainer_guidance import MechIDTrainerGuidanceError, generate_mechid_trainer_targets
 from .services.mechid_trainer_parser import MechIDTrainerParseError, parse_mechid_trainer_correction
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
 from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
@@ -1062,6 +1063,9 @@ def _build_mechid_trainer_base_draft(
         id=_base_trainer_case_id(text, result),
         text=text,
         parserStrategy=parser_strategy,
+        assistantGuidance=None,
+        assistantReviewTarget=None,
+        assistantFinalTarget=None,
         expectedRequiresConfirmation=result.requires_confirmation,
         expectedParsed=expected_parsed,
         expectedAnalysisPresent=analysis is not None,
@@ -1092,6 +1096,20 @@ def _apply_trainer_patch(base: MechIDTrainerEvalCase, patch: MechIDTrainerEvalPa
         patch.model_dump(by_alias=True, exclude_none=True),
     )
     return MechIDTrainerEvalCase.model_validate(merged)
+
+
+def _trainer_transient_examples(draft_case: MechIDTrainerEvalCase, *, kind: str) -> List[Dict[str, str]]:
+    target = draft_case.assistant_final_target if kind == "final" else draft_case.assistant_review_target
+    if not target:
+        return []
+    return [
+        {
+            "id": draft_case.id,
+            "text": draft_case.text,
+            "guidance": draft_case.assistant_guidance or "",
+            "target": target,
+        }
+    ]
 
 
 def _load_mechid_eval_cases() -> List[Dict[str, Any]]:
@@ -1205,8 +1223,6 @@ def mechid_trainer_preview(req: MechIDTrainerPreviewRequest) -> MechIDTrainerPre
         parser_model=req.parser_model,
         allow_fallback=req.allow_fallback,
     )
-    review_message, review_refined = _assistant_mechid_review_message(result, final=False)
-    final_message, final_refined = _assistant_mechid_review_message(result, final=True)
     draft_case = _build_mechid_trainer_base_draft(
         text=req.text,
         parser_strategy=req.parser_strategy,
@@ -1215,6 +1231,8 @@ def mechid_trainer_preview(req: MechIDTrainerPreviewRequest) -> MechIDTrainerPre
 
     correction_applied = False
     correction_warning = None
+    recommendation_applied = False
+    recommendation_warning = None
     correction_text = (req.correction_text or "").strip()
     if correction_text:
         try:
@@ -1231,6 +1249,34 @@ def mechid_trainer_preview(req: MechIDTrainerPreviewRequest) -> MechIDTrainerPre
         except MechIDTrainerParseError as exc:
             correction_warning = str(exc)
 
+    recommendation_text = (req.recommendation_text or "").strip()
+    if recommendation_text:
+        try:
+            patch, recommendation_warning = generate_mechid_trainer_targets(
+                raw_text=req.text,
+                recommendation_text=recommendation_text,
+                mechid_result=result,
+                parser_model=req.parser_model,
+            )
+            if patch is not None:
+                draft_case = _apply_trainer_patch(draft_case, patch)
+                if not draft_case.assistant_guidance:
+                    draft_case = draft_case.model_copy(update={"assistantGuidance": recommendation_text})
+                recommendation_applied = True
+        except MechIDTrainerGuidanceError as exc:
+            recommendation_warning = str(exc)
+
+    review_message, review_refined = _assistant_mechid_review_message(
+        result,
+        final=False,
+        transient_examples=_trainer_transient_examples(draft_case, kind="review"),
+    )
+    final_message, final_refined = _assistant_mechid_review_message(
+        result,
+        final=True,
+        transient_examples=_trainer_transient_examples(draft_case, kind="final"),
+    )
+
     return MechIDTrainerPreviewResponse(
         mechidResult=result,
         assistantReviewMessage=review_message,
@@ -1240,6 +1286,8 @@ def mechid_trainer_preview(req: MechIDTrainerPreviewRequest) -> MechIDTrainerPre
         draftCase=draft_case,
         correctionApplied=correction_applied,
         correctionWarning=correction_warning,
+        recommendationApplied=recommendation_applied,
+        recommendationWarning=recommendation_warning,
     )
 
 
@@ -2938,16 +2986,23 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
     return summary
 
 
-def _assistant_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> tuple[str, bool]:
+def _assistant_mechid_review_message(
+    result: MechIDTextAnalyzeResponse,
+    *,
+    final: bool = False,
+    transient_examples: List[Dict[str, str]] | None = None,
+) -> tuple[str, bool]:
     fallback = _build_mechid_review_message(result, final=final)
     if final:
         return narrate_mechid_assistant_message(
             mechid_result=result,
             fallback_message=fallback,
+            transient_examples=transient_examples,
         )
     return narrate_mechid_review_message(
         mechid_result=result,
         fallback_message=fallback,
+        transient_examples=transient_examples,
     )
 
 

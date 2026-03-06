@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
 from ..schemas import MechIDTextAnalyzeResponse, TextAnalyzeResponse
+from .mechid_consult_examples import select_mechid_consult_examples
 from .llm_text_parser import LLMParserError, _try_import_openai
 
 
@@ -115,18 +116,23 @@ def narrate_mechid_assistant_message(
     *,
     mechid_result: MechIDTextAnalyzeResponse,
     fallback_message: str,
+    transient_examples: List[Dict[str, str]] | None = None,
 ) -> Tuple[str, bool]:
     if not consult_narration_enabled():
         return fallback_message, False
     if mechid_result.analysis is None and mechid_result.provisional_advice is None:
         return fallback_message, False
 
+    examples = select_mechid_consult_examples(result=mechid_result, kind="final")
+    if transient_examples:
+        examples = [*transient_examples, *examples]
     payload = {
         "fallbackMessage": fallback_message,
         "parsedRequest": mechid_result.parsed_request.model_dump(by_alias=True) if mechid_result.parsed_request else None,
         "analysis": mechid_result.analysis.model_dump(by_alias=True) if mechid_result.analysis else None,
         "provisionalAdvice": mechid_result.provisional_advice.model_dump(by_alias=True) if mechid_result.provisional_advice else None,
         "warnings": mechid_result.warnings,
+        "examples": examples[:3],
     }
     prompt = (
         "You are an infectious diseases consultant rewriting a deterministic MechID result into a concise clinician-facing answer.\n"
@@ -136,6 +142,7 @@ def narrate_mechid_assistant_message(
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
         "When treatment options are available, lead with practical syndrome-specific options first, then say which option you would lean toward based on the submitted susceptibilities.\n"
         "If oral options are supported in the JSON, mention them in a clinically appropriate way. If the JSON implies IV-first treatment, keep that framing.\n"
+        "If example outputs are provided, use them as style references only when they fit the same type of case. Do not copy unsupported claims.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )
@@ -149,10 +156,14 @@ def narrate_mechid_review_message(
     *,
     mechid_result: MechIDTextAnalyzeResponse,
     fallback_message: str,
+    transient_examples: List[Dict[str, str]] | None = None,
 ) -> Tuple[str, bool]:
     if not consult_narration_enabled() or mechid_result.parsed_request is None:
         return fallback_message, False
 
+    examples = select_mechid_consult_examples(result=mechid_result, kind="review")
+    if transient_examples:
+        examples = [*transient_examples, *examples]
     payload = {
         "fallbackMessage": fallback_message,
         "parsedRequest": mechid_result.parsed_request.model_dump(by_alias=True),
@@ -160,6 +171,7 @@ def narrate_mechid_review_message(
         "provisionalAdvice": mechid_result.provisional_advice.model_dump(by_alias=True) if mechid_result.provisional_advice else None,
         "warnings": mechid_result.warnings,
         "requiresConfirmation": mechid_result.requires_confirmation,
+        "examples": examples[:3],
     }
     prompt = (
         "You are rewriting a deterministic MechID review-stage message before the user has asked for the final interpretation.\n"
@@ -169,6 +181,7 @@ def narrate_mechid_review_message(
         "Keep the tone conversational and clinically precise, but frame this as an extraction summary rather than a consultant impression.\n"
         "Prefer wording like 'What I extracted so far' or 'What still needs confirmation' instead of 'My impression'.\n"
         "When the JSON already supports practical treatment options, frame them as treatment-relevant signals captured from the input rather than as a final recommendation.\n"
+        "If example outputs are provided, use them as style references only when they fit the same type of case. Do not copy unsupported claims.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 2 short paragraphs. Plain text only."
     )

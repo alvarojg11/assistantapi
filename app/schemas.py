@@ -445,6 +445,9 @@ class MechIDTrainerEvalCase(BaseModel):
     id: str
     text: str
     parser_strategy: str = Field(default="rule", alias="parserStrategy")
+    assistant_guidance: Optional[str] = Field(default=None, alias="assistantGuidance")
+    assistant_review_target: Optional[str] = Field(default=None, alias="assistantReviewTarget")
+    assistant_final_target: Optional[str] = Field(default=None, alias="assistantFinalTarget")
     expected_requires_confirmation: Optional[bool] = Field(default=None, alias="expectedRequiresConfirmation")
     expected_parsed: Optional[MechIDTrainerParsedExpectation] = Field(default=None, alias="expectedParsed")
     expected_analysis_present: Optional[bool] = Field(default=None, alias="expectedAnalysisPresent")
@@ -465,6 +468,9 @@ class MechIDTrainerEvalCase(BaseModel):
 class MechIDTrainerEvalPatch(BaseModel):
     id: Optional[str] = None
     parser_strategy: Optional[str] = Field(default=None, alias="parserStrategy")
+    assistant_guidance: Optional[str] = Field(default=None, alias="assistantGuidance")
+    assistant_review_target: Optional[str] = Field(default=None, alias="assistantReviewTarget")
+    assistant_final_target: Optional[str] = Field(default=None, alias="assistantFinalTarget")
     expected_requires_confirmation: Optional[bool] = Field(default=None, alias="expectedRequiresConfirmation")
     expected_parsed: Optional[MechIDTrainerParsedExpectation] = Field(default=None, alias="expectedParsed")
     expected_analysis_present: Optional[bool] = Field(default=None, alias="expectedAnalysisPresent")
@@ -485,6 +491,7 @@ class MechIDTrainerEvalPatch(BaseModel):
 class MechIDTrainerPreviewRequest(BaseModel):
     text: str = Field(min_length=1)
     correction_text: Optional[str] = Field(default=None, alias="correctionText")
+    recommendation_text: Optional[str] = Field(default=None, alias="recommendationText")
     parser_strategy: Literal["auto", "rule", "openai"] = Field(default="rule", alias="parserStrategy")
     parser_model: Optional[str] = Field(default=None, alias="parserModel")
     allow_fallback: bool = Field(default=True, alias="allowFallback")
@@ -501,6 +508,8 @@ class MechIDTrainerPreviewResponse(BaseModel):
     draft_case: MechIDTrainerEvalCase = Field(alias="draftCase")
     correction_applied: bool = Field(default=False, alias="correctionApplied")
     correction_warning: Optional[str] = Field(default=None, alias="correctionWarning")
+    recommendation_applied: bool = Field(default=False, alias="recommendationApplied")
+    recommendation_warning: Optional[str] = Field(default=None, alias="recommendationWarning")
 
     model_config = {"populate_by_name": True}
 

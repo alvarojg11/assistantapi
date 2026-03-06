@@ -273,6 +273,10 @@
         font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
       }
 
+      .target-editor {
+        min-height: 120px;
+      }
+
       @media (max-width: 1180px) {
         .workspace {
           grid-template-columns: 1fr;
@@ -310,6 +314,10 @@
               <label for="correctionText">Correct this in plain English</label>
               <textarea id="correctionText" placeholder="Example: This should be uncomplicated cystitis. It should mention nitrofurantoin and TMP-SMX as oral options. It should not act like pyelonephritis."></textarea>
             </div>
+            <div>
+              <label for="recommendationText">Recommendation guidance in plain English</label>
+              <textarea id="recommendationText" placeholder="Example: For cystitis, mention oral options first. If nitrofurantoin and TMP-SMX are susceptible, say those are the practical oral choices. Keep the review stage extraction-focused and make the final stage sound like an ID consultant."></textarea>
+            </div>
             <div class="row">
               <div>
                 <label for="parserStrategy">Parser strategy</label>
@@ -330,9 +338,15 @@
             </div>
             <div class="row">
               <button class="secondary" id="evaluateBtn">Evaluate Draft</button>
-              <div class="checkbox" style="align-self:end;">
-                <input type="checkbox" id="checkAssistant" />
-                <label for="checkAssistant" style="margin:0; font-weight:400;">Include assistant checks</label>
+              <div style="display:grid; gap:8px;">
+                <div class="checkbox" style="align-self:end;">
+                  <input type="checkbox" id="checkAssistant" />
+                  <label for="checkAssistant" style="margin:0; font-weight:400;">Include assistant checks</label>
+                </div>
+                <div class="checkbox" style="align-self:end;">
+                  <input type="checkbox" id="autoPreview" checked />
+                  <label for="autoPreview" style="margin:0; font-weight:400;">Auto-preview while typing</label>
+                </div>
               </div>
             </div>
             <div class="status" id="statusBox"></div>
@@ -352,6 +366,14 @@
               <div class="message" id="extractionSummary">Run a preview to see what the API extracted from the case text.</div>
             </div>
             <div class="card">
+              <h3>Assistant Review Preview</h3>
+              <div class="message" id="reviewPreview">Run a preview to see the assistant review-stage wording.</div>
+            </div>
+            <div class="card">
+              <h3>Assistant Final Preview</h3>
+              <div class="message" id="finalPreview">Run a preview to see the final consultant-style wording.</div>
+            </div>
+            <div class="card">
               <h3>Structured MechID Result</h3>
               <pre id="rawResult">{}</pre>
             </div>
@@ -361,6 +383,15 @@
         <section class="panel">
           <h2>Eval Draft</h2>
           <p class="sub">This is what gets written to the MechID evaluator dataset. You can edit the JSON directly before saving.</p>
+          <div class="card">
+            <h3>Saved Assistant Guidance</h3>
+            <label for="assistantGuidance" style="margin-top:8px;">Guidance note</label>
+            <textarea class="target-editor" id="assistantGuidance" placeholder="Optional high-level note you want the assistant to learn from this case."></textarea>
+            <label for="assistantReviewTarget" style="margin-top:12px;">Review-stage target</label>
+            <textarea class="target-editor" id="assistantReviewTarget" placeholder="Optional review-stage wording you want saved for similar future cases."></textarea>
+            <label for="assistantFinalTarget" style="margin-top:12px;">Final-stage target</label>
+            <textarea class="target-editor" id="assistantFinalTarget" placeholder="Optional final assistant wording you want saved for similar future cases."></textarea>
+          </div>
           <div class="card">
             <h3>Draft JSON</h3>
             <textarea class="json-editor" id="draftEditor">{}</textarea>
@@ -380,22 +411,32 @@
     <script>
       const rawTextEl = document.getElementById("rawText");
       const correctionTextEl = document.getElementById("correctionText");
+      const recommendationTextEl = document.getElementById("recommendationText");
       const parserStrategyEl = document.getElementById("parserStrategy");
       const allowFallbackEl = document.getElementById("allowFallback");
       const previewBtn = document.getElementById("previewBtn");
       const saveBtn = document.getElementById("saveBtn");
       const evaluateBtn = document.getElementById("evaluateBtn");
       const checkAssistantEl = document.getElementById("checkAssistant");
+      const autoPreviewEl = document.getElementById("autoPreview");
       const statusBox = document.getElementById("statusBox");
       const caseListEl = document.getElementById("caseList");
       const extractionSummaryEl = document.getElementById("extractionSummary");
+      const reviewPreviewEl = document.getElementById("reviewPreview");
+      const finalPreviewEl = document.getElementById("finalPreview");
       const rawResultEl = document.getElementById("rawResult");
       const draftEditorEl = document.getElementById("draftEditor");
       const saveMessageEl = document.getElementById("saveMessage");
       const evalMessageEl = document.getElementById("evalMessage");
+      const assistantGuidanceEl = document.getElementById("assistantGuidance");
+      const assistantReviewTargetEl = document.getElementById("assistantReviewTarget");
+      const assistantFinalTargetEl = document.getElementById("assistantFinalTarget");
       const parserPill = document.getElementById("parserPill");
       const confirmPill = document.getElementById("confirmPill");
       const narrationPill = document.getElementById("narrationPill");
+      let previewTimer = null;
+      let lastServerReviewPreview = "";
+      let lastServerFinalPreview = "";
 
       function setStatus(text, tone = "ok") {
         statusBox.textContent = text;
@@ -409,6 +450,41 @@
 
       function pretty(value) {
         return JSON.stringify(value, null, 2);
+      }
+
+      function syncAssistantFieldsFromDraft(draft) {
+        assistantGuidanceEl.value = draft.assistantGuidance || "";
+        assistantReviewTargetEl.value = draft.assistantReviewTarget || "";
+        assistantFinalTargetEl.value = draft.assistantFinalTarget || "";
+      }
+
+      function mergeAssistantFieldsIntoDraft(draft) {
+        draft.assistantGuidance = assistantGuidanceEl.value.trim() || null;
+        draft.assistantReviewTarget = assistantReviewTargetEl.value.trim() || null;
+        draft.assistantFinalTarget = assistantFinalTargetEl.value.trim() || null;
+        return draft;
+      }
+
+      function refreshDraftEditorAssistantFields() {
+        try {
+          const draft = JSON.parse(draftEditorEl.value || "{}");
+          draftEditorEl.value = pretty(mergeAssistantFieldsIntoDraft(draft));
+        } catch (_err) {
+          // Leave invalid JSON untouched until the user fixes it.
+        }
+      }
+
+      function refreshPreviewFromTargets() {
+        reviewPreviewEl.textContent = assistantReviewTargetEl.value.trim() || lastServerReviewPreview || "Run a preview to see the assistant review-stage wording.";
+        finalPreviewEl.textContent = assistantFinalTargetEl.value.trim() || lastServerFinalPreview || "Run a preview to see the final consultant-style wording.";
+      }
+
+      function schedulePreview() {
+        if (!autoPreviewEl.checked) return;
+        if (previewTimer) window.clearTimeout(previewTimer);
+        previewTimer = window.setTimeout(() => {
+          runPreview();
+        }, 650);
       }
 
       function joinReadable(values) {
@@ -547,8 +623,13 @@
           }
           rawTextEl.value = body.text || "";
           correctionTextEl.value = "";
+          recommendationTextEl.value = body.assistantGuidance || "";
           parserStrategyEl.value = body.parserStrategy || "rule";
-          draftEditorEl.value = pretty(body);
+          syncAssistantFieldsFromDraft(body);
+          draftEditorEl.value = pretty(mergeAssistantFieldsIntoDraft(body));
+          lastServerReviewPreview = body.assistantReviewTarget || "";
+          lastServerFinalPreview = body.assistantFinalTarget || "";
+          refreshPreviewFromTargets();
           saveMessageEl.textContent = `Loaded ${body.id}. Click Run Preview to regenerate API output from the saved text, or edit the draft JSON directly.`;
           setStatus(`Loaded ${body.id}.`, "ok");
         } catch (err) {
@@ -598,6 +679,8 @@
       async function runPreview() {
         clearStatus();
         extractionSummaryEl.textContent = "Working...";
+        reviewPreviewEl.textContent = "Working...";
+        finalPreviewEl.textContent = "Working...";
         rawResultEl.textContent = "{}";
         try {
           const resp = await fetch("/v1/trainer/mechid/preview", {
@@ -606,6 +689,7 @@
             body: JSON.stringify({
               text: rawTextEl.value,
               correctionText: correctionTextEl.value,
+              recommendationText: recommendationTextEl.value,
               parserStrategy: parserStrategyEl.value,
               allowFallback: allowFallbackEl.checked
             })
@@ -616,14 +700,23 @@
           }
 
           extractionSummaryEl.textContent = buildExtractionSummary(body.mechidResult || {});
+          lastServerReviewPreview = body.assistantReviewMessage || "";
+          lastServerFinalPreview = body.assistantFinalMessage || "";
+          reviewPreviewEl.textContent = lastServerReviewPreview;
+          finalPreviewEl.textContent = lastServerFinalPreview;
           rawResultEl.textContent = pretty(body.mechidResult || {});
-          draftEditorEl.value = pretty(body.draftCase || {});
+          syncAssistantFieldsFromDraft(body.draftCase || {});
+          draftEditorEl.value = pretty(mergeAssistantFieldsIntoDraft(body.draftCase || {}));
           parserPill.textContent = `parser: ${body.mechidResult?.parser || "-"}`;
           confirmPill.textContent = `confirmation: ${body.mechidResult?.requiresConfirmation ? "yes" : "no"}`;
           narrationPill.textContent = `narration: review ${body.assistantReviewRefined ? "refined" : "deterministic"} / final ${body.assistantFinalRefined ? "refined" : "deterministic"}`;
 
           if (body.correctionWarning) {
             setStatus(body.correctionWarning, "warn");
+          } else if (body.recommendationWarning) {
+            setStatus(body.recommendationWarning, "warn");
+          } else if (body.recommendationApplied) {
+            setStatus("Recommendation guidance translated into assistant targets.", "ok");
           } else if (body.correctionApplied) {
             setStatus("Correction note translated into the draft case.", "ok");
           } else {
@@ -631,6 +724,8 @@
           }
         } catch (err) {
           extractionSummaryEl.textContent = "Preview failed.";
+          reviewPreviewEl.textContent = "Preview failed.";
+          finalPreviewEl.textContent = "Preview failed.";
           setStatus(err.message || "Preview failed.", "warn");
         }
       }
@@ -640,6 +735,8 @@
         let draft;
         try {
           draft = JSON.parse(draftEditorEl.value);
+          draft = mergeAssistantFieldsIntoDraft(draft);
+          draftEditorEl.value = pretty(draft);
         } catch (err) {
           setStatus(`Draft JSON is invalid: ${err.message}`, "warn");
           return;
@@ -668,6 +765,8 @@
         let draft;
         try {
           draft = JSON.parse(draftEditorEl.value);
+          draft = mergeAssistantFieldsIntoDraft(draft);
+          draftEditorEl.value = pretty(draft);
         } catch (err) {
           setStatus(`Draft JSON is invalid: ${err.message}`, "warn");
           return;
@@ -715,6 +814,20 @@
       previewBtn.addEventListener("click", runPreview);
       saveBtn.addEventListener("click", saveDraft);
       evaluateBtn.addEventListener("click", evaluateDraft);
+      rawTextEl.addEventListener("input", schedulePreview);
+      correctionTextEl.addEventListener("input", schedulePreview);
+      recommendationTextEl.addEventListener("input", schedulePreview);
+      assistantGuidanceEl.addEventListener("input", () => {
+        refreshDraftEditorAssistantFields();
+      });
+      assistantReviewTargetEl.addEventListener("input", () => {
+        refreshDraftEditorAssistantFields();
+        refreshPreviewFromTargets();
+      });
+      assistantFinalTargetEl.addEventListener("input", () => {
+        refreshDraftEditorAssistantFields();
+        refreshPreviewFromTargets();
+      });
       refreshCaseList();
       runPreview();
     </script>

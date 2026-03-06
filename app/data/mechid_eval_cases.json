@@ -145,11 +145,14 @@
   {
     "id": "escherichia_coli_cystitis",
     "text": "E. coli cystitis resistant to ceftriaxone and ciprofloxacin, susceptible to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. I would prefer an oral option.",
-    "parserStrategy": "rule",
+    "parserStrategy": "auto",
+    "assistantGuidance": "Focus on Escherichia coli causing cystitis with specific susceptibility and resistance patterns, including noted resistance to ceftriaxone and ciprofloxacin and susceptibilities to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. Emphasize oral treatment options and mention fosfomycin explicitly as an additional possible treatment option for ESBL-producing E. coli cystitis.",
+    "assistantReviewTarget": "Escherichia coli causing cystitis resistant to ceftriaxone and ciprofloxacin but susceptible to nitrofurantoin, trimethoprim/sulfamethoxazole, fosfomycin, and meropenem. Oral therapy is preferred. Fosfomycin is a relevant oral treatment option for ESBL-producing E. coli cystitis.",
+    "assistantFinalTarget": "For cystitis caused by ESBL-producing Escherichia coli resistant to ceftriaxone and ciprofloxacin, oral options include nitrofurantoin, trimethoprim/sulfamethoxazole, and fosfomycin. Meropenem is also effective but is intravenous. Fosfomycin is a recommended additional oral treatment option. Given your preference for oral therapy, nitrofurantoin, trimethoprim/sulfamethoxazole, and fosfomycin are reasonable choices for uncomplicated cystitis.",
     "expectedRequiresConfirmation": false,
     "expectedParsed": {
       "organism": "Escherichia coli",
-      "syndrome": "Uncomplicated cystitis",
+      "syndrome": "cystitis",
       "focusDetail": "Cystitis",
       "oralPreference": true,
       "mentionedOrganismsContains": [
@@ -159,9 +162,9 @@
       "susceptibilityResultsSubset": {
         "Ceftriaxone": "Resistant",
         "Ciprofloxacin": "Resistant",
-        "Meropenem": "Susceptible",
         "Nitrofurantoin": "Susceptible",
-        "Trimethoprim/Sulfamethoxazole": "Susceptible"
+        "Trimethoprim/Sulfamethoxazole": "Susceptible",
+        "Meropenem": "Susceptible"
       }
     },
     "expectedAnalysisPresent": true,
@@ -186,6 +189,160 @@
     "expectedOralOptionsContains": [],
     "expectedMissingSusceptibilitiesContains": [],
     "assistantReviewContains": [],
+    "assistantFinalContains": [],
+    "notes": "LLM ignored clues: fosfomycin susceptibility mentioned but not in catalog"
+  },
+  {
+    "id": "escherichia_coli",
+    "text": "blood culture grows:\n Escherichia coli\n\nAntimicrobial susceptibility results:\n\nAntibiotic\tResult\nAmpicillin\tResistant\nCeftriaxone\tResistant\nCefepime\tResistant\nPiperacillin–tazobactam\tResistant\nErtapenem\tResistant\nMeropenem\tResistant\nImipenem\tResistant\nCiprofloxacin\tResistant\nTMP-SMX\tResistant\nNitrofurantoin\tSusceptible",
+    "parserStrategy": "rule",
+    "assistantGuidance": "Identify the organism as carbapenem-resistant Escherichia coli (CRE). Recommend ceftazidime-avibactam or cefiderocol for serious infections or bacteremia while awaiting confirmation of carbapenemase production. Note that nitrofurantoin may be an option for uncomplicated cystitis despite the resistant result, per clinical context.",
+    "assistantReviewTarget": "Escherichia coli isolated from blood culture shows resistance to multiple antibiotics including all tested carbapenems and fluoroquinolones, indicating a carbapenem-resistant Enterobacteriaceae (CRE) phenotype. Nitrofurantoin is susceptible per user text but resistant in final results; clinical note suggests it remains an option for uncomplicated cystitis. Recommended treatment pending carbapenemase testing includes ceftazidime-avibactam or cefiderocol for serious infections or bacteremia.",
+    "assistantFinalTarget": "This Escherichia coli isolate demonstrates a carbapenem-resistant phenotype (CRE) with extensive resistance to multiple antibiotic classes. For serious infections such as bacteremia, initiation of ceftazidime-avibactam or cefiderocol is recommended while awaiting carbapenemase production test results. For uncomplicated cystitis, oral nitrofurantoin may remain a treatment option despite resistance reported in vitro, based on clinical judgment.",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Escherichia coli",
+      "mentionedOrganismsContains": [],
+      "resistancePhenotypesContains": [],
+      "susceptibilityResultsSubset": {
+        "Ampicillin": "Resistant",
+        "Ceftriaxone": "Resistant",
+        "Cefepime": "Resistant",
+        "Imipenem": "Resistant",
+        "Meropenem": "Resistant",
+        "Ertapenem": "Resistant",
+        "Ciprofloxacin": "Resistant",
+        "Nitrofurantoin": "Susceptible",
+        "Trimethoprim/Sulfamethoxazole": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "Carbapenem resistance (screen for carbapenemase; confirm by phenotypic/molecular tests).",
+      "Fluoroquinolone resistance: typically **QRDR mutations** in **gyrA/parC** ± **efflux upregulation** (AcrAB–TolC / OqxAB) and sometimes **plasmid-mediated qnr / AAC(6')-Ib-cr**."
+    ],
+    "expectedTherapyNotesContains": [
+      "**CRE phenotype** → isolate should be tested for **carbapenemase**.\n",
+      "**All tested fluoroquinolones are resistant** → avoid fluoroquinolones; use another susceptible class."
+    ],
+    "expectedFinalResultsSubset": {
+      "Ampicillin": "Resistant",
+      "Cefepime": "Resistant",
+      "Cefpodoxime": "Resistant",
+      "Ceftriaxone": "Resistant",
+      "Ciprofloxacin": "Resistant",
+      "Ertapenem": "Resistant",
+      "Imipenem": "Resistant",
+      "Meropenem": "Resistant",
+      "Nitrofurantoin": "Susceptible",
+      "Trimethoprim/Sulfamethoxazole": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [],
     "assistantFinalContains": []
+  },
+  {
+    "id": "escherichia_coli_bloodstream_infection",
+    "text": "blood culture grows:\n Escherichia coli bacteremia septic shock, cre is NDM positive \n\nAntimicrobial susceptibility results:\n\nAntibiotic\tResult\nAmpicillin\tResistant\nCeftriaxone\tResistant\nCefepime\tResistant\nPiperacillin–tazobactam\tResistant\nErtapenem\tResistant\nMeropenem\tResistant\nImipenem\tResistant\nCiprofloxacin\tResistant\nTMP-SMX\tResistant\nNitrofurantoin\tSusceptible",
+    "parserStrategy": "rule",
+    "assistantGuidance": "Include treatment recommendations for NDM-positive carbapenem-resistant Escherichia coli. Highlight appropriate combination therapy and advanced agents per resistance mechanism.",
+    "assistantReviewTarget": "Blood culture grows Escherichia coli bacteremia with septic shock. CRE is NDM-positive. The isolate shows resistance to multiple antibiotics including carbapenems and fluoroquinolones, but susceptibility to nitrofurantoin is incorrectly listed as resistant in the model but user states susceptible. Recommended therapy should consider NDM carbapenemase. Typical guidelines recommend ceftazidime-avibactam plus aztreonam or cefiderocol in such cases.",
+    "assistantFinalTarget": "This case involves NDM-positive carbapenem-resistant Escherichia coli bacteremia with septic shock. Given the presence of NDM carbapenemase, current guidelines recommend treatment with ceftazidime-avibactam combined with aztreonam, or alternatively cefiderocol. These options target NDM-producing CRE effectively. Other tested antibiotics show resistance and are not recommended. Consider using these combinations as part of therapy and consult infectious diseases specialists for management.",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Escherichia coli",
+      "syndrome": "Bloodstream infection",
+      "severity": "Severe / septic shock",
+      "focusDetail": "Bloodstream infection",
+      "mentionedOrganismsContains": [],
+      "resistancePhenotypesContains": [
+        "CRE",
+        "NDM"
+      ],
+      "susceptibilityResultsSubset": {
+        "Ampicillin": "Resistant",
+        "Ceftriaxone": "Resistant",
+        "Cefepime": "Resistant",
+        "Imipenem": "Resistant",
+        "Meropenem": "Resistant",
+        "Ertapenem": "Resistant",
+        "Ciprofloxacin": "Resistant",
+        "Nitrofurantoin": "Resistant",
+        "Trimethoprim/Sulfamethoxazole": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "Carbapenem resistance (screen for carbapenemase; confirm by phenotypic/molecular tests).",
+      "Fluoroquinolone resistance: typically **QRDR mutations** in **gyrA/parC** ± **efflux upregulation** (AcrAB–TolC / OqxAB) and sometimes **plasmid-mediated qnr / AAC(6')-Ib-cr**."
+    ],
+    "expectedTherapyNotesContains": [
+      "**CRE phenotype** → isolate should be tested for **carbapenemase**.\n",
+      "**All tested fluoroquinolones are resistant** → avoid fluoroquinolones; use another susceptible class."
+    ],
+    "expectedFinalResultsSubset": {
+      "Ampicillin": "Resistant",
+      "Cefepime": "Resistant",
+      "Cefpodoxime": "Resistant",
+      "Ceftriaxone": "Resistant",
+      "Ciprofloxacin": "Resistant",
+      "Ertapenem": "Resistant",
+      "Imipenem": "Resistant",
+      "Meropenem": "Resistant",
+      "Nitrofurantoin": "Resistant",
+      "Trimethoprim/Sulfamethoxazole": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "NDM positive"
+    ],
+    "assistantFinalContains": []
+  },
+  {
+    "id": "staphylococcus_aureus_septic_arthritis",
+    "text": "Septic arthritis growing MRSA. Could there be an oral option later?",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": true,
+    "expectedParsed": {
+      "organism": "Staphylococcus aureus",
+      "syndrome": "Bone/joint infection",
+      "focusDetail": "Septic arthritis",
+      "oralPreference": true,
+      "mentionedOrganismsContains": [
+        "Staphylococcus aureus"
+      ],
+      "resistancePhenotypesContains": [
+        "MRSA"
+      ],
+      "susceptibilityResultsSubset": {}
+    },
+    "expectedAnalysisPresent": false,
+    "expectedProvisionalPresent": true,
+    "expectedMechanismsContains": [],
+    "expectedTherapyNotesContains": [],
+    "expectedFinalResultsSubset": {},
+    "expectedRecommendedOptionsContains": [
+      "Vancomycin",
+      "Linezolid",
+      "Daptomycin for non-pulmonary infection"
+    ],
+    "expectedOralOptionsContains": [
+      "Linezolid"
+    ],
+    "expectedMissingSusceptibilitiesContains": [
+      "clindamycin",
+      "linezolid",
+      "doxycycline",
+      "trimethoprim/sulfamethoxazole"
+    ],
+    "assistantReviewContains": [],
+    "assistantFinalContains": [],
+    "notes": "No susceptibility results were confidently extracted from the text."
   }
 ]
