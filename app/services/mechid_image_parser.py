@@ -40,6 +40,8 @@ def _build_image_instructions(catalog: Dict[str, object]) -> str:
         "Normalize susceptibility values to exactly one of: Susceptible, Intermediate, Resistant.\n"
         "Map shorthand such as S, I, R only when the image clearly supports that reading.\n"
         "If a value is blurry or ambiguous, omit it and mention the ambiguity instead of guessing.\n"
+        "Some reports visually place carbapenemase assay rows in the same table as antibiotics. If you see rows like KPC, NDM, VIM, IMP, OXA48, MBL, carbapenemase, or CP-CRE, do not place them in susceptibilityResults.\n"
+        "Instead, map them to carbapenemaseResult and carbapenemaseClass.\n"
         "Use only organism names and antibiotics present in the provided catalog.\n"
         "If syndrome, site detail, or severity appears in the image, capture it. Otherwise use 'Not specified'.\n"
         "Set oralPreference to true only if the image or surrounding context explicitly asks for oral therapy.\n"

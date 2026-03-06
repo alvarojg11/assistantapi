@@ -128,6 +128,19 @@ def _canonicalize_carbapenemase_class(raw_value: object) -> str:
     return "Not specified"
 
 
+def _embedded_carbapenemase_row(raw_name: str, raw_state: ASTResult) -> tuple[str, str] | None:
+    row = str(raw_name or "").strip()
+    if not row:
+        return None
+    inferred_class = _canonicalize_carbapenemase_class(row)
+    if inferred_class != "Not specified":
+        return "Positive", inferred_class
+    lowered = row.lower()
+    if any(token in lowered for token in ("carbapenemase", "cp-cre", "cp cre")):
+        return "Positive", "Not specified"
+    return None
+
+
 def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, object]:
     warnings: List[str] = []
     organism = payload.organism
@@ -162,6 +175,17 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
 
     if organism:
         for raw_name, raw_state in payload.susceptibility_results.items():
+            embedded_carb = _embedded_carbapenemase_row(raw_name, raw_state)
+            if embedded_carb is not None:
+                inferred_result, inferred_class = embedded_carb
+                if tx_context["carbapenemaseResult"] == "Not specified":
+                    tx_context["carbapenemaseResult"] = inferred_result
+                if tx_context["carbapenemaseClass"] == "Not specified" and inferred_class != "Not specified":
+                    tx_context["carbapenemaseClass"] = inferred_class
+                warnings.append(
+                    f"Interpreted '{raw_name}' as a carbapenemase result row rather than an antibiotic AST entry."
+                )
+                continue
             antibiotic = resolve_antibiotic_name(organism, raw_name)
             if antibiotic is None:
                 warnings.append(f"Ignored unsupported antibiotic for {organism}: {raw_name}")
