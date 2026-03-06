@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional
 
-from .mechid_engine import canonical_antibiotic_aliases, list_mechid_organisms, normalize_organism
+from .mechid_engine import canonical_antibiotic_aliases, list_mechid_organisms, normalize_organism, resolve_antibiotic_name
 
 
 SUSC_STATES = {
@@ -44,10 +44,23 @@ PHENOTYPE_HINTS = {
     "esbl": "ESBL",
     "cre": "CRE",
     "kpc": "KPC carbapenemase",
+    "blakpc": "KPC carbapenemase",
+    "bla kpc": "KPC carbapenemase",
     "ndm": "NDM carbapenemase",
+    "blandm": "NDM carbapenemase",
+    "bla ndm": "NDM carbapenemase",
     "vim": "VIM carbapenemase",
+    "blavim": "VIM carbapenemase",
+    "bla vim": "VIM carbapenemase",
+    "imp": "IMP carbapenemase",
+    "blaimp": "IMP carbapenemase",
+    "bla imp": "IMP carbapenemase",
     "oxa-48": "OXA-48-like carbapenemase",
     "oxa 48": "OXA-48-like carbapenemase",
+    "oxa48": "OXA-48-like carbapenemase",
+    "oxa48-like": "OXA-48-like carbapenemase",
+    "oxa 48 like": "OXA-48-like carbapenemase",
+    "mbl": "MBL carbapenemase",
 }
 
 SYNDROME_HINTS = (
@@ -177,19 +190,36 @@ def _extract_state_segments(text_norm: str) -> Dict[str, str]:
 def _extract_antibiotic_results(text_norm: str, organism: str) -> Dict[str, str]:
     aliases = canonical_antibiotic_aliases(organism)
     findings: Dict[str, str] = {}
+    ordered_aliases = sorted(aliases.items(), key=lambda item: len(item[0]), reverse=True)
+
+    def _segment_matches(segment: str) -> List[str]:
+        matches: List[tuple[int, int, str]] = []
+        for alias, antibiotic in ordered_aliases:
+            for match in re.finditer(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", segment):
+                start, end = match.span()
+                if any(existing_start <= start and end <= existing_end for existing_start, existing_end, _ in matches):
+                    continue
+                matches.append((start, end, antibiotic))
+                break
+        matches.sort(key=lambda item: item[0])
+        deduped: List[str] = []
+        for _, _, antibiotic in matches:
+            if antibiotic not in deduped:
+                deduped.append(antibiotic)
+        return deduped
 
     for segment, state in _extract_state_segments(text_norm).items():
-        for alias, antibiotic in aliases.items():
-            if re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", segment):
-                findings[antibiotic] = state
+        for antibiotic in _segment_matches(segment):
+            findings[antibiotic] = state
 
-    for alias, antibiotic in aliases.items():
+    for alias, _antibiotic in ordered_aliases:
         pattern = re.compile(
             rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])(?:\s+(?:is|was|reported as))?\s+(susceptible|sensitive|intermediate|resistant)\b"
         )
         for match in pattern.finditer(text_norm):
             state = SUSC_STATES.get(match.group(1))
-            if state:
+            antibiotic = resolve_antibiotic_name(organism, alias)
+            if state and antibiotic:
                 findings[antibiotic] = state
 
         reverse = re.compile(
@@ -197,7 +227,8 @@ def _extract_antibiotic_results(text_norm: str, organism: str) -> Dict[str, str]
         )
         for match in reverse.finditer(text_norm):
             state = SUSC_STATES.get(match.group(1))
-            if state:
+            antibiotic = resolve_antibiotic_name(organism, alias)
+            if state and antibiotic:
                 findings[antibiotic] = state
     return findings
 
@@ -236,11 +267,11 @@ def _infer_tx_context(text_norm: str) -> Dict[str, str]:
         carbapenemase_result = "Positive"
 
     class_patterns = (
-        (r"\bkpc\b", "KPC"),
-        (r"\boxa(?:[- ]?48(?:-like)?)\b", "OXA-48-like"),
-        (r"\bndm\b", "NDM"),
-        (r"\bvim\b", "VIM"),
-        (r"\bimp\b", "IMP"),
+        (r"\b(?:bla[- ]?)?kpc\b", "KPC"),
+        (r"\boxa(?:[- ]?48(?:[- ]?like)?)\b|\boxa48(?:[- ]?like)?\b", "OXA-48-like"),
+        (r"\b(?:bla[- ]?)?ndm\b", "NDM"),
+        (r"\b(?:bla[- ]?)?vim\b", "VIM"),
+        (r"\b(?:bla[- ]?)?imp(?:[- ]?type)?\b", "IMP"),
     )
     for pattern, label in class_patterns:
         if re.search(pattern, text_norm):

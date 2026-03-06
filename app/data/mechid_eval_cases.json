@@ -347,5 +347,192 @@
     "assistantReviewContains": [],
     "assistantFinalContains": [],
     "notes": "No susceptibility results were confidently extracted from the text."
+  },
+  {
+    "id": "klebsiella_carbapenem_discordance",
+    "text": "Klebsiella pneumoniae resistant to meropenem, susceptible to imipenem and ceftazidime/avibactam. Which antibiotic would you use?",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Klebsiella pneumoniae",
+      "mentionedOrganismsContains": [
+        "Klebsiella pneumoniae"
+      ],
+      "susceptibilityResultsSubset": {
+        "Meropenem": "Resistant",
+        "Imipenem": "Susceptible",
+        "Ceftazidime/Avibactam": "Susceptible"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "Discordant carbapenem pattern: Meropenem resistant but Imipenem susceptible."
+    ],
+    "expectedTherapyNotesContains": [
+      "avoid relying on Imipenem or Meropenem alone when Meropenem is resistant"
+    ],
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Resistant",
+      "Imipenem": "Susceptible",
+      "Ceftazidime/Avibactam": "Susceptible"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "Ceftazidime/Avibactam susceptible"
+    ],
+    "assistantFinalContains": [
+      "avoid relying on Imipenem or Meropenem alone"
+    ]
+  },
+  {
+    "id": "klebsiella_caz_avi_alias",
+    "text": "Klebsiella pneumoniae Avycaz susceptible, meropenem resistant. What would you recommend?",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Klebsiella pneumoniae",
+      "mentionedOrganismsContains": [
+        "Klebsiella pneumoniae"
+      ],
+      "susceptibilityResultsSubset": {
+        "Ceftazidime/Avibactam": "Susceptible",
+        "Meropenem": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [],
+    "expectedTherapyNotesContains": [],
+    "expectedFinalResultsSubset": {
+      "Ceftazidime/Avibactam": "Susceptible",
+      "Meropenem": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "Ceftazidime/Avibactam susceptible"
+    ],
+    "assistantFinalContains": []
+  },
+  {
+    "id": "kpc_text_label",
+    "text": "Klebsiella pneumoniae KPC producer, carbapenemase positive, resistant to meropenem.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Klebsiella pneumoniae",
+      "carbapenemaseResult": "Positive",
+      "carbapenemaseClass": "KPC",
+      "susceptibilityResultsSubset": {
+        "Meropenem": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "KPC carbapenemase detected."
+    ],
+    "expectedTherapyNotesContains": [
+      "Meropenem/Vaborbactam",
+      "Ceftazidime/Avibactam"
+    ],
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "positive (KPC)"
+    ],
+    "assistantFinalContains": []
+  },
+  {
+    "id": "oxa48_text_label",
+    "text": "Klebsiella pneumoniae OXA48-like carbapenemase detected, meropenem resistant.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Klebsiella pneumoniae",
+      "carbapenemaseResult": "Positive",
+      "carbapenemaseClass": "OXA-48-like",
+      "susceptibilityResultsSubset": {
+        "Meropenem": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedMechanismsContains": [
+      "OXA-48-like carbapenemase detected."
+    ],
+    "expectedTherapyNotesContains": [
+      "Ceftazidime/Avibactam"
+    ],
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "positive (OXA-48-like)"
+    ],
+    "assistantFinalContains": []
+  },
+  {
+    "id": "vim_text_label",
+    "text": "Pseudomonas aeruginosa VIM positive metallo-beta-lactamase, carbapenemase positive, meropenem resistant.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Pseudomonas aeruginosa",
+      "carbapenemaseResult": "Positive",
+      "carbapenemaseClass": "VIM",
+      "susceptibilityResultsSubset": {
+        "Meropenem": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "positive (VIM)"
+    ],
+    "assistantFinalContains": []
+  },
+  {
+    "id": "imp_text_label",
+    "text": "Serratia marcescens blaIMP carbapenemase positive with meropenem resistant isolate.",
+    "parserStrategy": "rule",
+    "expectedRequiresConfirmation": false,
+    "expectedParsed": {
+      "organism": "Serratia marcescens",
+      "carbapenemaseResult": "Positive",
+      "carbapenemaseClass": "IMP",
+      "susceptibilityResultsSubset": {
+        "Meropenem": "Resistant"
+      }
+    },
+    "expectedAnalysisPresent": true,
+    "expectedProvisionalPresent": false,
+    "expectedFinalResultsSubset": {
+      "Meropenem": "Resistant"
+    },
+    "expectedRecommendedOptionsContains": [],
+    "expectedOralOptionsContains": [],
+    "expectedMissingSusceptibilitiesContains": [],
+    "assistantReviewContains": [
+      "positive (IMP)"
+    ],
+    "assistantFinalContains": []
   }
 ]

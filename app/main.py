@@ -3150,6 +3150,16 @@ def _friendly_mechid_therapy(
         return None
 
     def _select_preferred_agent(susceptible_agents: list[str]) -> str | None:
+        carbapenem_agents = {"Meropenem", "Imipenem", "Ertapenem", "Doripenem"}
+        carbapenem_resistance_present = any(
+            (provided_results or result.final_results).get(agent) == "Resistant"
+            for agent in carbapenem_agents
+        )
+        if carbapenem_resistance_present:
+            non_carbapenems = [agent for agent in susceptible_agents if agent not in carbapenem_agents]
+            if non_carbapenems:
+                return non_carbapenems[0]
+            return None
         for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
             if candidate in susceptible_agents:
                 return candidate
@@ -3172,6 +3182,26 @@ def _friendly_mechid_therapy(
             return (
                 "Based on the susceptibilities you gave me, "
                 f"{selected_note_local[0].lower() + selected_note_local[1:].rstrip('.') }."
+            )
+        carbapenem_agents = {"Meropenem", "Imipenem", "Ertapenem", "Doripenem"}
+        carbapenem_resistant = [
+            agent
+            for agent in carbapenem_agents
+            if (provided_results or result.final_results).get(agent) == "Resistant"
+        ]
+        carbapenem_susceptible = [
+            agent
+            for agent in carbapenem_agents
+            if (provided_results or result.final_results).get(agent) == "Susceptible"
+        ]
+        if carbapenem_resistant and carbapenem_susceptible:
+            return (
+                "Because there is discordant carbapenem susceptibility, I would avoid relying on imipenem or meropenem alone "
+                "and would favor another confirmed active agent or a newer CRE-directed option if the mechanism supports it."
+            )
+        if carbapenem_resistant and not preferred_local:
+            return (
+                "Because a carbapenem is resistant here, I would avoid defaulting to meropenem or imipenem and would look for another confirmed active agent."
             )
         if preferred_local is not None:
             if severity_local == "Severe / septic shock":

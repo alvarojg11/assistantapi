@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field
 
 from .llm_text_parser import LLMParserError, _extract_json, _try_import_openai
-from .mechid_engine import canonical_antibiotic_aliases, list_mechid_organisms, normalize_organism
+from .mechid_engine import canonical_antibiotic_aliases, list_mechid_organisms, normalize_organism, resolve_antibiotic_name
 from .mechid_text_parser import parse_mechid_text
 
 
@@ -72,6 +73,7 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "Set oralPreference to true only if the user is explicitly asking for oral therapy, oral step-down, or PO options.\n"
         "Use carbapenemaseResult when the text explicitly says carbapenemase testing is positive, negative, pending, or not tested.\n"
         "Use carbapenemaseClass only when the text explicitly names a class such as KPC, OXA-48-like, NDM, VIM, or IMP.\n"
+        "Normalize common variants such as OXA48, OXA 48, OXA-48, OXA-48-like, KPC producer, NDM positive, VIM positive, IMP positive, blaKPC, blaNDM, blaVIM, blaIMP, and MBL/metallo-beta-lactamase.\n"
         "Preserve as many explicitly stated AST calls as possible.\n"
         "Set confidence to low when the organism or the AST pattern is ambiguous.\n"
         "Use ambiguities for details that could support multiple interpretations.\n"
@@ -82,6 +84,48 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "CATALOG:\n"
         + json.dumps(catalog, ensure_ascii=True)
     )
+
+
+def _canonicalize_carbapenemase_result(raw_value: object) -> str:
+    text = str(raw_value or "").strip().lower()
+    if not text or text == "not specified":
+        return "Not specified"
+    if any(token in text for token in ("positive", "detected", "present", "producer", "producing")):
+        return "Positive"
+    if any(token in text for token in ("negative", "not detected")):
+        return "Negative"
+    if any(token in text for token in ("pending", "not tested", "not done")):
+        return "Not tested / pending"
+    return "Not specified"
+
+
+def _canonicalize_carbapenemase_class(raw_value: object) -> str:
+    text = str(raw_value or "").strip().lower()
+    if not text or text == "not specified":
+        return "Not specified"
+    normalized = text.replace("_", " ").replace("/", " ").replace(".", " ")
+    normalized = " ".join(normalized.split())
+    if any(token in normalized for token in ("blakpc", "bla kpc")):
+        return "KPC"
+    if "kpc" in normalized:
+        return "KPC"
+    if any(token in normalized for token in ("bla ndm", "blandm")):
+        return "NDM"
+    if "ndm" in normalized:
+        return "NDM"
+    if any(token in normalized for token in ("bla vim", "blavim")):
+        return "VIM"
+    if "vim" in normalized:
+        return "VIM"
+    if any(token in normalized for token in ("bla imp", "blaimp")):
+        return "IMP"
+    if re.search(r"\bimp(?:[- ]type)?\b", normalized):
+        return "IMP"
+    if re.search(r"\boxa(?:[- ]?48(?:[- ]?like)?)\b", normalized) or "oxa48" in normalized:
+        return "OXA-48-like"
+    if any(token in normalized for token in ("mbl", "metallo beta lactamase", "metallo-beta-lactamase")):
+        return "Other / Unknown"
+    return "Not specified"
 
 
 def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, object]:
@@ -95,9 +139,11 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         "severity": payload.tx_context.get("severity", "Not specified") or "Not specified",
         "focusDetail": payload.tx_context.get("focusDetail", "Not specified") or "Not specified",
         "oralPreference": bool(payload.tx_context.get("oralPreference", False)),
-        "carbapenemaseResult": payload.tx_context.get("carbapenemaseResult", "Not specified") or "Not specified",
-        "carbapenemaseClass": payload.tx_context.get("carbapenemaseClass", "Not specified") or "Not specified",
+        "carbapenemaseResult": _canonicalize_carbapenemase_result(payload.tx_context.get("carbapenemaseResult", "Not specified")),
+        "carbapenemaseClass": _canonicalize_carbapenemase_class(payload.tx_context.get("carbapenemaseClass", "Not specified")),
     }
+    if tx_context["carbapenemaseClass"] != "Not specified" and tx_context["carbapenemaseResult"] == "Not specified":
+        tx_context["carbapenemaseResult"] = "Positive"
 
     if organism:
         try:
@@ -115,15 +161,8 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
     mentioned_organisms = list(dict.fromkeys(normalized_mentions))
 
     if organism:
-        aliases = canonical_antibiotic_aliases(organism)
         for raw_name, raw_state in payload.susceptibility_results.items():
-            key = raw_name.strip().lower()
-            antibiotic = aliases.get(key)
-            if antibiotic is None:
-                for alias, canonical in aliases.items():
-                    if key == alias or key in alias or alias in key:
-                        antibiotic = canonical
-                        break
+            antibiotic = resolve_antibiotic_name(organism, raw_name)
             if antibiotic is None:
                 warnings.append(f"Ignored unsupported antibiotic for {organism}: {raw_name}")
                 continue

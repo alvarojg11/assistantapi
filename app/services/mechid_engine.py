@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 import types
 from collections import defaultdict
@@ -11,6 +12,45 @@ from typing import Dict, Iterable, List, Literal, Optional
 
 
 ASTResult = Literal["Susceptible", "Intermediate", "Resistant"]
+
+SUPPLEMENTAL_AGENT_ALIASES: Dict[str, List[str]] = {
+    "Ceftazidime/Avibactam": [
+        "ceftazidime/avibactam",
+        "ceftazidime avibactam",
+        "ceftazidime-avibactam",
+        "caz avi",
+        "caz-avi",
+        "caz/avi",
+        "avycaz",
+    ],
+    "Meropenem/Vaborbactam": [
+        "meropenem/vaborbactam",
+        "meropenem vaborbactam",
+        "meropenem-vaborbactam",
+        "mero vabor",
+        "mero-vabor",
+        "mero/vabor",
+        "vabomere",
+    ],
+    "Imipenem/Cilastatin/Relebactam": [
+        "imipenem/cilastatin/relebactam",
+        "imipenem cilastatin relebactam",
+        "imipenem-cilastatin-relebactam",
+        "imipenem relebactam",
+        "imi rele",
+        "imi-rele",
+        "imi/rele",
+        "recarbrio",
+    ],
+    "Cefiderocol": [
+        "cefiderocol",
+        "fetroja",
+    ],
+    "Aztreonam": [
+        "aztreonam",
+        "azt",
+    ],
+}
 
 
 class MechIDEngineError(RuntimeError):
@@ -295,26 +335,54 @@ def canonical_antibiotic_aliases(organism: str) -> Dict[str, str]:
         aliases[key] = ab
         aliases[key.replace("/", " / ")] = ab
         aliases[key.replace("/", "")] = ab
+        aliases[key.replace("/", "-")] = ab
+        aliases[key.replace("/", " ")] = ab
     for alias, canonical in custom.items():
         if canonical in panel:
+            aliases[alias] = canonical
+    for canonical, alias_list in SUPPLEMENTAL_AGENT_ALIASES.items():
+        aliases[canonical.lower()] = canonical
+        for alias in alias_list:
             aliases[alias] = canonical
     return aliases
 
 
-def _canonicalize_results_for_organism(organism: str, results: Dict[str, str | None]) -> Dict[str, ASTResult]:
+def resolve_antibiotic_name(organism: str, raw_name: str) -> str | None:
     aliases = canonical_antibiotic_aliases(organism)
+    key = raw_name.strip().lower()
+    if not key:
+        return None
+    if key in aliases:
+        return aliases[key]
+
+    normalized_key = re.sub(r"[^a-z0-9]+", "", key)
+    normalized_aliases = sorted(
+        ((alias, canonical) for alias, canonical in aliases.items()),
+        key=lambda item: len(item[0]),
+        reverse=True,
+    )
+    for alias, canonical in normalized_aliases:
+        alias_norm = re.sub(r"[^a-z0-9]+", "", alias)
+        if not alias_norm:
+            continue
+        if normalized_key == alias_norm:
+            return canonical
+    for alias, canonical in normalized_aliases:
+        alias_norm = re.sub(r"[^a-z0-9]+", "", alias)
+        if not alias_norm:
+            continue
+        if normalized_key in alias_norm or alias_norm in normalized_key:
+            return canonical
+    return None
+
+
+def _canonicalize_results_for_organism(organism: str, results: Dict[str, str | None]) -> Dict[str, ASTResult]:
     canonical: Dict[str, ASTResult] = {}
     for raw_name, raw_value in results.items():
         value = normalize_result(raw_value)
         if value is None:
             continue
-        key = raw_name.strip().lower()
-        antibiotic = aliases.get(key)
-        if antibiotic is None:
-            for alias, canonical_name in aliases.items():
-                if key == alias or key in alias or alias in key:
-                    antibiotic = canonical_name
-                    break
+        antibiotic = resolve_antibiotic_name(organism, raw_name)
         if antibiotic is None:
             raise MechIDEngineError(f"Unsupported antibiotic for {organism}: {raw_name}")
         canonical[antibiotic] = value
@@ -457,6 +525,40 @@ def _cre_carbapenemase_additions(
     return additions
 
 
+def _carbapenem_discordance_additions(
+    organism: str,
+    final_results: Dict[str, ASTResult | None],
+) -> Dict[str, List[str]]:
+    additions = {
+        "mechanisms": [],
+        "cautions": [],
+        "therapy_notes": [],
+    }
+    meropenem = final_results.get("Meropenem")
+    imipenem = final_results.get("Imipenem")
+    if meropenem == "Resistant" and imipenem == "Susceptible":
+        additions["mechanisms"].append(
+            "Discordant carbapenem pattern: Meropenem resistant but Imipenem susceptible."
+        )
+        additions["therapy_notes"].append(
+            "Discordant carbapenem pattern: avoid relying on Imipenem or Meropenem alone when Meropenem is resistant. Prioritize another confirmed active agent or a mechanism-directed newer option when available."
+        )
+        additions["cautions"].append(
+            "Meropenem-resistant / Imipenem-susceptible discordance can be unstable and should not be treated as routine carbapenem susceptibility."
+        )
+    elif imipenem == "Resistant" and meropenem == "Susceptible":
+        additions["mechanisms"].append(
+            "Discordant carbapenem pattern: Imipenem resistant but Meropenem susceptible."
+        )
+        additions["therapy_notes"].append(
+            "Discordant carbapenem pattern: do not assume the remaining susceptible carbapenem is a reliable default. Confirm the mechanism and prioritize another clearly active agent when possible."
+        )
+        additions["cautions"].append(
+            "Discordant carbapenem susceptibility should prompt caution before using a carbapenem as definitive therapy."
+        )
+    return additions
+
+
 def analyze_mechid(
     *,
     organism: str,
@@ -481,6 +583,10 @@ def analyze_mechid(
         tx_context=tx_context,
     )
     additions = _cre_carbapenemase_additions(module, normalized_org, final, tx_context)
+    discordance_additions = _carbapenem_discordance_additions(normalized_org, final)
+    additions["mechanisms"].extend(discordance_additions["mechanisms"])
+    additions["cautions"].extend(discordance_additions["cautions"])
+    additions["therapy_notes"].extend(discordance_additions["therapy_notes"])
     mechanisms = list(additions["mechanisms"]) + list(mechanisms or [])
     banners = list(banners or []) + list(additions["cautions"])
     therapy = list(additions["therapy_notes"]) + list(therapy or [])
