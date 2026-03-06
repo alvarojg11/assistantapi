@@ -21,6 +21,12 @@ class _StreamlitStop(Exception):
     pass
 
 
+def _create_pandas_stub() -> types.ModuleType:
+    module = types.ModuleType("pandas")
+    module.DataFrame = lambda rows=None, *args, **kwargs: rows if rows is not None else []
+    return module
+
+
 class _DummyContext:
     def __enter__(self):
         return self
@@ -159,7 +165,10 @@ def load_mechid_module():
 
     module = importlib.util.module_from_spec(spec)
     previous_streamlit = sys.modules.get("streamlit")
+    previous_pandas = sys.modules.get("pandas")
     sys.modules["streamlit"] = _create_streamlit_stub()
+    if previous_pandas is None:
+        sys.modules["pandas"] = _create_pandas_stub()
     try:
         try:
             spec.loader.exec_module(module)
@@ -167,9 +176,7 @@ def load_mechid_module():
             # Import may intentionally halt after UI setup; core functions are already defined.
             pass
     except ModuleNotFoundError as exc:
-        raise MechIDEngineError(
-            f"MechID dependency missing: {exc.name}. Install backend requirements including pandas."
-        ) from exc
+        raise MechIDEngineError(f"MechID dependency missing: {exc.name}. Install backend requirements.") from exc
     except Exception as exc:  # pragma: no cover - defensive runtime wrapper
         raise MechIDEngineError(f"Failed to import MechID logic: {exc}") from exc
     finally:
@@ -177,6 +184,10 @@ def load_mechid_module():
             sys.modules["streamlit"] = previous_streamlit
         else:
             sys.modules.pop("streamlit", None)
+        if previous_pandas is not None:
+            sys.modules["pandas"] = previous_pandas
+        else:
+            sys.modules.pop("pandas", None)
 
     required_attrs = [
         "ORGANISM_REGISTRY",

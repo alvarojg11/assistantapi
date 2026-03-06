@@ -47,6 +47,7 @@ from .schemas import (
 from .services.module_store import InMemoryModuleStore
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
+from .services.mechid_llm_parser import parse_mechid_text_with_openai
 from .services.mechid_text_parser import parse_mechid_text
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
 from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
@@ -982,18 +983,89 @@ def get_module(module_id: str) -> SyndromeModule:
     return module
 
 
-def _build_mechid_text_response(text: str) -> MechIDTextAnalyzeResponse:
+def _build_mechid_text_response(
+    text: str,
+    *,
+    parser_strategy: str = "auto",
+    parser_model: str | None = None,
+    allow_fallback: bool = True,
+) -> MechIDTextAnalyzeResponse:
     warnings: List[str] = []
-    try:
-        parsed = parse_mechid_text(text)
-    except MechIDEngineError as exc:
-        return MechIDTextAnalyzeResponse(
-            text=text,
-            parsedRequest=None,
-            warnings=[str(exc)],
-            requiresConfirmation=True,
-            analysis=None,
-        )
+    parser_fallback_used = False
+    parsed = None
+
+    if parser_strategy == "rule":
+        try:
+            parsed = parse_mechid_text(text)
+        except MechIDEngineError as exc:
+            return MechIDTextAnalyzeResponse(
+                text=text,
+                parsedRequest=None,
+                warnings=[str(exc)],
+                requiresConfirmation=True,
+                parserFallbackUsed=False,
+                analysis=None,
+            )
+        parser_name = "rule-based-v1"
+    elif parser_strategy == "openai":
+        try:
+            parsed = parse_mechid_text_with_openai(text=text, parser_model=parser_model)
+            parser_name = str(parsed.get("parser") or "openai-mechid")
+        except LLMParserError as exc:
+            if not allow_fallback:
+                return MechIDTextAnalyzeResponse(
+                    text=text,
+                    parsedRequest=None,
+                    warnings=[f"OpenAI MechID parser failed: {exc}"],
+                    requiresConfirmation=True,
+                    parser="openai-mechid",
+                    parserFallbackUsed=False,
+                    analysis=None,
+                )
+            try:
+                parsed = parse_mechid_text(text)
+            except MechIDEngineError as rule_exc:
+                return MechIDTextAnalyzeResponse(
+                    text=text,
+                    parsedRequest=None,
+                    warnings=[f"OpenAI MechID parser failed: {exc}", str(rule_exc)],
+                    requiresConfirmation=True,
+                    parser="rule-based-v1",
+                    parserFallbackUsed=True,
+                    analysis=None,
+                )
+            parser_name = "rule-based-v1"
+            parser_fallback_used = True
+            warnings.append(f"OpenAI MechID parser unavailable/failed, used rule parser fallback: {exc}")
+    else:
+        openai_err: str | None = None
+        if (os.getenv("OPENAI_API_KEY") or "").strip():
+            try:
+                parsed = parse_mechid_text_with_openai(text=text, parser_model=parser_model)
+                parser_name = str(parsed.get("parser") or "openai-mechid")
+            except LLMParserError as exc:
+                openai_err = str(exc)
+        if parsed is None:
+            try:
+                parsed = parse_mechid_text(text)
+            except MechIDEngineError as exc:
+                warning_list = [str(exc)]
+                if openai_err:
+                    warning_list.insert(0, f"OpenAI MechID parser unavailable/failed: {openai_err}")
+                return MechIDTextAnalyzeResponse(
+                    text=text,
+                    parsedRequest=None,
+                    warnings=warning_list,
+                    requiresConfirmation=True,
+                    parser="rule-based-v1",
+                    parserFallbackUsed=bool(openai_err),
+                    analysis=None,
+                )
+            parser_name = "rule-based-v1"
+            if openai_err:
+                parser_fallback_used = True
+                warnings.append(f"OpenAI MechID parser unavailable/failed: {openai_err}")
+                warnings.append("Used rule parser fallback.")
 
     parsed_request = None
     analysis = None
@@ -1029,10 +1101,12 @@ def _build_mechid_text_response(text: str) -> MechIDTextAnalyzeResponse:
 
     warnings.extend(parsed["warnings"])
     return MechIDTextAnalyzeResponse(
+        parser=parser_name,
         text=text,
         parsedRequest=parsed_request,
         warnings=warnings,
         requiresConfirmation=bool(parsed["requiresConfirmation"] or analysis is None),
+        parserFallbackUsed=parser_fallback_used,
         analysis=analysis,
     )
 
@@ -1080,7 +1154,12 @@ def analyze_mechid_endpoint(req: MechIDAnalyzeRequest) -> MechIDAnalyzeResponse:
 
 @app.post("/v1/mechid/analyze-text", response_model=MechIDTextAnalyzeResponse)
 def analyze_mechid_text_endpoint(req: MechIDTextAnalyzeRequest) -> MechIDTextAnalyzeResponse:
-    return _build_mechid_text_response(req.text)
+    return _build_mechid_text_response(
+        req.text,
+        parser_strategy=req.parser_strategy,
+        parser_model=req.parser_model,
+        allow_fallback=req.allow_fallback,
+    )
 
 
 def _resolve_module(req: AnalyzeRequest) -> SyndromeModule:
@@ -1726,16 +1805,24 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         summary += f" Clinical context: {_join_readable(context_bits)}."
 
     if result.analysis is not None:
-        if result.analysis.mechanisms:
-            summary += f" Likely mechanism(s): {_join_readable(result.analysis.mechanisms[:3])}."
-        if result.analysis.therapy_notes:
-            summary += f" Therapy guidance: {_join_readable(result.analysis.therapy_notes[:2])}."
+        mechanism_line = (
+            _join_readable(result.analysis.mechanisms[:3])
+            if result.analysis.mechanisms
+            else "no dominant mechanism identified from the submitted AST"
+        )
+        therapy_line = (
+            _join_readable(result.analysis.therapy_notes[:2])
+            if result.analysis.therapy_notes
+            else "no therapy guidance generated yet"
+        )
+        summary += f"\n\nLikely mechanism(s): {mechanism_line}."
+        summary += f"\nPreferred therapy guidance: {therapy_line}."
         if result.analysis.cautions:
-            summary += f" Key caution: {result.analysis.cautions[0]}."
+            summary += f"\nKey caution: {result.analysis.cautions[0]}."
         if final:
-            summary += " Review the full interpretation in the analysis panel."
+            summary += "\nReview the full interpretation in the analysis panel."
         else:
-            summary += " If this looks right, run the interpretation. Otherwise add or correct details."
+            summary += "\nIf this looks right, run the interpretation. Otherwise add or correct details."
         return summary
 
     if result.warnings:
@@ -2896,7 +2983,12 @@ def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: Assista
     state.endo_score_factor_ids = []
     state.mechid_text = message_text
 
-    mechid_result = _build_mechid_text_response(message_text)
+    mechid_result = _build_mechid_text_response(
+        message_text,
+        parser_strategy=state.parser_strategy,
+        parser_model=state.parser_model,
+        allow_fallback=state.allow_fallback,
+    )
     return AssistantTurnResponse(
         assistantMessage=_build_mechid_review_message(mechid_result),
         state=state,
@@ -3078,7 +3170,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         state.workflow = "mechid"
         state.mechid_text = _append_case_text(state.mechid_text, message_text)
         state.stage = "mechid_confirm"
-        mechid_result = _build_mechid_text_response(state.mechid_text)
+        mechid_result = _build_mechid_text_response(
+            state.mechid_text,
+            parser_strategy=state.parser_strategy,
+            parser_model=state.parser_model,
+            allow_fallback=state.allow_fallback,
+        )
         return AssistantTurnResponse(
             assistantMessage=_build_mechid_review_message(mechid_result),
             state=state,
@@ -3103,7 +3200,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         if req.message and req.message.strip():
             state.mechid_text = _append_case_text(state.mechid_text, req.message)
 
-        mechid_result = _build_mechid_text_response(state.mechid_text)
+        mechid_result = _build_mechid_text_response(
+            state.mechid_text,
+            parser_strategy=state.parser_strategy,
+            parser_model=state.parser_model,
+            allow_fallback=state.allow_fallback,
+        )
 
         if req.selection == "add_more_details" and not (req.message and req.message.strip()):
             state.stage = "mechid_describe"

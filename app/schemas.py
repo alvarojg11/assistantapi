@@ -383,6 +383,11 @@ class MechIDAnalyzeResponse(BaseModel):
 
 class MechIDTextAnalyzeRequest(BaseModel):
     text: str = Field(min_length=1)
+    parser_strategy: Literal["auto", "rule", "openai"] = Field(default="auto", alias="parserStrategy")
+    parser_model: Optional[str] = Field(default=None, alias="parserModel")
+    allow_fallback: bool = Field(default=True, alias="allowFallback")
+
+    model_config = {"populate_by_name": True}
 
 
 class MechIDTextParsedRequest(BaseModel):
@@ -399,6 +404,7 @@ class MechIDTextAnalyzeResponse(BaseModel):
     parsed_request: Optional[MechIDTextParsedRequest] = Field(default=None, alias="parsedRequest")
     warnings: List[str] = Field(default_factory=list)
     requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
+    parser_fallback_used: bool = Field(default=False, alias="parserFallbackUsed")
     analysis: Optional[MechIDAnalyzeResponse] = None
 
     model_config = {"populate_by_name": True}

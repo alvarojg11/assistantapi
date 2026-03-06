@@ -883,8 +883,9 @@
           const analysis = mechidResult.analysis;
           const warnings = mechidResult.warnings || [];
           const parserLabel = mechidResult.parser || "—";
-          els.parserBadge.textContent = `parser: ${parserLabel}`;
-          els.parserBadge.className = `badge ${warnings.length ? "warn" : "good"}`;
+          const fallback = !!mechidResult.parserFallbackUsed;
+          els.parserBadge.textContent = fallback ? `${parserLabel} (fallback)` : `parser: ${parserLabel}`;
+          els.parserBadge.className = `badge ${(warnings.length || fallback) ? "warn" : "good"}`;
 
           if (analysis) {
             const mechanisms = (analysis.mechanisms || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
