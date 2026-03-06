@@ -348,6 +348,7 @@ class AssistantTurnResponse(BaseModel):
 class MechIDTxContext(BaseModel):
     syndrome: str = "Not specified"
     severity: str = "Not specified"
+    focus_detail: str = Field(default="Not specified", alias="focusDetail")
     oral_preference: bool = Field(default=False, alias="oralPreference")
 
     model_config = {"populate_by_name": True}
@@ -395,8 +396,20 @@ class MechIDTextAnalyzeRequest(BaseModel):
 
 class MechIDTextParsedRequest(BaseModel):
     organism: Optional[str] = None
+    mentioned_organisms: List[str] = Field(default_factory=list, alias="mentionedOrganisms")
+    resistance_phenotypes: List[str] = Field(default_factory=list, alias="resistancePhenotypes")
     susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
     tx_context: MechIDTxContext = Field(default_factory=MechIDTxContext, alias="txContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDProvisionalAdvice(BaseModel):
+    summary: str
+    recommended_options: List[str] = Field(default_factory=list, alias="recommendedOptions")
+    oral_options: List[str] = Field(default_factory=list, alias="oralOptions")
+    missing_susceptibilities: List[str] = Field(default_factory=list, alias="missingSusceptibilities")
+    notes: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
 
@@ -409,5 +422,6 @@ class MechIDTextAnalyzeResponse(BaseModel):
     requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
     parser_fallback_used: bool = Field(default=False, alias="parserFallbackUsed")
     analysis: Optional[MechIDAnalyzeResponse] = None
+    provisional_advice: Optional[MechIDProvisionalAdvice] = Field(default=None, alias="provisionalAdvice")
 
     model_config = {"populate_by_name": True}

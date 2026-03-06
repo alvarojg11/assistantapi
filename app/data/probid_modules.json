@@ -322,13 +322,36 @@
     "pretestPresets": [
       {
         "id": "outpt_low",
-        "label": "Outpatient",
-        "p": 0.02
+        "label": "Outpatient / clinic unexplained diarrhea",
+        "p": 0.025,
+        "notes": "Back-calculated low-acuity baseline before applying the stool-frequency LR, using an outpatient diarrhea cohort with about 3.9% toxin-positive CDI.",
+        "source": {
+          "short": "Kutty et al., Emerg Infect Dis",
+          "year": 2011,
+          "url": "https://wwwnc.cdc.gov/eid/article/17/10/11-0069_article"
+        }
+      },
+      {
+        "id": "ed_inpt_early",
+        "label": "ED / early admission diarrhea (first 72h)",
+        "p": 0.065,
+        "notes": "Back-calculated ED or early-admission baseline before applying the stool-frequency LR, using an ED diarrhea cohort with about 10.2% CDI.",
+        "source": {
+          "short": "Abrahamian et al., Ann Emerg Med",
+          "year": 2017,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/28242058/"
+        }
       },
       {
         "id": "inpt",
-        "label": "Inpatient diarrhea after day 3",
-        "p": 0.15
+        "label": "Hospital-onset diarrhea after day 3",
+        "p": 0.08,
+        "notes": "Back-calculated hospital-onset baseline before applying the stool-frequency LR, using a suspected hospital-acquired diarrhea cohort with about 12.3% CDI.",
+        "source": {
+          "short": "Apisarnthanarak et al.",
+          "year": 2011,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21721449/"
+        }
       }
     ],
     "items": [

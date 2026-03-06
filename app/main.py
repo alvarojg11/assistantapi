@@ -33,6 +33,7 @@ from .schemas import (
     DecisionThresholds,
     MechIDAnalyzeRequest,
     MechIDAnalyzeResponse,
+    MechIDProvisionalAdvice,
     MechIDTextAnalyzeRequest,
     MechIDTextAnalyzeResponse,
     MechIDTextParsedRequest,
@@ -108,6 +109,18 @@ MECHID_INTENT_TOKENS = (
     "best antibiotic",
     "best therapy",
     "what should i treat with",
+)
+MECHID_THERAPY_INTENT_TOKENS = (
+    "which antibiotics",
+    "what antibiotics",
+    "what would you treat with",
+    "how would you treat",
+    "what would you use",
+    "would you recommend",
+    "recommend antibiotics",
+    "recommend therapy",
+    "cultures positive",
+    "culture positive",
 )
 
 ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
@@ -1070,13 +1083,20 @@ def _build_mechid_text_response(
 
     parsed_request = None
     analysis = None
-    if parsed["organism"] is not None:
+    if (
+        parsed.get("organism") is not None
+        or parsed.get("mentionedOrganisms")
+        or parsed.get("susceptibilityResults")
+        or parsed.get("resistancePhenotypes")
+    ):
         parsed_request = MechIDTextParsedRequest(
             organism=parsed["organism"],
+            mentionedOrganisms=parsed.get("mentionedOrganisms", []),
+            resistancePhenotypes=parsed.get("resistancePhenotypes", []),
             susceptibilityResults=parsed["susceptibilityResults"],
             txContext=parsed["txContext"],
         )
-        if parsed["susceptibilityResults"]:
+        if parsed["organism"] is not None and parsed["susceptibilityResults"]:
             try:
                 analyzed = analyze_mechid(
                     organism=parsed["organism"],
@@ -1101,6 +1121,7 @@ def _build_mechid_text_response(
                 warnings.append(str(exc))
 
     warnings.extend(parsed["warnings"])
+    provisional_advice = _build_mechid_provisional_advice(parsed_request)
     return MechIDTextAnalyzeResponse(
         parser=parser_name,
         text=text,
@@ -1109,6 +1130,7 @@ def _build_mechid_text_response(
         requiresConfirmation=bool(parsed["requiresConfirmation"] or analysis is None),
         parserFallbackUsed=parser_fallback_used,
         analysis=analysis,
+        provisionalAdvice=provisional_advice,
     )
 
 
@@ -1269,6 +1291,7 @@ def _build_reasons(
     module: SyndromeModule,
     base_pretest: float,
     adjusted_pretest: float,
+    preset_id: str | None,
     combined_lr_value: float,
     thresholds: DecisionThresholds,
     recommendation: str,
@@ -1276,13 +1299,22 @@ def _build_reasons(
     prep_notes: List[str] | None = None,
 ) -> List[str]:
     reasons: List[str] = []
+    preset_label = next((preset.label for preset in module.pretest_presets if preset.id == preset_id), None)
 
     if abs(adjusted_pretest - base_pretest) > 0.001:
-        reasons.append(
-            f"Pretest probability was adjusted from {base_pretest:.1%} to {adjusted_pretest:.1%} using odds multiplier."
-        )
+        if preset_label:
+            reasons.append(
+                f"Pretest probability started from preset '{preset_label}' at {base_pretest:.1%} and was adjusted to {adjusted_pretest:.1%} using odds multiplier."
+            )
+        else:
+            reasons.append(
+                f"Pretest probability was adjusted from {base_pretest:.1%} to {adjusted_pretest:.1%} using odds multiplier."
+            )
     else:
-        reasons.append(f"Pretest probability starts at {adjusted_pretest:.1%} from the selected preset or override.")
+        if preset_label:
+            reasons.append(f"Pretest probability starts at {adjusted_pretest:.1%} from preset '{preset_label}'.")
+        else:
+            reasons.append(f"Pretest probability starts at {adjusted_pretest:.1%} from the selected preset or override.")
 
     if applied_findings:
         top = applied_findings[:3]
@@ -1550,6 +1582,7 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         module=module,
         base_pretest=base_pretest,
         adjusted_pretest=adjusted_pretest,
+        preset_id=preset_id,
         combined_lr_value=combined_lr_value,
         thresholds=thresholds,
         recommendation=recommendation,
@@ -1801,13 +1834,24 @@ def _friendly_probid_drivers(analysis: AnalyzeResponse) -> str:
     return f"The biggest drivers here are {_join_readable(top_findings)}."
 
 
-def _friendly_probid_probability_and_harm(analysis: AnalyzeResponse) -> str:
+def _friendly_probid_probability_and_harm(module: SyndromeModule, analysis: AnalyzeResponse) -> str:
+    preset_label = None
+    if analysis.pretest.preset_id:
+        preset_label = next(
+            (preset.label for preset in module.pretest_presets if preset.id == analysis.pretest.preset_id),
+            analysis.pretest.preset_id,
+        )
     probability = analysis.posttest_probability
     threshold_sentence = (
         f"Post-test probability is {probability:.1%} after a combined LR of {analysis.combined_lr:.2f}. "
         f"The current action thresholds are observe at or below {analysis.thresholds.observe_probability:.1%} "
         f"and treat at or above {analysis.thresholds.treat_probability:.1%}."
     )
+    if preset_label:
+        threshold_sentence = (
+            f"The starting pretest came from preset '{preset_label}' at {analysis.pretest.base_probability:.1%}. "
+            + threshold_sentence
+        )
     harm_reason = next((reason for reason in analysis.reasons if reason.startswith("Harm model: ")), None)
     if harm_reason:
         return threshold_sentence + " " + harm_reason.removeprefix("Harm model: ").strip()
@@ -1850,7 +1894,7 @@ def _build_probid_consult_message(
     lines = [
         "My impression:",
         f"Bottom line: {_friendly_probid_bottom_line(module, analysis)}",
-        f"Probability and harm: {_friendly_probid_probability_and_harm(analysis)}",
+        f"Probability and harm: {_friendly_probid_probability_and_harm(module, analysis)}",
         f"Why I think that: {_friendly_probid_drivers(analysis)}",
         f"What I would do next: {_friendly_probid_next_steps(analysis)}",
         f"What would change my mind: {_friendly_probid_change_mind(analysis, missing_suggestions)}",
@@ -1867,9 +1911,244 @@ def _format_mechid_results(results: Dict[str, str]) -> str:
     return _join_readable(ordered)
 
 
+def _format_mechid_organism_list(organisms: List[str]) -> str:
+    if not organisms:
+        return "no organism identified yet"
+    return _join_readable(organisms)
+
+
+def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> MechIDProvisionalAdvice | None:
+    if parsed is None:
+        return None
+
+    organisms = list(dict.fromkeys(parsed.mentioned_organisms or ([parsed.organism] if parsed.organism else [])))
+    syndrome = parsed.tx_context.syndrome
+    focus_detail = parsed.tx_context.focus_detail
+    severity = parsed.tx_context.severity
+    oral_preference = parsed.tx_context.oral_preference
+    phenotype_hints = set(parsed.resistance_phenotypes)
+    has_ast = bool(parsed.susceptibility_results)
+
+    if has_ast:
+        return None
+
+    has_mrsa = "MRSA" in phenotype_hints
+    has_staph_aureus = "Staphylococcus aureus" in organisms
+    has_beta_strep = "β-hemolytic Streptococcus (GAS/GBS)" in organisms
+    has_enterococcus = any(org.startswith("Enterococcus") for org in organisms)
+    has_gnr = any(
+        org in {
+            "Escherichia coli",
+            "Klebsiella pneumoniae",
+            "Pseudomonas aeruginosa",
+            "Acinetobacter baumannii complex",
+            "Enterobacter cloacae complex",
+            "Serratia marcescens",
+            "Proteus mirabilis",
+        }
+        for org in organisms
+    )
+    is_deep_wound = syndrome == "Other deep-seated / high-inoculum focus"
+    is_bone_joint = syndrome == "Bone/joint infection"
+    is_pneumonia = syndrome == "Pneumonia (HAP/VAP or severe CAP)"
+    is_intra_abdominal = syndrome == "Intra-abdominal infection"
+    is_severe = severity == "Severe / septic shock"
+
+    def _base_missing(*items: str) -> List[str]:
+        return list(dict.fromkeys(items))
+
+    if has_mrsa and has_staph_aureus and has_beta_strep and (is_deep_wound or is_bone_joint):
+        recommended = ["Vancomycin", "Linezolid", "Daptomycin for non-pulmonary infection"]
+        notes = [
+            "For MRSA, doxycycline or trimethoprim/sulfamethoxazole alone would not be my preferred answer here because streptococcal coverage is less reliable.",
+        ]
+        if focus_detail == "Diabetic foot infection":
+            notes.insert(
+                0,
+                "If this diabetic foot infection is severe, ischemic, malodorous, or clearly polymicrobial, I would usually add gram-negative and anaerobic coverage until the full culture picture is clearer.",
+            )
+        if focus_detail == "Osteomyelitis":
+            notes.insert(0, "Debridement and bone source control matter as much as the antibiotic choice in osteomyelitis.")
+        if focus_detail == "Septic arthritis":
+            notes.insert(0, "Joint drainage and clinical response matter just as much as the isolate list in septic arthritis.")
+        oral_options = ["Linezolid"] if oral_preference else []
+        if oral_preference:
+            oral_options.append("Clindamycin if both isolates are susceptible")
+        return MechIDProvisionalAdvice(
+            summary=(
+                f"For {focus_detail.lower() if focus_detail != 'Not specified' else 'this infection'} growing MRSA plus group B streptococcus, I would choose an agent that reliably covers both organisms while susceptibilities are pending."
+            ),
+            recommendedOptions=recommended,
+            oralOptions=oral_options,
+            missingSusceptibilities=_base_missing(
+                "MRSA: clindamycin",
+                "MRSA: linezolid",
+                "MRSA: doxycycline",
+                "MRSA: trimethoprim/sulfamethoxazole",
+                "Group B streptococcus: clindamycin",
+            ),
+            notes=notes,
+        )
+
+    if has_mrsa and has_staph_aureus:
+        oral_options = ["Linezolid"] if oral_preference else []
+        notes = [
+            "Without susceptibilities, I would default to a reliable anti-MRSA option and then narrow once the AST returns."
+        ]
+        if oral_preference:
+            notes.append(
+                "If you want an oral option, linezolid is the cleanest empiric oral MRSA agent before the AST comes back."
+            )
+        return MechIDProvisionalAdvice(
+            summary="This sounds like an MRSA-driven infection, so I would start with dependable MRSA coverage and then narrow once susceptibilities are available.",
+            recommendedOptions=["Vancomycin", "Linezolid", "Daptomycin for non-pulmonary infection"],
+            oralOptions=oral_options,
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "trimethoprim/sulfamethoxazole",
+            ),
+            notes=notes,
+        )
+
+    if focus_detail == "Diabetic foot infection" or (organisms and is_deep_wound):
+        return MechIDProvisionalAdvice(
+            summary=(
+                "For a diabetic foot or deep wound infection, I would match therapy to severity, depth, and whether the picture looks polymicrobial rather than relying only on the first culture names."
+            ),
+            recommendedOptions=[
+                "If the culture is mainly gram-positive and the patient is stable: choose focused gram-positive coverage.",
+                "If the wound is severe, deep, limb-threatening, or clearly polymicrobial: add gram-negative and anaerobic coverage."
+            ],
+            oralOptions=["Oral step-down may be possible later if the patient is improving and the susceptibilities support it."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "trimethoprim/sulfamethoxazole",
+                "fluoroquinolone or other reported gram-negative agents if gram-negatives are present",
+            ),
+            notes=[
+                "Source control, debridement, and depth of infection matter as much as the isolate list in diabetic foot infections.",
+                "If osteomyelitis is also present, definitive oral step-down usually depends on reliable AST plus clinical improvement.",
+            ],
+        )
+
+    if focus_detail == "Osteomyelitis":
+        return MechIDProvisionalAdvice(
+            summary="For osteomyelitis, I would choose therapy that reliably covers the recovered organisms and then narrow once susceptibilities and source-control plans are clear.",
+            recommendedOptions=[
+                "For MRSA concern: Vancomycin, Linezolid, or Daptomycin for non-pulmonary infection",
+                "For streptococcal-only infection: a beta-lactam is often preferred once confirmed susceptible",
+            ],
+            oralOptions=["Linezolid can be a bridge oral option in selected cases.", "Other oral step-down options depend heavily on susceptibilities and source control."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "trimethoprim/sulfamethoxazole",
+                "beta-lactam susceptibilities for the non-MRSA isolate",
+            ),
+            notes=[
+                "Debridement, hardware considerations, and the ability to achieve source control are central in osteomyelitis.",
+            ],
+        )
+
+    if focus_detail == "Septic arthritis":
+        return MechIDProvisionalAdvice(
+            summary="For septic arthritis, I would start with dependable coverage for the recovered organisms and then narrow quickly once susceptibilities return and the joint has been drained.",
+            recommendedOptions=[
+                "For MRSA concern: Vancomycin or Linezolid",
+                "For streptococcal-only infection: a beta-lactam is often preferred once susceptibility is known",
+            ],
+            oralOptions=["Linezolid may be a temporary oral bridge in selected stable patients, but most early septic arthritis treatment starts IV."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "beta-lactam susceptibilities for the streptococcal isolate",
+            ),
+            notes=[
+                "Drainage and serial clinical response are core parts of septic arthritis management, not just antibiotic selection.",
+            ],
+        )
+
+    if is_pneumonia:
+        recommended = []
+        notes = []
+        if has_mrsa:
+            recommended.append("Vancomycin or Linezolid for MRSA coverage")
+        if has_gnr or is_severe:
+            recommended.append("A beta-lactam with strong pneumonia activity, and add antipseudomonal coverage if the organism list or setting supports it")
+        if not recommended:
+            recommended.append("Choose empiric therapy based on whether this behaves like CAP versus HAP/VAP and then narrow to the isolated organism(s)")
+        notes.append("For pneumonia, daptomycin is not useful.")
+        if oral_preference:
+            notes.append("I would not anchor on oral therapy early in pneumonia unless the patient is clearly improving and the isolates support it.")
+        return MechIDProvisionalAdvice(
+            summary="For pneumonia, I would choose therapy based on the likely setting and whether MRSA or resistant gram-negatives truly need to be covered, then narrow once susceptibilities return.",
+            recommendedOptions=recommended,
+            oralOptions=["Oral step-down is sometimes possible later, but not usually the starting move for severe pneumonia."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "oxacillin or cefoxitin if Staphylococcus aureus is present",
+                "ceftriaxone",
+                "cefepime",
+                "piperacillin/tazobactam",
+                "levofloxacin",
+            ),
+            notes=notes,
+        )
+
+    if is_intra_abdominal:
+        recommended = [
+            "Broad intra-abdominal coverage that addresses enteric gram-negatives and anaerobes",
+        ]
+        if has_enterococcus:
+            recommended.append("Add Enterococcus-active therapy when the source and patient context justify it")
+        if has_mrsa:
+            recommended.append("Add anti-MRSA therapy only if the culture and syndrome truly make MRSA clinically relevant")
+        return MechIDProvisionalAdvice(
+            summary="For intra-abdominal infection, I would treat the source first and use a regimen that covers enteric gram-negatives plus anaerobes, then narrow once the clinical source and susceptibilities are clearer.",
+            recommendedOptions=recommended,
+            oralOptions=["Oral step-down is sometimes possible later after source control and clinical improvement."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "ceftriaxone",
+                "cefepime",
+                "piperacillin/tazobactam",
+                "ertapenem or meropenem if a resistant gram-negative is present",
+                "fluoroquinolone or trimethoprim/sulfamethoxazole if an oral step-down is being considered",
+            ),
+            notes=[
+                "Drainage or source control usually matters more than trying to pick the final narrowest antibiotic before the source is defined.",
+            ],
+        )
+
+    if organisms and is_bone_joint:
+        return MechIDProvisionalAdvice(
+            summary="For a bone or joint infection, I can give a provisional site-based recommendation now, but definitive therapy still depends on susceptibilities and source control.",
+            recommendedOptions=[
+                "Use dependable coverage for the listed organisms first, then narrow once susceptibilities return.",
+            ],
+            oralOptions=["Oral step-down may be possible later if the patient is improving and the susceptibilities support it."] if oral_preference else [],
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "trimethoprim/sulfamethoxazole",
+                "beta-lactam susceptibilities for the non-MRSA isolate",
+            ),
+            notes=[
+                "Source control matters as much as the isolate list in bone and joint infections.",
+            ],
+        )
+
+    return None
+
+
 def _assistant_mechid_review_options(result: MechIDTextAnalyzeResponse) -> List[AssistantOption]:
     options: List[AssistantOption] = []
-    if result.analysis is not None:
+    if result.analysis is not None or result.provisional_advice is not None:
         options.append(AssistantOption(value="run_assessment", label="Give consultant impression"))
     options.append(AssistantOption(value="add_more_details", label="Add case detail"))
     options.append(AssistantOption(value="restart", label="Start new consult"))
@@ -2124,7 +2403,7 @@ def _friendly_mechid_bottom_line(
 
 def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> str:
     parsed = result.parsed_request
-    if parsed is None or not parsed.organism:
+    if parsed is None:
         message = (
             "I could not confidently identify the organism yet. "
             "Paste the organism plus a few susceptibility calls, for example: "
@@ -2134,10 +2413,13 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
             message += " " + result.warnings[0]
         return message
 
-    summary = (
-        f"I extracted {parsed.organism} with {_format_mechid_results(parsed.susceptibility_results)}."
-    )
+    extracted_target = parsed.organism or _format_mechid_organism_list(parsed.mentioned_organisms)
+    summary = f"I extracted {extracted_target} with {_format_mechid_results(parsed.susceptibility_results)}."
+    if parsed.resistance_phenotypes:
+        summary += f" I also noted {_join_readable(parsed.resistance_phenotypes)}."
     context_bits: List[str] = []
+    if parsed.tx_context.focus_detail != "Not specified":
+        context_bits.append(parsed.tx_context.focus_detail)
     if parsed.tx_context.syndrome != "Not specified":
         context_bits.append(parsed.tx_context.syndrome)
     if parsed.tx_context.severity != "Not specified":
@@ -2160,6 +2442,27 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
             summary += "\nI left the more technical mechanism details in the analysis panel below."
         else:
             summary += "\nIf that summary matches the case, run the interpretation. Otherwise add or correct details."
+        return summary
+
+    if result.provisional_advice is not None:
+        advice = result.provisional_advice
+        summary += "\n\nMy impression:"
+        summary += f"\nBottom line: {advice.summary}"
+        if advice.recommended_options:
+            summary += f"\nOptions I would consider now: {_join_readable(advice.recommended_options)}."
+        if advice.oral_options:
+            summary += f"\nPossible oral options: {_join_readable(advice.oral_options)}."
+        if advice.notes:
+            summary += f"\nWhat I would watch out for: {advice.notes[0]}"
+        if advice.missing_susceptibilities:
+            summary += (
+                f"\nWhat I still need: If you give susceptibilities for {_join_readable(advice.missing_susceptibilities[:5])}, "
+                "I can narrow this to a more specific treatment plan."
+            )
+        if final:
+            summary += "\nI can make this more definitive once you add the isolate susceptibilities."
+        else:
+            summary += "\nAdd susceptibilities if you want me to narrow this to a more specific treatment plan."
         return summary
 
     if result.warnings:
@@ -3291,7 +3594,19 @@ def _assistant_is_mechid_intent(message: str | None) -> bool:
     text = _normalize_choice(message)
     if not text:
         return False
-    return any(token in text for token in MECHID_INTENT_TOKENS)
+    if any(token in text for token in MECHID_INTENT_TOKENS):
+        return True
+    if any(token in text for token in MECHID_THERAPY_INTENT_TOKENS):
+        try:
+            parsed = parse_mechid_text(message or "")
+        except MechIDEngineError:
+            return False
+        return bool(
+            parsed.get("organism")
+            or parsed.get("mentionedOrganisms")
+            or parsed.get("resistancePhenotypes")
+        )
+    return False
 
 
 def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: AssistantState) -> AssistantTurnResponse | None:
@@ -3550,7 +3865,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             )
 
         if _is_ready_to_assess(req):
-            if mechid_result.analysis is None:
+            if mechid_result.analysis is None and mechid_result.provisional_advice is None:
                 return AssistantTurnResponse(
                     assistantMessage=_build_mechid_review_message(mechid_result),
                     state=state,

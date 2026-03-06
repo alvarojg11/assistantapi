@@ -16,9 +16,16 @@ ASTResult = Literal["Susceptible", "Intermediate", "Resistant"]
 
 class MechIDLLMExtractionPayload(BaseModel):
     organism: str | None = None
+    mentioned_organisms: List[str] = Field(default_factory=list, alias="mentionedOrganisms")
+    resistance_phenotypes: List[str] = Field(default_factory=list, alias="resistancePhenotypes")
     susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
     tx_context: Dict[str, Any] = Field(
-        default_factory=lambda: {"syndrome": "Not specified", "severity": "Not specified", "oralPreference": False},
+        default_factory=lambda: {
+            "syndrome": "Not specified",
+            "severity": "Not specified",
+            "focusDetail": "Not specified",
+            "oralPreference": False,
+        },
         alias="txContext",
     )
     confidence: Literal["low", "medium", "high"] = "medium"
@@ -53,11 +60,13 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "You extract lay or clinical microbiology questions into a MechID input JSON.\n"
         "Return JSON only.\n"
         "Your job is to identify the organism, named susceptibility results, and basic treatment context.\n"
+        "If multiple organisms are explicitly mentioned, set organism to null and list them in mentionedOrganisms.\n"
+        "Use resistancePhenotypes for terms like MRSA, MSSA, VRE, ESBL, or CRE when they are explicitly stated.\n"
         "Use only organism names and antibiotics present in the provided catalog.\n"
         "Do not infer susceptibility results that were not actually stated.\n"
         "Normalize susceptibility values to exactly one of: Susceptible, Intermediate, Resistant.\n"
         "If the organism is unclear, set organism to null instead of guessing.\n"
-        "If syndrome or severity is not clearly stated, use 'Not specified'.\n"
+        "If syndrome, site detail, or severity is not clearly stated, use 'Not specified'.\n"
         "Set oralPreference to true only if the user is explicitly asking for oral therapy, oral step-down, or PO options.\n"
         "Preserve as many explicitly stated AST calls as possible.\n"
         "Set confidence to low when the organism or the AST pattern is ambiguous.\n"
@@ -74,10 +83,13 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
 def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, object]:
     warnings: List[str] = []
     organism = payload.organism
+    mentioned_organisms = [item for item in payload.mentioned_organisms if item]
+    resistance_phenotypes = [item for item in payload.resistance_phenotypes if item]
     susceptibility_results: Dict[str, ASTResult] = {}
     tx_context = {
         "syndrome": payload.tx_context.get("syndrome", "Not specified") or "Not specified",
         "severity": payload.tx_context.get("severity", "Not specified") or "Not specified",
+        "focusDetail": payload.tx_context.get("focusDetail", "Not specified") or "Not specified",
         "oralPreference": bool(payload.tx_context.get("oralPreference", False)),
     }
 
@@ -87,6 +99,14 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         except Exception as exc:
             warnings.append(str(exc))
             organism = None
+
+    normalized_mentions: List[str] = []
+    for entry in mentioned_organisms:
+        try:
+            normalized_mentions.append(normalize_organism(entry))
+        except Exception:
+            normalized_mentions.append(entry)
+    mentioned_organisms = list(dict.fromkeys(normalized_mentions))
 
     if organism:
         aliases = canonical_antibiotic_aliases(organism)
@@ -109,9 +129,14 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         requires_confirmation = True
     if payload.ignored_clues:
         warnings.append("LLM ignored clues: " + "; ".join(payload.ignored_clues))
+    if len(mentioned_organisms) > 1:
+        warnings.append("I detected more than one organism, so I cannot run single-isolate MechID inference yet.")
+        requires_confirmation = True
 
     return {
         "organism": organism,
+        "mentionedOrganisms": mentioned_organisms,
+        "resistancePhenotypes": resistance_phenotypes,
         "susceptibilityResults": susceptibility_results,
         "txContext": tx_context,
         "warnings": warnings,
@@ -164,6 +189,10 @@ def parse_mechid_text_with_openai(
     if normalized["organism"] is None and rule_fallback["organism"] is not None:
         normalized["organism"] = rule_fallback["organism"]
         normalized["warnings"].append("Filled organism from rule parser.")
+    if not normalized.get("mentionedOrganisms") and rule_fallback.get("mentionedOrganisms"):
+        normalized["mentionedOrganisms"] = rule_fallback["mentionedOrganisms"]
+    if not normalized.get("resistancePhenotypes") and rule_fallback.get("resistancePhenotypes"):
+        normalized["resistancePhenotypes"] = rule_fallback["resistancePhenotypes"]
     if not normalized["susceptibilityResults"] and rule_fallback["susceptibilityResults"]:
         normalized["susceptibilityResults"] = rule_fallback["susceptibilityResults"]
         normalized["warnings"].append("Filled susceptibility results from rule parser.")
@@ -171,6 +200,8 @@ def parse_mechid_text_with_openai(
         normalized["txContext"]["syndrome"] = rule_fallback["txContext"]["syndrome"]
     if normalized["txContext"].get("severity") == "Not specified" and rule_fallback["txContext"].get("severity") != "Not specified":
         normalized["txContext"]["severity"] = rule_fallback["txContext"]["severity"]
+    if normalized["txContext"].get("focusDetail") == "Not specified" and rule_fallback["txContext"].get("focusDetail") != "Not specified":
+        normalized["txContext"]["focusDetail"] = rule_fallback["txContext"]["focusDetail"]
     if not normalized["txContext"].get("oralPreference") and rule_fallback["txContext"].get("oralPreference"):
         normalized["txContext"]["oralPreference"] = True
 

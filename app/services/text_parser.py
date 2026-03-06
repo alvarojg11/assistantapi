@@ -1222,7 +1222,6 @@ def _preset_score(text_norm: str, module: SyndromeModule, preset) -> int:
                 "ed" in preset.id
                 or "emergency" in label_norm
                 or _contains_phrase(label_norm, "ed")
-                or _contains_phrase(label_norm, "inpatient")
             ):
                 score += 2
             if group == "pc" and ("pc" in preset.id or "primary" in label_norm):
