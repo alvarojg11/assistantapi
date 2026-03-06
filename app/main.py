@@ -35,6 +35,8 @@ from .schemas import (
     DecisionThresholds,
     MechIDAnalyzeRequest,
     MechIDAnalyzeResponse,
+    MechIDImageAnalyzeRequest,
+    MechIDImageAnalyzeResponse,
     MechIDProvisionalAdvice,
     MechIDTextAnalyzeRequest,
     MechIDTextAnalyzeResponse,
@@ -70,6 +72,7 @@ from .services.consult_narrator import (
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
 from .services.mechid_eval import EvalStats, evaluate_mechid_case
+from .services.mechid_image_parser import parse_mechid_image_with_openai
 from .services.mechid_llm_parser import parse_mechid_text_with_openai
 from .services.mechid_text_parser import parse_mechid_text
 from .services.mechid_trainer_guidance import MechIDTrainerGuidanceError, generate_mechid_trainer_targets
@@ -1494,6 +1497,113 @@ def get_module(module_id: str) -> SyndromeModule:
     return module
 
 
+def _mechid_canonical_text(parsed_request: MechIDTextParsedRequest | None) -> str:
+    if parsed_request is None:
+        return ""
+
+    parts: List[str] = []
+    target = parsed_request.organism or _format_mechid_organism_list(parsed_request.mentioned_organisms)
+    if target:
+        parts.append(target)
+
+    grouped_results: Dict[str, List[str]] = {"Resistant": [], "Intermediate": [], "Susceptible": []}
+    for antibiotic, call in (parsed_request.susceptibility_results or {}).items():
+        if call in grouped_results:
+            grouped_results[call].append(antibiotic)
+
+    for state_label, prefix in (
+        ("Resistant", "resistant to"),
+        ("Intermediate", "intermediate to"),
+        ("Susceptible", "susceptible to"),
+    ):
+        antibiotics = grouped_results[state_label]
+        if antibiotics:
+            parts.append(f"{prefix} {_join_readable(antibiotics)}")
+
+    if parsed_request.resistance_phenotypes:
+        parts.append(f"phenotype {_join_readable(parsed_request.resistance_phenotypes)}")
+
+    tx_context = parsed_request.tx_context
+    context_bits: List[str] = []
+    if tx_context.focus_detail != "Not specified":
+        context_bits.append(tx_context.focus_detail)
+    elif tx_context.syndrome != "Not specified":
+        context_bits.append(tx_context.syndrome)
+    if tx_context.severity != "Not specified":
+        context_bits.append(tx_context.severity)
+    if context_bits:
+        parts.append(f"context {_join_readable(context_bits)}")
+    if tx_context.carbapenemase_result != "Not specified":
+        carbapenemase_text = tx_context.carbapenemase_result
+        if tx_context.carbapenemase_class != "Not specified":
+            carbapenemase_text += f" ({tx_context.carbapenemase_class})"
+        parts.append(f"carbapenemase {carbapenemase_text}")
+
+    return ". ".join(part.strip().rstrip(".") for part in parts if part and part.strip()).strip() + ("" if not parts else ".")
+
+
+def _build_mechid_response_from_parsed(
+    *,
+    text: str,
+    parsed: Dict[str, Any],
+    parser_name: str,
+    parser_fallback_used: bool = False,
+    warnings: List[str] | None = None,
+) -> MechIDTextAnalyzeResponse:
+    warning_list = list(warnings or [])
+    parsed_request = None
+    analysis = None
+    if (
+        parsed.get("organism") is not None
+        or parsed.get("mentionedOrganisms")
+        or parsed.get("susceptibilityResults")
+        or parsed.get("resistancePhenotypes")
+    ):
+        parsed_request = MechIDTextParsedRequest(
+            organism=parsed.get("organism"),
+            mentionedOrganisms=parsed.get("mentionedOrganisms", []),
+            resistancePhenotypes=parsed.get("resistancePhenotypes", []),
+            susceptibilityResults=parsed.get("susceptibilityResults", {}),
+            txContext=parsed.get("txContext", {}),
+        )
+        if parsed.get("organism") is not None and parsed.get("susceptibilityResults"):
+            try:
+                analyzed = analyze_mechid(
+                    organism=parsed["organism"],
+                    susceptibility_results=parsed["susceptibilityResults"],
+                    tx_context=parsed["txContext"],
+                )
+                analysis = MechIDAnalyzeResponse(
+                    organism=analyzed["organism"],
+                    panel=analyzed["panel"],
+                    submittedResults=analyzed["submitted_results"],
+                    inferredResults=analyzed["inferred_results"],
+                    finalResults=analyzed["final_results"],
+                    rows=analyzed["rows"],
+                    mechanisms=analyzed["mechanisms"],
+                    cautions=analyzed["cautions"],
+                    favorableSignals=analyzed["favorable_signals"],
+                    therapyNotes=analyzed["therapy_notes"],
+                    references=analyzed["references"],
+                    warnings=list(parsed.get("warnings", [])),
+                )
+            except MechIDEngineError as exc:
+                warning_list.append(str(exc))
+
+    warning_list.extend(parsed.get("warnings", []))
+    provisional_advice = _build_mechid_provisional_advice(parsed_request)
+    return MechIDTextAnalyzeResponse(
+        parser=parser_name,
+        text=text,
+        parsedRequest=parsed_request,
+        warnings=warning_list,
+        requiresConfirmation=bool(parsed.get("requiresConfirmation") or analysis is None),
+        parserFallbackUsed=parser_fallback_used,
+        analysis=analysis,
+        provisionalAdvice=provisional_advice,
+    )
+
+
 def _build_mechid_text_response(
     text: str,
     *,
@@ -1578,56 +1688,12 @@ def _build_mechid_text_response(
                 warnings.append(f"OpenAI MechID parser unavailable/failed: {openai_err}")
                 warnings.append("Used rule parser fallback.")
 
-    parsed_request = None
-    analysis = None
-    if (
-        parsed.get("organism") is not None
-        or parsed.get("mentionedOrganisms")
-        or parsed.get("susceptibilityResults")
-        or parsed.get("resistancePhenotypes")
-    ):
-        parsed_request = MechIDTextParsedRequest(
-            organism=parsed["organism"],
-            mentionedOrganisms=parsed.get("mentionedOrganisms", []),
-            resistancePhenotypes=parsed.get("resistancePhenotypes", []),
-            susceptibilityResults=parsed["susceptibilityResults"],
-            txContext=parsed["txContext"],
-        )
-        if parsed["organism"] is not None and parsed["susceptibilityResults"]:
-            try:
-                analyzed = analyze_mechid(
-                    organism=parsed["organism"],
-                    susceptibility_results=parsed["susceptibilityResults"],
-                    tx_context=parsed["txContext"],
-                )
-                analysis = MechIDAnalyzeResponse(
-                    organism=analyzed["organism"],
-                    panel=analyzed["panel"],
-                    submittedResults=analyzed["submitted_results"],
-                    inferredResults=analyzed["inferred_results"],
-                    finalResults=analyzed["final_results"],
-                    rows=analyzed["rows"],
-                    mechanisms=analyzed["mechanisms"],
-                    cautions=analyzed["cautions"],
-                    favorableSignals=analyzed["favorable_signals"],
-                    therapyNotes=analyzed["therapy_notes"],
-                    references=analyzed["references"],
-                    warnings=list(parsed["warnings"]),
-                )
-            except MechIDEngineError as exc:
-                warnings.append(str(exc))
-
-    warnings.extend(parsed["warnings"])
-    provisional_advice = _build_mechid_provisional_advice(parsed_request)
-    return MechIDTextAnalyzeResponse(
-        parser=parser_name,
+    return _build_mechid_response_from_parsed(
         text=text,
-        parsedRequest=parsed_request,
+        parsed=parsed,
+        parser_name=parser_name,
+        parser_fallback_used=parser_fallback_used,
         warnings=warnings,
-        requiresConfirmation=bool(parsed["requiresConfirmation"] or analysis is None),
-        parserFallbackUsed=parser_fallback_used,
-        analysis=analysis,
-        provisionalAdvice=provisional_advice,
     )
 
 
@@ -1679,6 +1745,86 @@ def analyze_mechid_text_endpoint(req: MechIDTextAnalyzeRequest) -> MechIDTextAna
         parser_strategy=req.parser_strategy,
         parser_model=req.parser_model,
         allow_fallback=req.allow_fallback,
+    )
+
+
+@app.post("/v1/mechid/analyze-image", response_model=MechIDImageAnalyzeResponse)
+def analyze_mechid_image_endpoint(req: MechIDImageAnalyzeRequest) -> MechIDImageAnalyzeResponse:
+    try:
+        parsed = parse_mechid_image_with_openai(
+            image_data_url=req.image_data_url,
+            filename=req.filename,
+            parser_model=req.parser_model,
+        )
+    except LLMParserError as exc:
+        raise HTTPException(status_code=502, detail=f"Image extraction failed: {exc}") from exc
+
+    mechid_result = _build_mechid_response_from_parsed(
+        text=_mechid_canonical_text(
+            MechIDTextParsedRequest(
+                organism=parsed.get("organism"),
+                mentionedOrganisms=parsed.get("mentionedOrganisms", []),
+                resistancePhenotypes=parsed.get("resistancePhenotypes", []),
+                susceptibilityResults=parsed.get("susceptibilityResults", {}),
+                txContext=parsed.get("txContext", {}),
+            )
+        ),
+        parsed=parsed,
+        parser_name=str(parsed.get("parser") or "openai-mechid-image"),
+    )
+    return MechIDImageAnalyzeResponse(
+        parser=str(parsed.get("parser") or "openai-mechid-image"),
+        imageFilename=req.filename,
+        sourceSummary="Uploaded isolate susceptibility report image.",
+        mechidResult=mechid_result,
+    )
+
+
+@app.post("/v1/assistant/mechid-image", response_model=AssistantTurnResponse)
+def assistant_mechid_image(req: MechIDImageAnalyzeRequest) -> AssistantTurnResponse:
+    try:
+        parsed = parse_mechid_image_with_openai(
+            image_data_url=req.image_data_url,
+            filename=req.filename,
+            parser_model=req.parser_model,
+        )
+    except LLMParserError as exc:
+        raise HTTPException(status_code=502, detail=f"Image extraction failed: {exc}") from exc
+
+    parsed_request = MechIDTextParsedRequest(
+        organism=parsed.get("organism"),
+        mentionedOrganisms=parsed.get("mentionedOrganisms", []),
+        resistancePhenotypes=parsed.get("resistancePhenotypes", []),
+        susceptibilityResults=parsed.get("susceptibilityResults", {}),
+        txContext=parsed.get("txContext", {}),
+    )
+    canonical_text = _mechid_canonical_text(parsed_request) or "Uploaded isolate report image."
+    mechid_result = _build_mechid_response_from_parsed(
+        text=canonical_text,
+        parsed=parsed,
+        parser_name=str(parsed.get("parser") or "openai-mechid-image"),
+    )
+
+    state = AssistantState(
+        workflow="mechid",
+        stage="mechid_confirm",
+        mechidText=canonical_text,
+    )
+    review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
+    assistant_message = (
+        "I extracted this isolate report from the uploaded image. Please confirm or correct anything that looks off before I run the interpretation. "
+        + review_message
+    )
+    return AssistantTurnResponse(
+        assistantMessage=assistant_message,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=_assistant_mechid_review_options(mechid_result),
+        mechidAnalysis=mechid_result,
+        tips=[
+            "If the extraction looks right, click Give consultant impression.",
+            "If anything is off, type the correction in plain language, for example 'meropenem resistant' or 'this is Klebsiella, not E. coli'.",
+        ],
     )
 
 
@@ -4635,25 +4781,66 @@ def _assistant_start_case_from_text(
 
 
 def _assistant_is_mechid_intent(message: str | None) -> bool:
+    return _assistant_mechid_intent_profile(message)["strong_mechid_trigger"]
+
+
+def _assistant_mechid_intent_profile(message: str | None) -> Dict[str, bool]:
     text = _normalize_choice(message)
+    profile = {
+        "has_isolate": False,
+        "has_ast": False,
+        "has_resistance_signal": False,
+        "has_explicit_mechid_words": False,
+        "has_explicit_therapy_words": False,
+        "strong_mechid_trigger": False,
+        "ambiguous_isolate_only": False,
+    }
     if not text:
-        return False
+        return profile
+
     try:
         parsed = parse_mechid_text(message or "")
     except MechIDEngineError:
         parsed = None
-    if parsed is not None and bool(
-        parsed.get("organism")
-        or parsed.get("mentionedOrganisms")
-        or parsed.get("resistancePhenotypes")
-        or parsed.get("susceptibilityResults")
-    ):
-        return True
-    if any(token in text for token in MECHID_INTENT_TOKENS):
-        return True
-    if any(token in text for token in MECHID_THERAPY_INTENT_TOKENS):
-        return True
-    return False
+
+    tx_context = parsed.get("txContext", {}) if isinstance(parsed, dict) else {}
+    has_isolate = bool(
+        parsed
+        and (
+            parsed.get("organism")
+            or parsed.get("mentionedOrganisms")
+        )
+    )
+    has_ast = bool(parsed and parsed.get("susceptibilityResults"))
+    has_resistance_signal = bool(
+        parsed
+        and (
+            parsed.get("resistancePhenotypes")
+            or tx_context.get("carbapenemaseResult") not in {None, "", "Not specified"}
+            or tx_context.get("carbapenemaseClass") not in {None, "", "Not specified"}
+        )
+    )
+    has_explicit_mechid_words = any(token in text for token in MECHID_INTENT_TOKENS)
+    has_explicit_therapy_words = any(token in text for token in MECHID_THERAPY_INTENT_TOKENS)
+    strong_mechid_trigger = (
+        has_ast
+        or has_resistance_signal
+        or has_explicit_mechid_words
+        or has_explicit_therapy_words
+    )
+
+    profile.update(
+        {
+            "has_isolate": has_isolate,
+            "has_ast": has_ast,
+            "has_resistance_signal": has_resistance_signal,
+            "has_explicit_mechid_words": has_explicit_mechid_words,
+            "has_explicit_therapy_words": has_explicit_therapy_words,
+            "strong_mechid_trigger": strong_mechid_trigger,
+            "ambiguous_isolate_only": has_isolate and not strong_mechid_trigger,
+        }
+    )
+    return profile
 
 
 def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: AssistantState) -> AssistantTurnResponse | None:
@@ -4857,8 +5044,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         message_text = (req.message or "").strip()
         if message_text:
             probid_preview = _assistant_preview_case_from_text(message_text, state, require_high_confidence=True)
+            mechid_intent = _assistant_mechid_intent_profile(message_text)
             mechid_preview = _assistant_preview_mechid_from_text(message_text, state)
-            if probid_preview is not None and mechid_preview is not None:
+            if probid_preview is not None and mechid_preview is not None and mechid_intent["strong_mechid_trigger"]:
                 _, module, _, _ = probid_preview
                 state.stage = "select_consult_focus"
                 state.pending_intake_text = message_text
@@ -4875,6 +5063,42 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     tips=[
                         "Choose resistance, syndrome, or both.",
                         "If you choose both, I will keep the same case text and carry it from one lane to the other.",
+                    ],
+                )
+            if probid_preview is not None and mechid_intent["ambiguous_isolate_only"]:
+                state.pending_followup_workflow = "mechid"
+                state.pending_followup_text = message_text
+                case_response = _assistant_intake_case_from_text(req, state)
+                if case_response is not None:
+                    case_response.assistant_message = (
+                        "I also noticed an isolate in your text, but this reads more like a syndrome question than a resistance question. "
+                        "I’ll keep the isolate in mind and focus on the syndrome first. "
+                        + case_response.assistant_message
+                    )
+                    case_response.tips = [
+                        "If you later want resistance help, tell me the susceptibilities or ask which antibiotics you would use.",
+                        *(case_response.tips or []),
+                    ][:3]
+                    return case_response
+            if probid_preview is None and mechid_intent["ambiguous_isolate_only"]:
+                isolate_preview = _build_mechid_text_response(
+                    message_text,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "I picked up an isolate, but I’m not yet sure whether you want resistance help or a syndrome workup. "
+                        "If you want resistance help, add a few susceptibilities or ask which antibiotics you would use. "
+                        "If you want syndrome help, describe the symptoms, source, or key test results."
+                    ),
+                    state=state,
+                    mechidAnalysis=isolate_preview,
+                    options=_assistant_module_options(),
+                    tips=[
+                        "For resistance help, a useful reply would be: 'E. coli resistant to ceftriaxone, susceptible to meropenem.'",
+                        "For syndrome help, a useful reply would be: 'fever, flank pain, pyuria, and positive urine culture'.",
                     ],
                 )
 

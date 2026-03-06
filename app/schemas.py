@@ -401,6 +401,14 @@ class MechIDTextAnalyzeRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class MechIDImageAnalyzeRequest(BaseModel):
+    image_data_url: str = Field(min_length=1, alias="imageDataUrl")
+    filename: Optional[str] = None
+    parser_model: Optional[str] = Field(default=None, alias="parserModel")
+
+    model_config = {"populate_by_name": True}
+
+
 class MechIDTextParsedRequest(BaseModel):
     organism: Optional[str] = None
     mentioned_organisms: List[str] = Field(default_factory=list, alias="mentionedOrganisms")
@@ -430,6 +438,15 @@ class MechIDTextAnalyzeResponse(BaseModel):
     parser_fallback_used: bool = Field(default=False, alias="parserFallbackUsed")
     analysis: Optional[MechIDAnalyzeResponse] = None
     provisional_advice: Optional[MechIDProvisionalAdvice] = Field(default=None, alias="provisionalAdvice")
+
+    model_config = {"populate_by_name": True}
+
+
+class MechIDImageAnalyzeResponse(BaseModel):
+    parser: str = "openai-mechid-image"
+    image_filename: Optional[str] = Field(default=None, alias="imageFilename")
+    source_summary: Optional[str] = Field(default=None, alias="sourceSummary")
+    mechid_result: MechIDTextAnalyzeResponse = Field(alias="mechidResult")
 
     model_config = {"populate_by_name": True}
 

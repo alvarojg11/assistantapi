@@ -523,6 +523,8 @@
               <div class="btn-row">
                 <button type="button" class="btn" id="restartBtn">Restart</button>
                 <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
+                <button type="button" class="btn" id="imageBtn">Upload antibiogram</button>
+                <input type="file" id="imageInput" class="hidden" accept="image/*" />
                 <button type="button" class="btn consult hidden" id="consultBtn">Give consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
               </div>
@@ -593,6 +595,8 @@
         sendBtn: document.getElementById("sendBtn"),
         restartBtn: document.getElementById("restartBtn"),
         exampleBtn: document.getElementById("exampleBtn"),
+        imageBtn: document.getElementById("imageBtn"),
+        imageInput: document.getElementById("imageInput"),
         consultBtn: document.getElementById("consultBtn"),
         composerHint: document.getElementById("composerHint"),
         helpBanner: document.getElementById("helpBanner"),
@@ -614,6 +618,7 @@
         els.sendBtn.disabled = next;
         els.restartBtn.disabled = next;
         els.exampleBtn.disabled = next;
+        els.imageBtn.disabled = next;
         els.consultBtn.disabled = next;
         els.userInput.disabled = next;
         if (next) els.sendBtn.textContent = "Sending...";
@@ -1123,6 +1128,63 @@
         return data;
       }
 
+      async function callAssistantMechidImage(payload) {
+        const res = await fetch("/v1/assistant/mechid-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`Server returned ${res.status} without JSON`);
+        }
+        if (!res.ok) {
+          throw new Error(data?.detail || `HTTP ${res.status}`);
+        }
+        return data;
+      }
+
+      function fileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("Could not read the image file."));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function uploadAntibiogram(file) {
+        if (!file || state.busy) return;
+        setBusy(true);
+        try {
+          appendMessage("user", `Uploaded antibiogram image: ${file.name}`);
+          const imageDataUrl = await fileToDataUrl(file);
+          const resp = await callAssistantMechidImage({
+            imageDataUrl,
+            filename: file.name,
+            parserModel: null,
+          });
+          state.lastResponse = resp;
+          state.assistantState = resp.state || null;
+          appendMessage("assistant", resp.assistantMessage || "No message.");
+          renderOptions(resp.options || []);
+          renderAnalysis(resp);
+          setTopStatus(resp);
+          els.rawResponse.textContent = JSON.stringify(resp, null, 2);
+          const tips = resp.tips || [];
+          els.composerHint.textContent = tips[0] || "Review the extracted antibiogram and correct anything that looks off.";
+        } catch (err) {
+          appendMessage("assistant", `I hit an error: ${err.message}`);
+          els.composerHint.textContent = "Image extraction failed. Check the server setup and try again.";
+        } finally {
+          setBusy(false);
+          els.imageInput.value = "";
+          els.userInput.focus();
+        }
+      }
+
       async function sendTurn({ message = null, selection = null, userVisibleText = null } = {}) {
         if (state.busy) return;
         const currentStage = state.assistantState?.stage || null;
@@ -1247,6 +1309,15 @@
 
       els.restartBtn.addEventListener("click", () => {
         sendTurn({ message: "restart", userVisibleText: "Restart" });
+      });
+
+      els.imageBtn.addEventListener("click", () => {
+        els.imageInput.click();
+      });
+
+      els.imageInput.addEventListener("change", () => {
+        const [file] = Array.from(els.imageInput.files || []);
+        if (file) uploadAntibiogram(file);
       });
 
       els.consultBtn.addEventListener("click", () => {
