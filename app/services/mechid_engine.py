@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import types
 from collections import defaultdict
@@ -125,14 +126,32 @@ def _create_streamlit_stub() -> types.ModuleType:
 
 
 def _mechid_app_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "App Micro mechanisms" / "app_gnr.py"
+    env_path = os.getenv("MECHID_SOURCE_PATH", "").strip()
+    candidates = []
+    if env_path:
+        candidates.append(Path(env_path).expanduser())
+
+    here = Path(__file__).resolve()
+    candidates.extend(
+        [
+            here.parents[1] / "data" / "mechid" / "app_gnr.py",
+            here.parents[3] / "App Micro mechanisms" / "app_gnr.py",
+            Path.cwd() / "app" / "data" / "mechid" / "app_gnr.py",
+            Path.cwd() / "App Micro mechanisms" / "app_gnr.py",
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    attempted = ", ".join(str(candidate) for candidate in candidates)
+    raise MechIDEngineError(f"MechID source not found. Tried: {attempted}")
 
 
 @lru_cache(maxsize=1)
 def load_mechid_module():
     app_path = _mechid_app_path()
-    if not app_path.exists():
-        raise MechIDEngineError(f"MechID source not found at {app_path}")
 
     spec = importlib.util.spec_from_file_location("mechid_app_gnr_api", app_path)
     if spec is None or spec.loader is None:
@@ -342,4 +361,3 @@ def analyze_mechid(
         "references": references,
         "panel": organism_panel(normalized_org),
     }
-
