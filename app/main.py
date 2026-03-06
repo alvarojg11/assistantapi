@@ -2190,6 +2190,40 @@ def _friendly_mechid_therapy(
     result: MechIDAnalyzeResponse,
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
+    def _select_mechid_therapy_note() -> str | None:
+        if not result.therapy_notes:
+            return None
+        cleaned_notes = [_clean_mechid_text(note).rstrip(".") for note in result.therapy_notes]
+        syndrome_local = parsed.tx_context.syndrome if parsed is not None else "Not specified"
+        severity_local = parsed.tx_context.severity if parsed is not None else "Not specified"
+
+        best_note = cleaned_notes[0]
+        best_score = -1
+        for note in cleaned_notes:
+            note_lower = note.lower()
+            score = 0
+            if any(token in note_lower for token in ("preferred", "prefer", "use ", "appropriate", "standard")):
+                score += 3
+            if any(token in note_lower for token in ("avoid", "do not rely", "not preferred")):
+                score += 1
+            if severity_local == "Severe / septic shock" and any(
+                token in note_lower
+                for token in ("serious infections", "high-risk syndrome", "invasive disease", "severe sepsis", "bacteremia", "pneumonia")
+            ):
+                score += 4
+            if syndrome_local == "Uncomplicated cystitis" and any(token in note_lower for token in ("cystitis", "urinary", "oral option")):
+                score += 4
+            if syndrome_local == "Complicated UTI / pyelonephritis" and any(
+                token in note_lower for token in ("pyelonephritis", "urinary", "oral option")
+            ):
+                score += 4
+            if syndrome_local == "Pneumonia (HAP/VAP or severe CAP)" and "pneumonia" in note_lower:
+                score += 4
+            if score > best_score:
+                best_score = score
+                best_note = note
+        return best_note
+
     provided_results = parsed.susceptibility_results if parsed is not None else {}
     susceptible_agents = [
         antibiotic
@@ -2203,6 +2237,7 @@ def _friendly_mechid_therapy(
     ]
     syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
     severity = parsed.tx_context.severity if parsed is not None else "Not specified"
+    selected_note = _select_mechid_therapy_note()
 
     preferred = None
     for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
@@ -2213,39 +2248,19 @@ def _friendly_mechid_therapy(
         preferred = susceptible_agents[0]
 
     lines: List[str] = []
-    if preferred is not None:
+    if selected_note is not None:
+        lines.append(selected_note + ".")
+    elif preferred is not None:
         if severity == "Severe / septic shock":
             lines.append(f"For this severity, I would lean toward {preferred} if it fits the infection source and patient factors.")
         elif syndrome == "CNS infection":
             lines.append(f"For a CNS infection, I would prioritize an agent with reliable CNS activity rather than relying only on the susceptibility label; {preferred} may or may not be the best fit depending on the full panel.")
         else:
             lines.append(f"From the drugs you gave me, {preferred} looks like the clearest active option.")
-    elif result.therapy_notes:
-        lines.append(_clean_mechid_text(result.therapy_notes[0]).rstrip(".") + ".")
 
-    if resistant_agents:
+    if resistant_agents and selected_note is None:
         avoid = _join_readable(resistant_agents[:3])
         lines.append(f"Based on this pattern, I would avoid {avoid} unless there is additional data that changes the interpretation.")
-
-    if result.therapy_notes:
-        cleaned_notes = [_clean_mechid_text(note).rstrip(".") for note in result.therapy_notes]
-        selected_note = None
-        if syndrome == "Uncomplicated cystitis":
-            for note in cleaned_notes:
-                note_lower = note.lower()
-                if "oral option" in note_lower or "cystitis" in note_lower:
-                    selected_note = note
-                    break
-        elif syndrome == "Complicated UTI / pyelonephritis":
-            for note in cleaned_notes:
-                note_lower = note.lower()
-                if "oral option" in note_lower or "pyelonephritis" in note_lower or "urinary" in note_lower:
-                    selected_note = note
-                    break
-        if selected_note is None and cleaned_notes:
-            selected_note = cleaned_notes[0]
-        if selected_note:
-            lines.append(f"MechID-specific therapy note: {selected_note}.")
 
     return " ".join(lines) if lines else "I would match therapy to the susceptible agents and infection source."
 
@@ -2369,25 +2384,16 @@ def _friendly_mechid_bottom_line(
     result: MechIDAnalyzeResponse,
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
-    syndrome = parsed.tx_context.syndrome if parsed is not None else "Not specified"
-    oral_preference = parsed.tx_context.oral_preference if parsed is not None else False
+    therapy_line = _friendly_mechid_therapy(result, parsed)
+    if therapy_line and therapy_line != "I would match therapy to the susceptible agents and infection source.":
+        return therapy_line
+
     provided_results = parsed.susceptibility_results if parsed is not None else {}
     susceptible_agents = [
         antibiotic
         for antibiotic, call in (provided_results or result.final_results).items()
         if call == "Susceptible"
     ]
-
-    if syndrome == "Uncomplicated cystitis":
-        for candidate in ("Nitrofurantoin", "Trimethoprim/Sulfamethoxazole", "Fosfomycin"):
-            if candidate in susceptible_agents:
-                return f"This looks like a resistant urinary isolate, but {candidate} remains a reasonable oral option for uncomplicated cystitis if clinically appropriate."
-
-    if "Meropenem" in susceptible_agents and parsed is not None and parsed.tx_context.severity == "Severe / septic shock":
-        return "This looks like an ESBL-type resistant pattern, and for a severe infection I would treat this as a meropenem-favored scenario."
-
-    if oral_preference and syndrome in {"Bone/joint infection", "Other deep-seated / high-inoculum focus"}:
-        return "Oral therapy may be possible in selected bone, joint, or deep wound infections, but I would only consider it after matching the agent to the isolate, the source, and the patient’s clinical stability."
 
     if result.mechanisms:
         first = _clean_mechid_text(result.mechanisms[0]).rstrip(".")
