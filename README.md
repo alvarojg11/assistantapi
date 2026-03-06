@@ -77,6 +77,15 @@ cd backend
 .venv311/bin/python scripts/evaluate_local_parser.py --dataset app/data/parser_eval_cases.json --parsers local
 ```
 
+## Smoke test newly added syndromes
+
+Run the regression smoke test for the recently added syndrome modules and guided assistant paths:
+
+```bash
+cd backend
+.venv311/bin/python scripts/smoke_test_new_syndromes.py
+```
+
 ## Enable LLM extraction (optional)
 
 `POST /v1/analyze-text` now supports a local example-driven parser in addition to the rule-based parser and the optional OpenAI-backed parser.
