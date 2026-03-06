@@ -57,6 +57,21 @@ PRESET_HINT_ALIASES: Dict[str, List[str]] = {
     "vap_gt48h": ["48 hours", "2 days", "two days", "greater than 48 hours"],
 }
 
+PRESET_GENERIC_LABEL_TOKENS = {
+    "evaluation",
+    "workup",
+    "consult",
+    "specialty",
+    "suspected",
+    "possible",
+    "acute",
+    "severe",
+    "low",
+    "high",
+    "concern",
+    "pathway",
+}
+
 
 COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "cap_fever": {"present": ["fever", "febrile"], "absent": ["afebrile", "no fever"]},
@@ -1211,10 +1226,16 @@ def resolve_module_from_request(
 def _preset_score(text_norm: str, module: SyndromeModule, preset) -> int:
     score = 0
     label_norm = normalize(preset.label)
+    module_tokens = set(normalize(module.name).split())
     if label_norm and _contains_phrase(text_norm, label_norm):
         score += 4
     for token in label_norm.split():
-        if len(token) >= 3 and _contains_phrase(text_norm, token):
+        if (
+            len(token) >= 3
+            and token not in module_tokens
+            and token not in PRESET_GENERIC_LABEL_TOKENS
+            and _contains_phrase(text_norm, token)
+        ):
             score += 1
     for group, aliases in PRESET_HINT_ALIASES.items():
         if any(_contains_phrase(text_norm, a) for a in aliases):
@@ -1254,7 +1275,8 @@ def _choose_preset(module: SyndromeModule, text: str, preset_hint: str | None) -
     scored.sort(key=lambda x: x[1], reverse=True)
     best = scored[0]
     if best[1] == 0:
-        return presets[0].id, warnings
+        warnings.append("Could not infer setting/pretest context from text.")
+        return None, warnings
     if len(scored) > 1 and scored[1][1] == best[1]:
         warnings.append(f"Multiple presets matched text; selected '{best[0].id}'.")
     return best[0].id, warnings

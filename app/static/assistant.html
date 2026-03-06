@@ -1007,7 +1007,6 @@
               <div class="k">Treat ≥</div><div class="v">${treatPct}%</div>
               <div class="k">Confidence</div><div class="v">${Math.round((analysis.confidence || 0) * 100)}%</div>
             </div>
-            ${analysis.explanationForUser ? `<div class="muted" style="font-size:13px;">${escapeHtml(analysis.explanationForUser)}</div>` : ""}
             <details style="margin-top:10px;">
               <summary>How It Was Calculated</summary>
               <div class="kv" style="margin-top:8px;">

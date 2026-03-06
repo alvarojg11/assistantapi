@@ -147,6 +147,176 @@ MECHID_THERAPY_INTENT_TOKENS = (
     "culture positive",
 )
 
+MODULE_EVIDENCE_REFERENCES: Dict[str, List[Dict[str, str]]] = {
+    "cap": [
+        {
+            "context": "Evidence base: Community-acquired pneumonia",
+            "citation": "Metlay et al. ATS/IDSA CAP guideline (2019)",
+            "url": "https://www.idsociety.org/practice-guideline/community-acquired-pneumonia-cap-in-adults/",
+        },
+        {
+            "context": "Evidence base: Community-acquired pneumonia",
+            "citation": "Marchello et al. Accuracy of signs and symptoms for CAP: meta-analysis (2020)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/32329557/",
+        },
+    ],
+    "vap": [
+        {
+            "context": "Evidence base: Ventilator-associated pneumonia",
+            "citation": "Kalil et al. ATS/IDSA HAP/VAP guideline (2016)",
+            "url": "https://www.idsociety.org/practice-guideline/hap_vap/",
+        },
+    ],
+    "cdi": [
+        {
+            "context": "Evidence base: Clostridioides difficile infection",
+            "citation": "Johnson et al. SHEA/IDSA CDI focused update (2021)",
+            "url": "https://www.idsociety.org/practice-guideline/clostridioides-difficile-2021-focused-update/",
+        },
+        {
+            "context": "Evidence base: Clostridioides difficile infection",
+            "citation": "McDonald et al. IDSA/SHEA CDI guideline update (2018)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/29562266/",
+        },
+        {
+            "context": "Evidence base: Clostridioides difficile infection",
+            "citation": "Binnicker et al. NAAT diagnostic meta-analysis for C. difficile (2019)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/31142497/",
+        },
+    ],
+    "uti": [
+        {
+            "context": "Evidence base: Urinary tract infection",
+            "citation": "Bent et al. Acute uncomplicated UTI diagnostic review (2002)",
+            "url": "https://doi.org/10.1001/jama.287.20.2701",
+        },
+        {
+            "context": "Evidence base: Urinary tract infection",
+            "citation": "Giesen et al. UTI symptom/sign diagnostic accuracy systematic review (2010)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/20969801/",
+        },
+        {
+            "context": "Evidence base: Urinary tract infection",
+            "citation": "Nicolle et al. IDSA asymptomatic bacteriuria guideline update (2019)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/30895288/",
+        },
+    ],
+    "endo": [
+        {
+            "context": "Evidence base: Infective endocarditis",
+            "citation": "ESC endocarditis guideline (2023)",
+            "url": "https://academic.oup.com/eurheartj/article/44/39/3948/7243107",
+        },
+        {
+            "context": "Evidence base: Infective endocarditis",
+            "citation": "Baddour et al. AHA infective endocarditis scientific statement (2015)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/26373316/",
+        },
+        {
+            "context": "Evidence base: Infective endocarditis",
+            "citation": "Duke-ISCVID criteria external validation (2024)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/38330166/",
+        },
+    ],
+    "septic_arthritis": [
+        {
+            "context": "Evidence base: Septic arthritis",
+            "citation": "Margaretten et al. Does this adult patient have septic arthritis? (2007)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/17405973/",
+        },
+        {
+            "context": "Evidence base: Septic arthritis",
+            "citation": "Carpenter et al. Evidence-based diagnostics: adult septic arthritis (2011)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/21843213/",
+        },
+        {
+            "context": "Evidence base: Septic arthritis",
+            "citation": "Mathews et al. Bacterial septic arthritis in adults (2010)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/20206778/",
+        },
+    ],
+    "bacterial_meningitis": [
+        {
+            "context": "Evidence base: Bacterial meningitis",
+            "citation": "Attia et al. Does this adult patient have acute meningitis? (1999)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/10411200/",
+        },
+        {
+            "context": "Evidence base: Bacterial meningitis",
+            "citation": "van de Beek et al. Clinical features and prognostic factors in adults with bacterial meningitis (2004)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/15509818/",
+        },
+        {
+            "context": "Evidence base: Bacterial meningitis",
+            "citation": "van de Beek et al. Community-acquired bacterial meningitis review (2021)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/34303412/",
+        },
+        {
+            "context": "Evidence base: Bacterial meningitis",
+            "citation": "Sakushima et al. CSF lactate meta-analysis (2011)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/21194480/",
+        },
+    ],
+    "encephalitis": [
+        {
+            "context": "Evidence base: Encephalitis",
+            "citation": "Tunkel et al. IDSA encephalitis guideline (2008)",
+            "url": "https://www.idsociety.org/practice-guideline/encephalitis/",
+        },
+        {
+            "context": "Evidence base: Encephalitis",
+            "citation": "Gaensbauer et al. HSV PCR assay comparison in CNS infection (2023)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/37390620/",
+        },
+    ],
+    "spinal_epidural_abscess": [
+        {
+            "context": "Evidence base: Spinal epidural abscess",
+            "citation": "Arko et al. Medical and surgical management of spinal epidural abscess: systematic review (2014)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/25081964/",
+        },
+        {
+            "context": "Evidence base: Spinal epidural abscess",
+            "citation": "Davis et al. Prospective SEA decision guideline evaluation (2011)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/21417700/",
+        },
+        {
+            "context": "Evidence base: Spinal epidural abscess",
+            "citation": "Tetsuka et al. Spinal epidural abscess review (2020)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/33324773/",
+        },
+    ],
+    "brain_abscess": [
+        {
+            "context": "Evidence base: Brain abscess",
+            "citation": "Bodilsen et al. Anti-infective treatment of brain abscess (2018)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/29909695/",
+        },
+        {
+            "context": "Evidence base: Brain abscess",
+            "citation": "Chow. Brain and spinal epidural abscess review (2018)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/30273242/",
+        },
+        {
+            "context": "Evidence base: Brain abscess",
+            "citation": "Leuthardt et al. Diffusion-weighted MRI in the preoperative assessment of brain abscesses (2002)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/12517619/",
+        },
+    ],
+    "necrotizing_soft_tissue_infection": [
+        {
+            "context": "Evidence base: Necrotizing soft tissue infection",
+            "citation": "Stevens et al. IDSA skin and soft tissue infection guideline (2014)",
+            "url": "https://www.idsociety.org/practice-guideline/skin-and-soft-tissue-infections/",
+        },
+        {
+            "context": "Evidence base: Necrotizing soft tissue infection",
+            "citation": "Fernando et al. NSTI diagnostic accuracy meta-analysis (2019)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/29672405/",
+        },
+    ],
+}
+
 ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
     "staph": {
         "label": "Staphylococcus aureus",
@@ -1587,6 +1757,9 @@ def _collect_reference_entries(
                 continue
             add_entry(f"Baseline factor: {spec.label}", spec.source_note, spec.source_url)
 
+    for evidence_ref in MODULE_EVIDENCE_REFERENCES.get(module.id, []):
+        add_entry(evidence_ref["context"], evidence_ref["citation"], evidence_ref["url"])
+
     return entries
 
 
@@ -2110,6 +2283,36 @@ def _assistant_module_options() -> List[AssistantOption]:
     return options
 
 
+def _assistant_consult_focus_options() -> List[AssistantOption]:
+    return [
+        AssistantOption(
+            value="focus_resistance",
+            label="Resistance first",
+            description="Start with the isolate, mechanism, and therapy interpretation.",
+        ),
+        AssistantOption(
+            value="focus_syndrome",
+            label="Syndrome first",
+            description="Start with the diagnostic syndrome workup and post-test probability.",
+        ),
+        AssistantOption(
+            value="focus_both",
+            label="Both",
+            description="Work through both, one step at a time.",
+        ),
+    ]
+
+
+def _assistant_message_explicitly_mentions_module(message_text: str, module: SyndromeModule) -> bool:
+    text = _normalize_choice(message_text)
+    candidates = {
+        module.name.lower(),
+        module.id.replace("_", " ").lower(),
+        _assistant_module_label(module).lower(),
+    }
+    return any(candidate and candidate in text for candidate in candidates)
+
+
 def _assistant_module_label(module: SyndromeModule) -> str:
     return ASSISTANT_MODULE_LABELS.get(module.id, module.name)
 
@@ -2153,6 +2356,70 @@ def _assistant_single_case_follow_up(
     )
 
 
+def _assistant_populate_case_review_analysis(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+) -> None:
+    if text_result.analysis is not None or text_result.parsed_request is None:
+        return
+    try:
+        text_result.analysis = _analyze_internal(text_result.parsed_request)
+    except HTTPException:
+        return
+
+
+def _assistant_case_is_consult_ready(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> bool:
+    if text_result.parsed_request is None:
+        return False
+
+    _assistant_populate_case_review_analysis(module, text_result)
+    if text_result.analysis is None:
+        return False
+
+    item_lookup = {item.id: item for item in module.items}
+    informative_count = 0
+    for item_id, finding_state in (text_result.parsed_request.findings or {}).items():
+        if finding_state == "unknown":
+            continue
+        item = item_lookup.get(item_id)
+        if item is None:
+            continue
+        if any(token in item.id for token in ("not_done", "unknown", "not_used", "na")):
+            continue
+        informative_count += 1
+
+    if len(text_result.analysis.applied_findings) >= 2:
+        return True
+    if informative_count >= 3:
+        return True
+    if (
+        informative_count >= 2
+        and text_result.analysis.combined_lr is not None
+        and abs(text_result.analysis.combined_lr - 1.0) >= 0.25
+    ):
+        return True
+    return not bool(_top_missing_item_specs(module, text_result.parsed_request, limit=1, state=state))
+
+
+def _assistant_ready_for_consult_message(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> str:
+    next_items = _top_missing_item_specs(module, text_result.parsed_request, limit=1, state=state)
+    message = (
+        "I have enough to run the consult with what you gave me. "
+        "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
+    )
+    if next_items:
+        message += f" If you want to sharpen it further, the next useful detail would be {next_items[0][1]}."
+    return message
+
+
 def _assistant_concise_probid_follow_up(
     module: SyndromeModule,
     text_result: TextAnalyzeResponse,
@@ -2161,13 +2428,16 @@ def _assistant_concise_probid_follow_up(
     lead: str = "That helps.",
 ) -> str:
     pieces = [lead]
-    follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
-    if follow_up:
-        pieces.append(follow_up)
-    elif text_result.requires_confirmation:
-        pieces.append("If anything looks off, correct it or add another detail.")
+    if _assistant_case_is_consult_ready(module, text_result, state):
+        pieces.append(_assistant_ready_for_consult_message(module, text_result, state))
     else:
-        pieces.append("If this extraction matches the case, ask for my consultant impression.")
+        follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
+        if follow_up:
+            pieces.append(follow_up)
+        elif text_result.requires_confirmation:
+            pieces.append("If anything looks off, correct it or add another detail.")
+        else:
+            pieces.append("If this extraction matches the case, ask for my consultant impression.")
     return " ".join(piece.strip() for piece in pieces if piece and piece.strip())
 
 
@@ -3359,6 +3629,28 @@ def _assistant_preset_options(module: SyndromeModule) -> List[AssistantOption]:
     ]
 
 
+def _assistant_lay_preset_prompt(module: SyndromeModule) -> str:
+    labels = [preset.label for preset in module.pretest_presets]
+    readable = _join_readable(labels[:3]) if labels else "the current setting"
+    return (
+        f"Before I set the starting probability for {_assistant_module_label(module)}, "
+        f"where is the patient being evaluated? In plain terms, is this more like {readable}?"
+    )
+
+
+def _assistant_text_explicitly_supports_preset(
+    message_text: str,
+    module: SyndromeModule,
+) -> bool:
+    parsed = parse_text_to_request(
+        store=store,
+        text=message_text,
+        module_hint=module.id,
+        include_explanation=False,
+    )
+    return bool(parsed.parsed_request and parsed.parsed_request.preset_id)
+
+
 def _select_endo_blood_culture_context_from_turn(req: AssistantTurnRequest) -> str | None:
     selection = (req.selection or "").strip()
     if selection in ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES:
@@ -4096,13 +4388,18 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
             f"I also captured {_join_readable(absent_findings)} as absent or negative."
         )
 
-    single_follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
-    if single_follow_up:
-        summary += " " + single_follow_up
+    if _assistant_case_is_consult_ready(module, text_result, state):
+        summary += " " + _assistant_ready_for_consult_message(module, text_result, state)
+    else:
+        single_follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
+        if single_follow_up:
+            summary += " " + single_follow_up
     score_name = _assistant_selected_endo_score_id(state)
     if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state):
         summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
 
+    if _assistant_case_is_consult_ready(module, text_result, state):
+        return summary
     if text_result.requires_confirmation:
         summary += " If anything looks off, correct it or add more case detail. If this extraction matches the case, ask for my consultant impression."
     else:
@@ -4176,7 +4473,22 @@ def _assistant_intake_case_from_text(
     module_hint: str | None = None,
     preset_hint: str | None = None,
 ) -> AssistantTurnResponse | None:
-    message_text = (req.message or "").strip()
+    return _assistant_start_case_from_text(
+        (req.message or "").strip(),
+        state,
+        module_hint=module_hint,
+        preset_hint=preset_hint,
+    )
+
+
+def _assistant_preview_case_from_text(
+    message_text: str,
+    state: AssistantState,
+    *,
+    module_hint: str | None = None,
+    preset_hint: str | None = None,
+    require_high_confidence: bool = False,
+) -> tuple[TextAnalyzeResponse, SyndromeModule, str | None, List[str]] | None:
     if not message_text:
         return None
 
@@ -4211,9 +4523,63 @@ def _assistant_intake_case_from_text(
     if not text_result.parsed_request.findings and not inferred_score_factor_ids:
         return None
 
+    if require_high_confidence:
+        finding_count = len(text_result.parsed_request.findings or {})
+        if not _assistant_message_explicitly_mentions_module(message_text, module) and finding_count < 2 and not inferred_score_factor_ids:
+            return None
+
+    return text_result, module, inferred_context, inferred_score_factor_ids
+
+
+def _assistant_start_case_from_text(
+    message_text: str,
+    state: AssistantState,
+    *,
+    module_hint: str | None = None,
+    preset_hint: str | None = None,
+) -> AssistantTurnResponse | None:
+    preview = _assistant_preview_case_from_text(
+        message_text,
+        state,
+        module_hint=module_hint,
+        preset_hint=preset_hint,
+    )
+    if preview is None:
+        return None
+
+    text_result, module, inferred_context, inferred_score_factor_ids = preview
+    explicit_preset_supported = bool(preset_hint) or _assistant_text_explicitly_supports_preset(message_text, module)
+    if module.pretest_presets and (not text_result.parsed_request.preset_id or not explicit_preset_supported):
+        state.module_id = module.id
+        state.workflow = "probid"
+        state.preset_id = None
+        state.case_text = message_text
+        state.mechid_text = None
+        state.case_section = None
+        state.stage = "select_preset"
+        if module.id == "endo":
+            state.endo_blood_culture_context = inferred_context
+            _assistant_merge_endo_score_factor_ids(state, inferred_score_factor_ids)
+        else:
+            state.endo_blood_culture_context = None
+            state.endo_score_factor_ids = []
+        _sync_pretest_factor_labels(state, module)
+        return AssistantTurnResponse(
+            assistantMessage=_assistant_lay_preset_prompt(module),
+            assistantNarrationRefined=False,
+            state=state,
+            options=_assistant_preset_options(module),
+            analysis=text_result,
+            tips=[
+                "You can answer in plain language, for example 'this is in the ED' or 'already inpatient on the floor'.",
+                "Once I have the setting, I will keep the rest of the case details you already gave me.",
+            ],
+        )
+
     state.module_id = module.id
     state.workflow = "probid"
     state.preset_id = text_result.parsed_request.preset_id or state.preset_id
+    state.pending_intake_text = None
     state.case_text = message_text
     state.mechid_text = None
     state.case_section = None
@@ -4255,37 +4621,34 @@ def _assistant_is_mechid_intent(message: str | None) -> bool:
     text = _normalize_choice(message)
     if not text:
         return False
+    try:
+        parsed = parse_mechid_text(message or "")
+    except MechIDEngineError:
+        parsed = None
+    if parsed is not None and bool(
+        parsed.get("organism")
+        or parsed.get("mentionedOrganisms")
+        or parsed.get("resistancePhenotypes")
+        or parsed.get("susceptibilityResults")
+    ):
+        return True
     if any(token in text for token in MECHID_INTENT_TOKENS):
         return True
     if any(token in text for token in MECHID_THERAPY_INTENT_TOKENS):
-        try:
-            parsed = parse_mechid_text(message or "")
-        except MechIDEngineError:
-            return False
-        return bool(
-            parsed.get("organism")
-            or parsed.get("mentionedOrganisms")
-            or parsed.get("resistancePhenotypes")
-        )
+        return True
     return False
 
 
 def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: AssistantState) -> AssistantTurnResponse | None:
-    message_text = (req.message or "").strip()
+    return _assistant_start_mechid_from_text((req.message or "").strip(), state)
+
+
+def _assistant_preview_mechid_from_text(
+    message_text: str,
+    state: AssistantState,
+) -> MechIDTextAnalyzeResponse | None:
     if not message_text or not _assistant_is_mechid_intent(message_text):
         return None
-
-    state.workflow = "mechid"
-    state.stage = "mechid_confirm"
-    state.module_id = None
-    state.preset_id = None
-    state.case_section = None
-    state.case_text = None
-    state.pretest_factor_ids = []
-    state.pretest_factor_labels = []
-    state.endo_blood_culture_context = None
-    state.endo_score_factor_ids = []
-    state.mechid_text = message_text
 
     mechid_result = _build_mechid_text_response(
         message_text,
@@ -4293,6 +4656,39 @@ def _assistant_intake_mechid_from_text(req: AssistantTurnRequest, state: Assista
         parser_model=state.parser_model,
         allow_fallback=state.allow_fallback,
     )
+    parsed = mechid_result.parsed_request
+    if parsed is None:
+        return None
+    if not (
+        parsed.organism
+        or parsed.mentioned_organisms
+        or parsed.resistance_phenotypes
+        or parsed.susceptibility_results
+    ):
+        return None
+    return mechid_result
+
+
+def _assistant_start_mechid_from_text(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    mechid_result = _assistant_preview_mechid_from_text(message_text, state)
+    if mechid_result is None:
+        return None
+
+    state.workflow = "mechid"
+    state.stage = "mechid_confirm"
+    state.module_id = None
+    state.preset_id = None
+    state.pending_intake_text = None
+    state.case_section = None
+    state.case_text = None
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+    state.mechid_text = message_text
     review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
     return AssistantTurnResponse(
         assistantMessage=review_message,
@@ -4331,6 +4727,47 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     return None
 
 
+def _select_consult_focus_from_turn(req: AssistantTurnRequest) -> str | None:
+    selection = (req.selection or "").strip()
+    if selection in {"focus_resistance", "focus_syndrome", "focus_both"}:
+        return selection
+
+    message = _normalize_choice(req.message)
+    if not message:
+        return None
+    if message in {"resistance", "mechid", "isolate", "ast", "mechanism"}:
+        return "focus_resistance"
+    if message in {"syndrome", "probid", "probability", "diagnosis"}:
+        return "focus_syndrome"
+    if message in {"both", "both please", "do both", "both of them"}:
+        return "focus_both"
+    return None
+
+
+def _assistant_start_pending_followup(state: AssistantState) -> AssistantTurnResponse | None:
+    pending_text = (state.pending_followup_text or "").strip()
+    pending_workflow = state.pending_followup_workflow
+    if not pending_text or pending_workflow is None:
+        return None
+
+    state.pending_followup_workflow = None
+    state.pending_followup_text = None
+    if pending_workflow == "mechid":
+        response = _assistant_start_mechid_from_text(pending_text, state)
+        if response is not None:
+            response.assistant_message = (
+                "I carried the same case into the resistance lane. " + response.assistant_message
+            )
+        return response
+
+    response = _assistant_start_case_from_text(pending_text, state)
+    if response is not None:
+        response.assistant_message = (
+            "I carried the same case into the syndrome lane. " + response.assistant_message
+        )
+    return response
+
+
 def _select_preset_from_turn(module: SyndromeModule, req: AssistantTurnRequest) -> str | None:
     candidates = {p.id: p for p in module.pretest_presets}
     sel = (req.selection or "").strip()
@@ -4346,6 +4783,15 @@ def _select_preset_from_turn(module: SyndromeModule, req: AssistantTurnRequest) 
             return p.id
         if p.label.lower() in msg or msg in p.label.lower():
             return p.id
+
+    parsed = parse_text_to_request(
+        store=store,
+        text=req.message or "",
+        module_hint=module.id,
+        include_explanation=False,
+    )
+    if parsed.parsed_request and parsed.parsed_request.preset_id:
+        return parsed.parsed_request.preset_id
     return None
 
 
@@ -4378,6 +4824,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             workflow="probid",
             caseText=None,
             mechidText=None,
+            pendingIntakeText=None,
+            pendingFollowupWorkflow=None,
+            pendingFollowupText=None,
             endoScoreFactorIds=[],
             caseSection=None,
             pretestFactorIds=[],
@@ -4388,13 +4837,37 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         )
 
     if state.stage == "select_module":
-        direct_case_response = _assistant_intake_case_from_text(req, state)
-        if direct_case_response is not None:
-            return direct_case_response
+        message_text = (req.message or "").strip()
+        if message_text:
+            probid_preview = _assistant_preview_case_from_text(message_text, state, require_high_confidence=True)
+            mechid_preview = _assistant_preview_mechid_from_text(message_text, state)
+            if probid_preview is not None and mechid_preview is not None:
+                _, module, _, _ = probid_preview
+                state.stage = "select_consult_focus"
+                state.pending_intake_text = message_text
+                state.module_id = module.id
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        f"I extracted both an isolate/resistance pattern and a syndrome signal for {_assistant_module_label(module)}. "
+                        "Do you want me to start with resistance, with the syndrome, or work through both step by step?"
+                    ),
+                    state=state,
+                    options=_assistant_consult_focus_options(),
+                    analysis=probid_preview[0],
+                    mechidAnalysis=mechid_preview,
+                    tips=[
+                        "Choose resistance, syndrome, or both.",
+                        "If you choose both, I will keep the same case text and carry it from one lane to the other.",
+                    ],
+                )
 
         direct_mechid_response = _assistant_intake_mechid_from_text(req, state)
         if direct_mechid_response is not None:
             return direct_mechid_response
+
+        direct_case_response = _assistant_intake_case_from_text(req, state)
+        if direct_case_response is not None:
+            return direct_case_response
 
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id:
@@ -4454,6 +4927,62 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_module_options(),
             tips=[
                 "I can either run a ProbID syndrome workup or a MechID resistance-mechanism interpretation.",
+            ],
+        )
+
+    if state.stage == "select_consult_focus":
+        selected_focus = _select_consult_focus_from_turn(req)
+        pending_text = (state.pending_intake_text or "").strip()
+        if not pending_text:
+            state.stage = "select_module"
+            state.module_id = None
+            return AssistantTurnResponse(
+                assistantMessage="I lost the original case text. Paste the case again and I will sort out resistance, syndrome, or both.",
+                state=state,
+                options=_assistant_module_options(),
+            )
+
+        if selected_focus == "focus_resistance":
+            state.pending_followup_workflow = None
+            state.pending_followup_text = None
+            return _assistant_start_mechid_from_text(pending_text, state) or AssistantTurnResponse(
+                assistantMessage="I could not start the resistance lane from that text yet. Add the organism plus a few susceptibility calls.",
+                state=state,
+                options=[AssistantOption(value="restart", label="Start new consult")],
+            )
+
+        if selected_focus == "focus_syndrome":
+            state.pending_followup_workflow = None
+            state.pending_followup_text = None
+            return _assistant_start_case_from_text(pending_text, state) or AssistantTurnResponse(
+                assistantMessage="I could not start the syndrome lane from that text yet. Add a few syndrome-defining findings or test results.",
+                state=state,
+                options=[AssistantOption(value="restart", label="Start new consult")],
+            )
+
+        if selected_focus == "focus_both":
+            state.pending_followup_workflow = "probid"
+            state.pending_followup_text = pending_text
+            response = _assistant_start_mechid_from_text(pending_text, state)
+            if response is not None:
+                response.assistant_message = (
+                    "I’ll start with the resistance side first, then we can carry the same case into the syndrome workup. "
+                    + response.assistant_message
+                )
+                return response
+            return AssistantTurnResponse(
+                assistantMessage="I could not start the resistance side yet. Add the organism plus a few susceptibility calls, or choose syndrome first.",
+                state=state,
+                options=_assistant_consult_focus_options(),
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage="I found both an isolate/resistance pattern and a syndrome signal. Do you want resistance, syndrome, or both?",
+            state=state,
+            options=_assistant_consult_focus_options(),
+            tips=[
+                "Choose resistance, syndrome, or both.",
+                "If you choose both, I will carry the same text forward so you do not need to paste it again.",
             ],
         )
 
@@ -4544,15 +5073,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
             state.stage = "done"
             narrated_message, narration_refined = _assistant_mechid_review_message(mechid_result, final=True)
+            done_options = [AssistantOption(value="restart", label="Start new consult")]
+            done_tips = [
+                "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
+            ]
+            if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
+                done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
+                done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
                 state=state,
-                options=[AssistantOption(value="restart", label="Start new consult")],
+                options=done_options,
                 mechidAnalysis=mechid_result,
-                tips=[
-                    "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
-                ],
+                tips=done_tips,
             )
 
         return AssistantTurnResponse(
@@ -4600,8 +5134,24 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             state.case_section = None
             state.pretest_factor_ids = []
             state.pretest_factor_labels = []
-            state.case_text = None
             preset = next((p for p in module.pretest_presets if p.id == chosen_preset_id), None)
+            existing_case_text = (state.case_text or "").strip()
+            if existing_case_text:
+                return _assistant_start_case_from_text(
+                    existing_case_text,
+                    state,
+                    module_hint=state.module_id,
+                    preset_hint=chosen_preset_id,
+                ) or AssistantTurnResponse(
+                    assistantMessage=(
+                        f"I’ll use {preset.label if preset else chosen_preset_id}. "
+                        "I still need a little more clinical detail before I can continue."
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                )
+
+            state.case_text = None
             if module.id == "endo":
                 state.stage = "select_endo_blood_culture_context"
                 return AssistantTurnResponse(
@@ -4646,10 +5196,13 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             )
 
         return AssistantTurnResponse(
-            assistantMessage="Which setting/pretest context fits this case best?",
+            assistantMessage=_assistant_lay_preset_prompt(module),
             state=state,
             options=_assistant_preset_options(module),
-            tips=["Choose one of the preset contexts or type a short phrase like 'ED' or 'ICU'."],
+            tips=[
+                "You can type it in normal words, for example 'this is in the ED' or 'already inpatient'.",
+                "Or click the preset that fits best.",
+            ],
         )
 
     if state.stage == "select_endo_blood_culture_context":
@@ -5096,18 +5649,23 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 fallback_message=final_message,
                 module_label=_assistant_module_label(module),
             )
+            done_options = [
+                AssistantOption(value="restart", label="Start new consult"),
+            ]
+            done_tips = [
+                "Review `understood` to confirm what I extracted from your text.",
+                "If you want to change the case details, begin a new consult and rerun it.",
+            ]
+            if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
+                done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
+                done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
                 state=state,
-                options=[
-                    AssistantOption(value="restart", label="Start new consult"),
-                ],
+                options=done_options,
                 analysis=text_result,
-                tips=[
-                    "Review `understood` to confirm what I extracted from your text.",
-                    "If you want to change the case details, begin a new consult and rerun it.",
-                ],
+                tips=done_tips,
             )
 
         if req.message and req.message.strip():
@@ -5141,12 +5699,22 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             ],
         )
 
+    if state.stage == "done":
+        selection = (req.selection or "").strip()
+        if selection in {"continue_to_syndrome", "continue_to_resistance"}:
+            followup_response = _assistant_start_pending_followup(state)
+            if followup_response is not None:
+                return followup_response
+
     # done / fallback
     if restart_requested:
         state = AssistantState(
             workflow="probid",
             caseText=None,
             mechidText=None,
+            pendingIntakeText=None,
+            pendingFollowupWorkflow=None,
+            pendingFollowupText=None,
             endoScoreFactorIds=[],
             caseSection=None,
             parserStrategy=state.parser_strategy,
@@ -5158,6 +5726,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         state.workflow = "probid"
         state.module_id = None
         state.preset_id = None
+        state.pending_intake_text = None
+        state.pending_followup_workflow = None
+        state.pending_followup_text = None
         state.endo_blood_culture_context = None
         state.endo_score_factor_ids = []
         state.case_section = None

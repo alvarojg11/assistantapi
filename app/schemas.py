@@ -278,6 +278,7 @@ class ParserTrainingExample(BaseModel):
 
 AssistantStage = Literal[
     "select_module",
+    "select_consult_focus",
     "select_preset",
     "select_endo_blood_culture_context",
     "select_pretest_factors",
@@ -304,6 +305,9 @@ class AssistantState(BaseModel):
     workflow: Literal["probid", "mechid"] = "probid"
     module_id: Optional[str] = Field(default=None, alias="moduleId")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
+    pending_intake_text: Optional[str] = Field(default=None, alias="pendingIntakeText")
+    pending_followup_workflow: Optional[Literal["probid", "mechid"]] = Field(default=None, alias="pendingFollowupWorkflow")
+    pending_followup_text: Optional[str] = Field(default=None, alias="pendingFollowupText")
     endo_blood_culture_context: Optional[
         Literal["staph", "strep", "enterococcus", "other_unknown_pending"]
     ] = Field(default=None, alias="endoBloodCultureContext")
