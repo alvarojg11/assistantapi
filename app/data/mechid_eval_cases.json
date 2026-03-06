@@ -152,7 +152,7 @@
     "expectedRequiresConfirmation": false,
     "expectedParsed": {
       "organism": "Escherichia coli",
-      "syndrome": "cystitis",
+      "syndrome": "Uncomplicated cystitis",
       "focusDetail": "Cystitis",
       "oralPreference": true,
       "mentionedOrganismsContains": [
@@ -257,6 +257,8 @@
       "syndrome": "Bloodstream infection",
       "severity": "Severe / septic shock",
       "focusDetail": "Bloodstream infection",
+      "carbapenemaseResult": "Positive",
+      "carbapenemaseClass": "NDM",
       "mentionedOrganismsContains": [],
       "resistancePhenotypesContains": [
         "CRE",
@@ -281,6 +283,7 @@
       "Fluoroquinolone resistance: typically **QRDR mutations** in **gyrA/parC** ± **efflux upregulation** (AcrAB–TolC / OqxAB) and sometimes **plasmid-mediated qnr / AAC(6')-Ib-cr**."
     ],
     "expectedTherapyNotesContains": [
+      "Ceftazidime/Avibactam plus Aztreonam",
       "**CRE phenotype** → isolate should be tested for **carbapenemase**.\n",
       "**All tested fluoroquinolones are resistant** → avoid fluoroquinolones; use another susceptible class."
     ],
@@ -300,7 +303,7 @@
     "expectedOralOptionsContains": [],
     "expectedMissingSusceptibilitiesContains": [],
     "assistantReviewContains": [
-      "NDM positive"
+      "positive (NDM)"
     ],
     "assistantFinalContains": []
   },

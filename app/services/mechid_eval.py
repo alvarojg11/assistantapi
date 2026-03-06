@@ -173,6 +173,22 @@ def evaluate_mechid_case(
                 case_id,
                 stats,
             )
+        if "carbapenemaseResult" in parsed_expect:
+            _check_equal(
+                parsed.get("txContext", {}).get("carbapenemaseResult"),
+                parsed_expect["carbapenemaseResult"],
+                "carbapenemaseResult",
+                case_id,
+                stats,
+            )
+        if "carbapenemaseClass" in parsed_expect:
+            _check_equal(
+                parsed.get("txContext", {}).get("carbapenemaseClass"),
+                parsed_expect["carbapenemaseClass"],
+                "carbapenemaseClass",
+                case_id,
+                stats,
+            )
         if "mentionedOrganismsContains" in parsed_expect:
             _check_contains_list(
                 parsed.get("mentionedOrganisms", []),

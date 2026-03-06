@@ -351,6 +351,8 @@ class MechIDTxContext(BaseModel):
     severity: str = "Not specified"
     focus_detail: str = Field(default="Not specified", alias="focusDetail")
     oral_preference: bool = Field(default=False, alias="oralPreference")
+    carbapenemase_result: str = Field(default="Not specified", alias="carbapenemaseResult")
+    carbapenemase_class: str = Field(default="Not specified", alias="carbapenemaseClass")
 
     model_config = {"populate_by_name": True}
 
@@ -434,6 +436,8 @@ class MechIDTrainerParsedExpectation(BaseModel):
     severity: Optional[str] = None
     focus_detail: Optional[str] = Field(default=None, alias="focusDetail")
     oral_preference: Optional[bool] = Field(default=None, alias="oralPreference")
+    carbapenemase_result: Optional[str] = Field(default=None, alias="carbapenemaseResult")
+    carbapenemase_class: Optional[str] = Field(default=None, alias="carbapenemaseClass")
     mentioned_organisms_contains: List[str] = Field(default_factory=list, alias="mentionedOrganismsContains")
     resistance_phenotypes_contains: List[str] = Field(default_factory=list, alias="resistancePhenotypesContains")
     susceptibility_results_subset: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResultsSubset")

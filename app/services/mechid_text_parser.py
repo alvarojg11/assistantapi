@@ -43,6 +43,11 @@ PHENOTYPE_HINTS = {
     "vre": "VRE",
     "esbl": "ESBL",
     "cre": "CRE",
+    "kpc": "KPC carbapenemase",
+    "ndm": "NDM carbapenemase",
+    "vim": "VIM carbapenemase",
+    "oxa-48": "OXA-48-like carbapenemase",
+    "oxa 48": "OXA-48-like carbapenemase",
 }
 
 SYNDROME_HINTS = (
@@ -202,6 +207,8 @@ def _infer_tx_context(text_norm: str) -> Dict[str, str]:
     severity = "Not specified"
     focus_detail = "Not specified"
     oral_preference = False
+    carbapenemase_result = "Not specified"
+    carbapenemase_class = "Not specified"
     for token, label, detail in SYNDROME_HINTS:
         if token in text_norm:
             syndrome = label
@@ -212,11 +219,46 @@ def _infer_tx_context(text_norm: str) -> Dict[str, str]:
             severity = label
             break
     oral_preference = any(token in text_norm for token in ORAL_PREFERENCE_HINTS)
+    if re.search(r"\b(?:carbapenemase|cp[- ]?cre)\b.*\b(?:negative|not detected)\b", text_norm) or re.search(
+        r"\b(?:negative|not detected)\b.*\bcarbapenemase\b",
+        text_norm,
+    ):
+        carbapenemase_result = "Negative"
+    elif re.search(r"\bcarbapenemase\b.*\b(?:pending|not tested)\b", text_norm) or re.search(
+        r"\b(?:pending|not tested)\b.*\bcarbapenemase\b",
+        text_norm,
+    ):
+        carbapenemase_result = "Not tested / pending"
+    elif re.search(r"\b(?:carbapenemase|cp[- ]?cre)\b.*\b(?:positive|detected|present)\b", text_norm) or re.search(
+        r"\b(?:positive|detected|present)\b.*\b(?:for\s+)?carbapenemase\b",
+        text_norm,
+    ):
+        carbapenemase_result = "Positive"
+
+    class_patterns = (
+        (r"\bkpc\b", "KPC"),
+        (r"\boxa(?:[- ]?48(?:-like)?)\b", "OXA-48-like"),
+        (r"\bndm\b", "NDM"),
+        (r"\bvim\b", "VIM"),
+        (r"\bimp\b", "IMP"),
+    )
+    for pattern, label in class_patterns:
+        if re.search(pattern, text_norm):
+            carbapenemase_class = label
+            if carbapenemase_result == "Not specified":
+                carbapenemase_result = "Positive"
+            break
+    if carbapenemase_class == "Not specified" and re.search(r"\b(?:mbl|metallo beta lactamase|metallo-beta-lactamase)\b", text_norm):
+        carbapenemase_class = "Other / Unknown"
+        if carbapenemase_result == "Not specified":
+            carbapenemase_result = "Positive"
     return {
         "syndrome": syndrome,
         "severity": severity,
         "focusDetail": focus_detail,
         "oralPreference": oral_preference,
+        "carbapenemaseResult": carbapenemase_result,
+        "carbapenemaseClass": carbapenemase_class,
     }
 
 

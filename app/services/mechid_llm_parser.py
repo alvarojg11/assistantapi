@@ -25,6 +25,8 @@ class MechIDLLMExtractionPayload(BaseModel):
             "severity": "Not specified",
             "focusDetail": "Not specified",
             "oralPreference": False,
+            "carbapenemaseResult": "Not specified",
+            "carbapenemaseClass": "Not specified",
         },
         alias="txContext",
     )
@@ -68,6 +70,8 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "If the organism is unclear, set organism to null instead of guessing.\n"
         "If syndrome, site detail, or severity is not clearly stated, use 'Not specified'.\n"
         "Set oralPreference to true only if the user is explicitly asking for oral therapy, oral step-down, or PO options.\n"
+        "Use carbapenemaseResult when the text explicitly says carbapenemase testing is positive, negative, pending, or not tested.\n"
+        "Use carbapenemaseClass only when the text explicitly names a class such as KPC, OXA-48-like, NDM, VIM, or IMP.\n"
         "Preserve as many explicitly stated AST calls as possible.\n"
         "Set confidence to low when the organism or the AST pattern is ambiguous.\n"
         "Use ambiguities for details that could support multiple interpretations.\n"
@@ -91,6 +95,8 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         "severity": payload.tx_context.get("severity", "Not specified") or "Not specified",
         "focusDetail": payload.tx_context.get("focusDetail", "Not specified") or "Not specified",
         "oralPreference": bool(payload.tx_context.get("oralPreference", False)),
+        "carbapenemaseResult": payload.tx_context.get("carbapenemaseResult", "Not specified") or "Not specified",
+        "carbapenemaseClass": payload.tx_context.get("carbapenemaseClass", "Not specified") or "Not specified",
     }
 
     if organism:
@@ -204,6 +210,16 @@ def parse_mechid_text_with_openai(
         normalized["txContext"]["focusDetail"] = rule_fallback["txContext"]["focusDetail"]
     if not normalized["txContext"].get("oralPreference") and rule_fallback["txContext"].get("oralPreference"):
         normalized["txContext"]["oralPreference"] = True
+    if (
+        normalized["txContext"].get("carbapenemaseResult") == "Not specified"
+        and rule_fallback["txContext"].get("carbapenemaseResult") != "Not specified"
+    ):
+        normalized["txContext"]["carbapenemaseResult"] = rule_fallback["txContext"]["carbapenemaseResult"]
+    if (
+        normalized["txContext"].get("carbapenemaseClass") == "Not specified"
+        and rule_fallback["txContext"].get("carbapenemaseClass") != "Not specified"
+    ):
+        normalized["txContext"]["carbapenemaseClass"] = rule_fallback["txContext"]["carbapenemaseClass"]
 
     normalized["requiresConfirmation"] = bool(
         normalized["requiresConfirmation"]

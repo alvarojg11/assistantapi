@@ -2759,6 +2759,8 @@ def _friendly_mechid_therapy(
         cleaned_notes = [_clean_mechid_text(note).rstrip(".") for note in result.therapy_notes]
         syndrome_local = parsed.tx_context.syndrome if parsed is not None else "Not specified"
         severity_local = parsed.tx_context.severity if parsed is not None else "Not specified"
+        carbapenemase_result_local = parsed.tx_context.carbapenemase_result if parsed is not None else "Not specified"
+        carbapenemase_class_local = parsed.tx_context.carbapenemase_class if parsed is not None else "Not specified"
 
         best_note = cleaned_notes[0]
         best_score = -1
@@ -2781,6 +2783,20 @@ def _friendly_mechid_therapy(
             ):
                 score += 4
             if syndrome_local == "Pneumonia (HAP/VAP or severe CAP)" and "pneumonia" in note_lower:
+                score += 4
+            if carbapenemase_result_local == "Positive" and any(
+                token in note_lower
+                for token in (
+                    "meropenem/vaborbactam",
+                    "ceftazidime/avibactam",
+                    "imipenem/cilastatin/relebactam",
+                    "aztreonam",
+                    "cefiderocol",
+                    "carbapenemase pattern",
+                )
+            ):
+                score += 5
+            if carbapenemase_class_local != "Not specified" and carbapenemase_class_local.lower() in note_lower:
                 score += 4
             if score > best_score:
                 best_score = score
@@ -2991,6 +3007,11 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         context_bits.append(parsed.tx_context.severity)
     if context_bits:
         summary += f" Clinical context: {_join_readable(context_bits)}."
+    if parsed.tx_context.carbapenemase_result != "Not specified":
+        carbapenemase_summary = parsed.tx_context.carbapenemase_result.lower()
+        if parsed.tx_context.carbapenemase_class != "Not specified":
+            carbapenemase_summary += f" ({parsed.tx_context.carbapenemase_class})"
+        summary += f" Carbapenemase testing: {carbapenemase_summary}."
 
     if not final:
         if result.analysis is not None:
