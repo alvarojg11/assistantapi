@@ -2420,6 +2420,23 @@ def _assistant_ready_for_consult_message(
     return message
 
 
+def _assistant_probability_change_sentence(
+    previous_analysis: AnalyzeResponse | None,
+    updated_analysis: AnalyzeResponse | None,
+) -> str | None:
+    if previous_analysis is None or updated_analysis is None:
+        return None
+    previous = previous_analysis.posttest_probability
+    updated = updated_analysis.posttest_probability
+    delta = updated - previous
+    if abs(delta) < 0.001:
+        return f"The post-test probability is essentially unchanged at {updated:.1%}."
+    direction = "up" if delta > 0 else "down"
+    return (
+        f"The post-test probability moved {direction} from {previous:.1%} to {updated:.1%}."
+    )
+
+
 def _assistant_concise_probid_follow_up(
     module: SyndromeModule,
     text_result: TextAnalyzeResponse,
@@ -5073,8 +5090,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
             state.stage = "done"
             narrated_message, narration_refined = _assistant_mechid_review_message(mechid_result, final=True)
-            done_options = [AssistantOption(value="restart", label="Start new consult")]
+            done_options = [
+                AssistantOption(value="add_more_details", label="Update this case"),
+                AssistantOption(value="restart", label="Start new consult"),
+            ]
             done_tips = [
+                "Add another susceptibility, test result, or clinical detail anytime and I will update the same case.",
                 "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
             ]
             if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
@@ -5650,11 +5671,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 module_label=_assistant_module_label(module),
             )
             done_options = [
+                AssistantOption(value="add_more_details", label="Update this case"),
                 AssistantOption(value="restart", label="Start new consult"),
             ]
             done_tips = [
+                "Add another test result or case detail anytime and I will update the same consult.",
                 "Review `understood` to confirm what I extracted from your text.",
-                "If you want to change the case details, begin a new consult and rerun it.",
             ]
             if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
@@ -5705,6 +5727,130 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             followup_response = _assistant_start_pending_followup(state)
             if followup_response is not None:
                 return followup_response
+        if selection == "add_more_details" and not (req.message and req.message.strip()):
+            if state.workflow == "mechid":
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Add the new organism detail, susceptibility result, or treatment context in plain language, "
+                        "and I will update the same isolate consult."
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                    tips=["For example: 'cefepime resistant' or 'this is bacteremia rather than cystitis'."],
+                )
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "Add the new test result or case detail in plain language, and I will update the same consult."
+                ),
+                state=state,
+                options=[AssistantOption(value="restart", label="Start new consult")],
+                tips=["For example: 'TEE negative', 'blood cultures cleared', or 'CSF Gram stain positive'."],
+            )
+        if req.message and req.message.strip():
+            if state.workflow == "mechid" and state.mechid_text:
+                previous_result = _build_mechid_text_response(
+                    state.mechid_text,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                state.mechid_text = _append_case_text(state.mechid_text, req.message)
+                updated_result = _build_mechid_text_response(
+                    state.mechid_text,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                updated_message, narration_refined = _assistant_mechid_review_message(updated_result, final=True)
+                prefix = "I updated the isolate consult with the new information."
+                if previous_result.analysis is not None and updated_result.analysis is not None:
+                    if previous_result.analysis.final_results != updated_result.analysis.final_results:
+                        prefix += " The susceptibility interpretation changed."
+                    elif previous_result.analysis.mechanisms != updated_result.analysis.mechanisms:
+                        prefix += " The mechanism interpretation changed."
+                done_options = [
+                    AssistantOption(value="add_more_details", label="Update this case"),
+                    AssistantOption(value="restart", label="Start new consult"),
+                ]
+                done_tips = [
+                    "Keep adding AST details or context if you want me to keep refining the same case.",
+                ]
+                if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
+                    done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
+                    done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
+                return AssistantTurnResponse(
+                    assistantMessage=f"{prefix} {updated_message}",
+                    assistantNarrationRefined=narration_refined,
+                    state=state,
+                    options=done_options,
+                    mechidAnalysis=updated_result,
+                    tips=done_tips,
+                )
+            if state.workflow == "probid" and state.case_text and state.module_id:
+                module = store.get(state.module_id or "")
+                if module is not None:
+                    previous_result = _assistant_parse_case_text(module, state)
+                    _assistant_populate_case_review_analysis(module, previous_result)
+                    state.case_text = _append_case_text(state.case_text, req.message)
+                    updated_result = _assistant_parse_case_text(module, state)
+                    _assistant_populate_case_review_analysis(module, updated_result)
+                    if updated_result.analysis is None:
+                        state.stage = "confirm_case"
+                        review_message, narration_refined = _assistant_probid_review_message(
+                            module,
+                            updated_result,
+                            state,
+                            prefix="I added the new detail, but I still need a bit more clarification before I rerun the consult. ",
+                        )
+                        return AssistantTurnResponse(
+                            assistantMessage=review_message,
+                            assistantNarrationRefined=narration_refined,
+                            state=state,
+                            options=_assistant_review_options_for_case(module, updated_result, state),
+                            analysis=updated_result,
+                            tips=[
+                                "Keep replying in normal words and I will keep the case moving one question at a time.",
+                                "If the extraction looks right already, ask for my consultant impression.",
+                            ],
+                        )
+                    missing_suggestions = _top_missing_tests(module, updated_result.parsed_request, limit=3, state=state)
+                    final_message = _build_probid_consult_message(
+                        module,
+                        updated_result.analysis,
+                        missing_suggestions=missing_suggestions,
+                        include_panel_note=True,
+                    )
+                    narrated_message, narration_refined = narrate_probid_assistant_message(
+                        text_result=updated_result,
+                        fallback_message=final_message,
+                        module_label=_assistant_module_label(module),
+                    )
+                    probability_change = _assistant_probability_change_sentence(
+                        previous_result.analysis,
+                        updated_result.analysis,
+                    )
+                    lead = "I updated the consult with the new information."
+                    if probability_change:
+                        lead += " " + probability_change
+                    done_options = [
+                        AssistantOption(value="add_more_details", label="Update this case"),
+                        AssistantOption(value="restart", label="Start new consult"),
+                    ]
+                    done_tips = [
+                        "Add another test result anytime if you want to see the probability update again.",
+                        "Review `understood` to confirm what I extracted from your text.",
+                    ]
+                    if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
+                        done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
+                        done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
+                    return AssistantTurnResponse(
+                        assistantMessage=f"{lead} {narrated_message}",
+                        assistantNarrationRefined=narration_refined,
+                        state=state,
+                        options=done_options,
+                        analysis=updated_result,
+                        tips=done_tips,
+                    )
 
     # done / fallback
     if restart_requested:

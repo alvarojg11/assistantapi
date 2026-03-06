@@ -355,6 +355,12 @@
         color: #2a1908;
         border-color: rgba(209, 122, 47, 0.5);
       }
+      .btn.consult {
+        background: linear-gradient(180deg, #2d5f9d, #234a8a);
+        color: #eef4ff;
+        border-color: rgba(35, 74, 138, 0.55);
+        box-shadow: 0 6px 16px rgba(35, 74, 138, 0.18);
+      }
       .btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -517,6 +523,7 @@
               <div class="btn-row">
                 <button type="button" class="btn" id="restartBtn">Restart</button>
                 <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
+                <button type="button" class="btn consult hidden" id="consultBtn">Give consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
               </div>
             </div>
@@ -586,6 +593,7 @@
         sendBtn: document.getElementById("sendBtn"),
         restartBtn: document.getElementById("restartBtn"),
         exampleBtn: document.getElementById("exampleBtn"),
+        consultBtn: document.getElementById("consultBtn"),
         composerHint: document.getElementById("composerHint"),
         helpBanner: document.getElementById("helpBanner"),
         summaryStage: document.getElementById("summaryStage"),
@@ -606,9 +614,23 @@
         els.sendBtn.disabled = next;
         els.restartBtn.disabled = next;
         els.exampleBtn.disabled = next;
+        els.consultBtn.disabled = next;
         els.userInput.disabled = next;
         if (next) els.sendBtn.textContent = "Sending...";
         else els.sendBtn.textContent = "Send";
+      }
+
+      function syncConsultButton(options = []) {
+        const consultOption = options.find((opt) => opt.value === "run_assessment");
+        if (!consultOption) {
+          els.consultBtn.classList.add("hidden");
+          els.consultBtn.textContent = "Give consultant impression";
+          els.consultBtn.disabled = state.busy;
+          return;
+        }
+        els.consultBtn.classList.remove("hidden");
+        els.consultBtn.textContent = consultOption.label || "Give consultant impression";
+        els.consultBtn.disabled = state.busy;
       }
 
       function appendMessage(role, text) {
@@ -629,6 +651,7 @@
 
       function renderOptions(options = []) {
         els.optionTray.innerHTML = "";
+        syncConsultButton(options);
         if (!options.length) return;
         const currentStage = state.assistantState?.stage || null;
         const supportsInsertMode = ["describe_case", "confirm_case"].includes(currentStage);
@@ -675,6 +698,9 @@
         }
         let pendingSection = null;
         for (const opt of options) {
+          if (opt.value === "run_assessment") {
+            continue;
+          }
           if (typeof opt.value === "string" && opt.value.startsWith("section:")) {
             const label = document.createElement("div");
             label.className = "option-section";
@@ -695,15 +721,14 @@
           }
           const btn = document.createElement("button");
           btn.type = "button";
-          const isPrimaryAction = opt.value === "run_assessment";
-          btn.className = isPrimaryAction ? "btn primary" : "chip";
-          if (useSingleLineChoices && !isPrimaryAction) {
+          btn.className = "chip";
+          if (useSingleLineChoices) {
             btn.classList.add("single-line");
           }
-          if (!isPrimaryAction && typeof opt.value === "string" && opt.value.startsWith("insert_text:")) {
+          if (typeof opt.value === "string" && opt.value.startsWith("insert_text:")) {
             btn.classList.add("secondary");
           }
-          if (!isPrimaryAction && isHiddenCaseOption) {
+          if (isHiddenCaseOption) {
             btn.classList.add("used");
           }
           btn.textContent = helperChipLabel(opt, isHiddenCaseOption);
@@ -1185,6 +1210,7 @@
       function startConversation() {
         clearConversationMessages();
         els.optionTray.innerHTML = "";
+        syncConsultButton([]);
         state.assistantState = null;
         state.lastResponse = null;
         state.hiddenCaseOptions.clear();
@@ -1221,6 +1247,10 @@
 
       els.restartBtn.addEventListener("click", () => {
         sendTurn({ message: "restart", userVisibleText: "Restart" });
+      });
+
+      els.consultBtn.addEventListener("click", () => {
+        sendTurn({ selection: "run_assessment", userVisibleText: "Give consultant impression" });
       });
 
       function exampleTextForCurrentState() {
