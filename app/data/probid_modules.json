@@ -2,7 +2,7 @@
   {
     "id": "cap",
     "name": "CAP",
-    "description": "Community-acquired pneumonia probability update using symptoms/vitals/exam + simplified CXR and labs. Starter LRs—replace with curated evidence.",
+    "description": "Community-acquired pneumonia probability update using symptoms/vitals/exam + simplified CXR and labs. Starter LRs\u2014replace with curated evidence.",
     "pretestPresets": [
       {
         "id": "pc_adult",
@@ -45,14 +45,14 @@
       },
       {
         "id": "cap_fever",
-        "label": "Fever (≥38°C)",
+        "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
         "lrPos": 2,
         "lrNeg": 0.7
       },
       {
         "id": "cap_rr",
-        "label": "Tachypnea (RR ≥ 24)",
+        "label": "Tachypnea (RR \u2265 24)",
         "category": "vital",
         "lrPos": 2.5,
         "lrNeg": 0.5
@@ -92,7 +92,7 @@
         "group": "cap_cxr",
         "lrPos": 8,
         "lrNeg": 0.25,
-        "notes": "If CXR done, mark Present/Absent. If not done, choose “CXR not done”."
+        "notes": "If CXR done, mark Present/Absent. If not done, choose \u201cCXR not done\u201d."
       },
       {
         "id": "cap_cxr_not_done",
@@ -103,7 +103,7 @@
       },
       {
         "id": "cap_wbc_ge15",
-        "label": "WBC ≥ 15,000",
+        "label": "WBC \u2265 15,000",
         "category": "lab",
         "lrPos": 1.6,
         "lrNeg": 0.9,
@@ -124,7 +124,7 @@
         "group": "cap_rvp",
         "lrPos": 0.53,
         "lrNeg": 1.07,
-        "notes": "Modeled as modifier of bacterial coinfection likelihood in CAP (proxy endpoint: blood-culture positivity). Derived from cohort rates (viral-positive 12.6%; blood-culture positivity 2.7% vs 5.3%), yielding LR+ ~0.53 and LR− ~1.07.",
+        "notes": "Modeled as modifier of bacterial coinfection likelihood in CAP (proxy endpoint: blood-culture positivity). Derived from cohort rates (viral-positive 12.6%; blood-culture positivity 2.7% vs 5.3%), yielding LR+ ~0.53 and LR\u2212 ~1.07.",
         "source": {
           "short": "Klompas et al. Infect Control Hosp Epidemiol",
           "year": 2021,
@@ -140,7 +140,7 @@
       },
       {
         "id": "cap_age_ge65",
-        "label": "Age ≥ 65",
+        "label": "Age \u2265 65",
         "category": "host",
         "lrPos": 1.15
       },
@@ -318,7 +318,7 @@
   {
     "id": "cdi",
     "name": "C. difficile",
-    "description": "C. difficile infection probability update using diarrhea features + host/exposure risk + simplified NAAT→toxin testing. Starter LRs—replace with curated evidence.",
+    "description": "C. difficile infection probability update using diarrhea features + host/exposure risk + simplified NAAT\u2192toxin testing. Starter LRs\u2014replace with curated evidence.",
     "pretestPresets": [
       {
         "id": "outpt_low",
@@ -357,7 +357,7 @@
     "items": [
       {
         "id": "cdi_freq",
-        "label": "≥3 unformed stools / 24h",
+        "label": "\u22653 unformed stools / 24h",
         "category": "symptom",
         "lrPos": 1.6
       },
@@ -375,7 +375,7 @@
       },
       {
         "id": "cdi_fever",
-        "label": "Fever (≥38°C)",
+        "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
         "lrPos": 1.3,
         "lrNeg": 0.9
@@ -390,7 +390,7 @@
       },
       {
         "id": "cdi_abx",
-        "label": "Antibiotics in prior 8–12 weeks",
+        "label": "Antibiotics in prior 8\u201312 weeks",
         "category": "host",
         "lrPos": 2,
         "lrNeg": 0.7
@@ -418,7 +418,7 @@
       },
       {
         "id": "cdi_age_ge65",
-        "label": "Age ≥ 65",
+        "label": "Age \u2265 65",
         "category": "host",
         "lrPos": 1.3,
         "lrNeg": 0.9
@@ -439,7 +439,7 @@
       },
       {
         "id": "cdi_wbc15",
-        "label": "WBC ≥ 15k",
+        "label": "WBC \u2265 15k",
         "category": "lab",
         "lrPos": 1.4,
         "lrNeg": 0.9,
@@ -495,7 +495,7 @@
   {
     "id": "uti",
     "name": "UTI",
-    "description": "UTI probability update using setting-only pretest probability plus symptoms, urinalysis (and optional culture), and host risk factors. Starter LRs—replace with curated evidence.",
+    "description": "UTI probability update using setting-only pretest probability plus symptoms, urinalysis (and optional culture), and host risk factors. Starter LRs\u2014replace with curated evidence.",
     "pretestPresets": [
       {
         "id": "uti_comm",
@@ -542,7 +542,7 @@
       },
       {
         "id": "uti_fever",
-        "label": "Fever (≥38°C)",
+        "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
         "lrPos": 1.3,
         "lrNeg": 0.9
@@ -573,7 +573,7 @@
       },
       {
         "id": "uti_age_ge65",
-        "label": "Age ≥ 65",
+        "label": "Age \u2265 65",
         "category": "host",
         "lrPos": 1.2,
         "lrNeg": 0.95
@@ -672,7 +672,7 @@
   {
     "id": "endo",
     "name": "Endocarditis",
-    "description": "Infective endocarditis probability update using setting-only pretest probability plus selected host risk, organism-specific microbiology, risk-score context (VIRSTA / DENOVA / HANDOC), and imaging (TTE/TEE) ± FDG PET/CT. Imaging LRs derived from published sensitivity/specificity where available. Beware correlated Duke elements.",
+    "description": "Infective endocarditis probability update using setting-only pretest probability plus selected host risk, organism-specific microbiology, risk-score context (VIRSTA / DENOVA / HANDOC), and imaging (TTE/TEE) \u00b1 FDG PET/CT. Imaging LRs derived from published sensitivity/specificity where available. Beware correlated Duke elements.",
     "pretestPresets": [
       {
         "id": "endo_very_low",
@@ -696,7 +696,7 @@
     "items": [
       {
         "id": "endo_fever",
-        "label": "Fever (≥38°C)",
+        "label": "Fever (\u226538\u00b0C)",
         "category": "symptom",
         "lrPos": 1.4,
         "lrNeg": 0.85
@@ -792,7 +792,7 @@
       },
       {
         "id": "endo_bcx_major_typical",
-        "label": "Blood cultures: Duke major (typical organism in ≥2 sets)",
+        "label": "Blood cultures: Duke major (typical organism in \u22652 sets)",
         "category": "micro",
         "lrPos": 12,
         "lrNeg": 0.9,
@@ -854,7 +854,7 @@
       },
       {
         "id": "endo_coxiella_major",
-        "label": "Coxiella burnetii Phase I IgG ≥ 1:800",
+        "label": "Coxiella burnetii Phase I IgG \u2265 1:800",
         "category": "micro",
         "lrPos": 20,
         "lrNeg": 0.95,
@@ -1465,7 +1465,7 @@
         "lrNeg": 0.92,
         "notes": "Candida Score component; modeled as an OR-informed risk enricher rather than a standalone diagnostic test.",
         "source": {
-          "short": "León et al. Crit Care Med",
+          "short": "Le\u00f3n et al. Crit Care Med",
           "year": 2006,
           "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
         }
@@ -1478,7 +1478,7 @@
         "lrNeg": 0.9,
         "notes": "Candida Score component; modeled as an OR-informed risk enricher rather than a standalone diagnostic test.",
         "source": {
-          "short": "León et al. Crit Care Med",
+          "short": "Le\u00f3n et al. Crit Care Med",
           "year": 2006,
           "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
         }
@@ -1491,7 +1491,7 @@
         "lrNeg": 0.85,
         "notes": "Candida Score component; stronger enrichment when colonization is documented at multiple non-blood sites.",
         "source": {
-          "short": "León et al. Crit Care Med",
+          "short": "Le\u00f3n et al. Crit Care Med",
           "year": 2006,
           "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
         }
@@ -1504,7 +1504,7 @@
         "lrNeg": 0.85,
         "notes": "Candida Score component with the highest weighting in the original score derivation.",
         "source": {
-          "short": "León et al. Crit Care Med",
+          "short": "Le\u00f3n et al. Crit Care Med",
           "year": 2006,
           "url": "https://doi.org/10.1097/01.CCM.0000202208.37364.7D"
         }
@@ -4192,6 +4192,238 @@
         "category": "imaging",
         "group": "pji_imaging",
         "notes": "Neutral selection."
+      }
+    ]
+  },
+  {
+    "id": "tb_uveitis",
+    "name": "Tuberculous uveitis",
+    "description": "Consensus-based tuberculous uveitis assessment for ophthalmology visits using the Collaborative Ocular Tuberculosis Study (COTS) calculator inputs: lesion phenotype, TB endemicity, TST, IGRA/QuantiFERON, and chest imaging. The primary output is a mapped consensus probability for initiating antitubercular therapy, not a microbiologic gold-standard disease probability.",
+    "pretestPresets": [
+      {
+        "id": "ophthalmology_visit",
+        "label": "Ophthalmology visit",
+        "p": 0.15,
+        "notes": "Anchor pretest used only to back-calculate a display LR. The main result comes from the COTS consensus matrix rather than an epidemiologic baseline.",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "tbu_phenotype_au_first",
+        "label": "Anterior uveitis, first episode",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "notes": "COTS phenotype: anterior uveitis, first episode.",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_au_recurrent",
+        "label": "Anterior uveitis, recurrent episode",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "notes": "COTS phenotype: anterior uveitis, recurrent episode.",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_intermediate",
+        "label": "Intermediate uveitis",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_panuveitis",
+        "label": "Panuveitis",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_rv_active",
+        "label": "Retinal vasculitis, active",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_rv_inactive",
+        "label": "Retinal vasculitis, inactive",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_phenotype_choroiditis_serpiginoid",
+        "label": "Choroiditis, serpiginoid",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
+        }
+      },
+      {
+        "id": "tbu_phenotype_choroiditis_multifocal",
+        "label": "Choroiditis, multifocal / non-serpiginoid",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
+        }
+      },
+      {
+        "id": "tbu_phenotype_choroiditis_tuberculoma",
+        "label": "Choroiditis, tuberculoma / nodule",
+        "category": "exam",
+        "group": "tbu_phenotype",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
+        }
+      },
+      {
+        "id": "tbu_endemicity_endemic",
+        "label": "Patient from TB-endemic region",
+        "category": "host",
+        "group": "tbu_endemicity",
+        "notes": "High-burden TB country / endemic region as used by the COTS calculator.",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_endemicity_non_endemic",
+        "label": "Patient from TB-non-endemic region",
+        "category": "host",
+        "group": "tbu_endemicity",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_tst_positive",
+        "label": "Tuberculin skin test positive",
+        "category": "lab",
+        "group": "tbu_tst",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_tst_negative",
+        "label": "Tuberculin skin test negative",
+        "category": "lab",
+        "group": "tbu_tst",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_tst_na",
+        "label": "Tuberculin skin test not done / unknown",
+        "category": "lab",
+        "group": "tbu_tst",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_igra_positive",
+        "label": "IGRA / QuantiFERON positive",
+        "category": "lab",
+        "group": "tbu_igra",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_igra_negative",
+        "label": "IGRA / QuantiFERON negative",
+        "category": "lab",
+        "group": "tbu_igra",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_igra_na",
+        "label": "IGRA / QuantiFERON not done / unknown",
+        "category": "lab",
+        "group": "tbu_igra",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_chest_imaging_positive",
+        "label": "Chest X-ray / CT positive for healed or active TB signs",
+        "category": "imaging",
+        "group": "tbu_chest_imaging",
+        "notes": "COTS treats any healed or active TB sign on chest X-ray or chest CT as positive.",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_chest_imaging_negative",
+        "label": "Chest X-ray / CT negative for healed or active TB signs",
+        "category": "imaging",
+        "group": "tbu_chest_imaging",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_chest_imaging_na",
+        "label": "Chest X-ray / CT not done / unknown",
+        "category": "imaging",
+        "group": "tbu_chest_imaging",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
       }
     ]
   }

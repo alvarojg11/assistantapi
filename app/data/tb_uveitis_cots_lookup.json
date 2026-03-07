@@ -1,0 +1,1946 @@
+{
+  "auf|e|+|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "auf|e|+|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "auf|e|+|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "auf|e|+|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|e|+|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|+|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|e|+|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|+|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|-|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|e|-|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|-|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "auf|e|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|e|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|e|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "auf|e|-|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|e|-|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|e|ND|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|e|ND|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|ND|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|e|ND|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "auf|e|ND|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|e|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "auf|e|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "auf|e|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "auf|e|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "auf|n|+|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "auf|n|+|+|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "auf|n|+|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "auf|n|+|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|n|+|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|+|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|n|+|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|+|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|-|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|n|-|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|-|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "auf|n|-|-|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "auf|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|-|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "auf|n|-|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|ND|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "auf|n|ND|+|-": {
+    "median": 1,
+    "iqr": 2
+  },
+  "auf|n|ND|+|ND": {
+    "median": 1,
+    "iqr": 2
+  },
+  "auf|n|ND|-|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "auf|n|ND|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|ND|ND|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "auf|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "auf|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "aur|e|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "aur|e|+|+|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "aur|e|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|e|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|e|+|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|e|-|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|-|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "aur|e|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|e|-|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|e|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|ND|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|e|ND|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "aur|e|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|ND|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "aur|e|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|e|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "aur|n|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "aur|n|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "aur|n|+|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "aur|n|+|-|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "aur|n|+|-|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "aur|n|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "aur|n|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|n|+|ND|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "aur|n|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|n|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|n|-|+|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "aur|n|-|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|n|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "aur|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|n|-|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "aur|n|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|n|ND|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "aur|n|ND|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "aur|n|ND|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "aur|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "aur|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chm|e|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|+|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|e|+|-|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "chm|e|+|-|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|e|+|ND|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|+|ND|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "chm|e|-|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chm|e|-|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|-|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|-|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|-|-|-": {
+    "median": 1,
+    "iqr": 2
+  },
+  "chm|e|-|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|e|-|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|e|-|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|e|-|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|e|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|e|ND|+|-": {
+    "median": 4,
+    "iqr": 3
+  },
+  "chm|e|ND|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "chm|e|ND|-|+": {
+    "median": 4,
+    "iqr": 3
+  },
+  "chm|e|ND|-|-": {
+    "median": 1,
+    "iqr": 2
+  },
+  "chm|e|ND|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|e|ND|ND|+": {
+    "median": 4,
+    "iqr": 3
+  },
+  "chm|e|ND|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|e|ND|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chm|n|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chm|n|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|n|+|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chm|n|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|n|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|n|+|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|n|-|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|-|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|-|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|-|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|-|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chm|n|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|ND|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chm|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chm|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chs|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|e|+|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|e|+|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|e|+|-|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|e|+|-|-": {
+    "median": 5,
+    "iqr": 2
+  },
+  "chs|e|+|-|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|e|+|ND|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|e|+|ND|-": {
+    "median": 5,
+    "iqr": 2
+  },
+  "chs|e|+|ND|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|e|-|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|e|-|+|-": {
+    "median": 4,
+    "iqr": 1
+  },
+  "chs|e|-|+|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "chs|e|-|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|e|-|-|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "chs|e|-|-|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "chs|e|-|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|e|-|ND|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "chs|e|-|ND|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "chs|e|ND|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|e|ND|+|-": {
+    "median": 5,
+    "iqr": 2
+  },
+  "chs|e|ND|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|e|ND|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|e|ND|-|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "chs|e|ND|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|e|ND|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|e|ND|ND|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "chs|e|ND|ND|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "chs|n|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|n|+|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|+|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|+|-|-": {
+    "median": 4,
+    "iqr": 1
+  },
+  "chs|n|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "chs|n|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|+|ND|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|+|ND|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|-|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "chs|n|-|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|-|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|-|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|n|-|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "chs|n|-|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|-|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|n|-|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|-|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|ND|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|ND|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "chs|n|ND|-|+": {
+    "median": 4,
+    "iqr": 3
+  },
+  "chs|n|ND|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|ND|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|ND|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "chs|n|ND|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "chs|n|ND|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "cht|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|e|+|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|+|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|+|-|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|e|+|-|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|+|-|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|+|ND|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|e|+|ND|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|+|ND|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|-|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|e|-|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|-|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|-|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|-|-|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "cht|e|-|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "cht|e|-|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|-|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "cht|e|-|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "cht|e|ND|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|e|ND|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|e|ND|+|ND": {
+    "median": 5,
+    "iqr": 2
+  },
+  "cht|e|ND|-|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "cht|e|ND|-|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "cht|e|ND|-|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "cht|e|ND|ND|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "cht|e|ND|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "cht|e|ND|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "cht|n|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|n|+|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|-|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|-|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|ND|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|+|ND|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|-|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|n|-|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|-|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|-|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "cht|n|-|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "cht|n|-|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "cht|n|-|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "cht|n|-|ND|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "cht|n|-|ND|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "cht|n|ND|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "cht|n|ND|+|-": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|ND|+|ND": {
+    "median": 5,
+    "iqr": 1
+  },
+  "cht|n|ND|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "cht|n|ND|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "cht|n|ND|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "cht|n|ND|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "cht|n|ND|ND|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "cht|n|ND|ND|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "iu|e|+|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|e|+|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|+|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|e|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|e|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|+|-|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|e|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|e|+|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|e|-|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|-|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|-|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|-|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|-|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|-|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|e|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|e|ND|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|e|ND|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "iu|e|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|e|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|ND|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|e|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|e|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "iu|n|+|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|n|+|+|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|n|+|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|n|+|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "iu|n|+|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|+|ND|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "iu|n|+|ND|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "iu|n|+|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "iu|n|-|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|-|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "iu|n|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "iu|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|n|-|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|ND|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "iu|n|ND|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|ND|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "iu|n|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|n|ND|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "iu|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "iu|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "pu|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "pu|e|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|+|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|e|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|e|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|e|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|e|+|ND|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|+|ND|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|e|-|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|-|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|e|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "pu|e|-|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|e|-|-|ND": {
+    "median": 1,
+    "iqr": 2
+  },
+  "pu|e|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|e|-|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "pu|e|-|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "pu|e|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|e|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|e|ND|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "pu|e|ND|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "pu|e|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|e|ND|-|ND": {
+    "median": 2,
+    "iqr": 1
+  },
+  "pu|e|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|e|ND|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "pu|e|ND|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "pu|n|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "pu|n|+|+|-": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|n|+|+|ND": {
+    "median": 4,
+    "iqr": 2
+  },
+  "pu|n|+|-|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "pu|n|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|+|ND|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|n|+|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|n|-|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|-|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|-|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "pu|n|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "pu|n|-|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|n|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "pu|n|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|ND|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|n|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "pu|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "pu|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|e|+|+|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "rva|e|+|+|-": {
+    "median": 5,
+    "iqr": 2
+  },
+  "rva|e|+|+|ND": {
+    "median": 5,
+    "iqr": 2
+  },
+  "rva|e|+|-|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "rva|e|+|-|-": {
+    "median": 3,
+    "iqr": 1
+  },
+  "rva|e|+|-|ND": {
+    "median": 3,
+    "iqr": 1
+  },
+  "rva|e|+|ND|+": {
+    "median": 5,
+    "iqr": 0
+  },
+  "rva|e|+|ND|-": {
+    "median": 4,
+    "iqr": 1
+  },
+  "rva|e|+|ND|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "rva|e|-|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "rva|e|-|+|-": {
+    "median": 4,
+    "iqr": 1
+  },
+  "rva|e|-|+|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "rva|e|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|e|-|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|e|-|-|ND": {
+    "median": 2,
+    "iqr": 1
+  },
+  "rva|e|-|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rva|e|-|ND|-": {
+    "median": 2,
+    "iqr": 1
+  },
+  "rva|e|-|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rva|e|ND|+|+": {
+    "median": 5,
+    "iqr": 1
+  },
+  "rva|e|ND|+|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|e|ND|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|e|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|e|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|e|ND|-|ND": {
+    "median": 2,
+    "iqr": 1
+  },
+  "rva|e|ND|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rva|e|ND|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rva|e|ND|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rva|n|+|+|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "rva|n|+|+|-": {
+    "median": 5,
+    "iqr": 3
+  },
+  "rva|n|+|+|ND": {
+    "median": 4,
+    "iqr": 1
+  },
+  "rva|n|+|-|+": {
+    "median": 5,
+    "iqr": 3
+  },
+  "rva|n|+|-|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|+|-|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|+|ND|+": {
+    "median": 5,
+    "iqr": 3
+  },
+  "rva|n|+|ND|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|+|ND|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|-|+|+": {
+    "median": 5,
+    "iqr": 3
+  },
+  "rva|n|-|+|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|n|-|+|ND": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|n|-|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rva|n|-|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|-|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rva|n|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|ND|+|+": {
+    "median": 5,
+    "iqr": 3
+  },
+  "rva|n|ND|+|-": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|ND|+|ND": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|ND|-|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rva|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rva|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|+|+|+": {
+    "median": 5,
+    "iqr": 2
+  },
+  "rvi|e|+|+|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|e|+|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|e|+|-|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|e|+|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|+|ND|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|e|+|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|+|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|-|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|e|-|+|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|e|-|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|e|-|-|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|e|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|e|-|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|-|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rvi|e|-|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|-|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|ND|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|e|ND|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|ND|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|ND|-|+": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|e|ND|-|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|ND|-|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|ND|ND|+": {
+    "median": 3,
+    "iqr": 2
+  },
+  "rvi|e|ND|ND|-": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|e|ND|ND|ND": {
+    "median": 1,
+    "iqr": 1
+  },
+  "rvi|n|+|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|n|+|+|-": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rvi|n|+|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|n|+|-|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rvi|n|+|-|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|+|-|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|+|ND|+": {
+    "median": 3,
+    "iqr": 3
+  },
+  "rvi|n|+|ND|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|+|ND|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|-|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|n|-|+|-": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|n|-|+|ND": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|n|-|-|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|n|-|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|-|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|-|ND|+": {
+    "median": 2,
+    "iqr": 3
+  },
+  "rvi|n|-|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|-|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|ND|+|+": {
+    "median": 4,
+    "iqr": 2
+  },
+  "rvi|n|ND|+|-": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|ND|+|ND": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|ND|-|+": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|ND|-|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|ND|-|ND": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|ND|ND|+": {
+    "median": 2,
+    "iqr": 2
+  },
+  "rvi|n|ND|ND|-": {
+    "median": 1,
+    "iqr": 0
+  },
+  "rvi|n|ND|ND|ND": {
+    "median": 1,
+    "iqr": 0
+  }
+}

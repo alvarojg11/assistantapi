@@ -1462,6 +1462,19 @@
             return "I want to assess whether this patient needs pulmonary TB rule-out. He has cough for 3 weeks, weight loss, night sweats, a positive QuantiFERON, and chest CT concerning for active pulmonary TB.";
           }
 
+          if (moduleId === "tb_uveitis") {
+            if (currentSection === "exam_vitals") {
+              return "This is an ophthalmology visit for serpiginoid choroiditis in a patient from a TB endemic region.";
+            }
+            if (currentSection === "lab") {
+              return "Tuberculin skin test is positive and QuantiFERON is positive.";
+            }
+            if (currentSection === "imaging") {
+              return "Chest x ray is positive for healed or active TB signs.";
+            }
+            return "This is an ophthalmology visit for tuberculous uveitis assessment: serpiginoid choroiditis, patient from a TB endemic region, tuberculin skin test positive, QuantiFERON positive, and chest x ray positive for healed or active TB signs.";
+          }
+
           if (moduleId === "cdi") {
             return "This is a hospitalized patient with 6 watery bowel movements in 24 hours after recent antibiotics, lower abdominal cramping, leukocytosis, and no alternative explanation for diarrhea.";
           }
@@ -1480,10 +1493,16 @@
           if (moduleId === "active_tb") {
             return "Add chest CT concerning for active pulmonary TB and chronic cough.";
           }
+          if (moduleId === "tb_uveitis") {
+            return "Add the uveitis phenotype, endemicity, TST or QuantiFERON result, and chest imaging result.";
+          }
           return "Add one or two high-yield findings that would strengthen the case before running the assessment.";
         }
 
         if (stage === "select_preset") {
+          if (moduleId === "tb_uveitis") {
+            return "Ophthalmology visit";
+          }
           if (moduleId === "endo" || moduleId === "cap" || moduleId === "active_tb" || moduleId === "cdi") {
             return "ED / inpatient";
           }

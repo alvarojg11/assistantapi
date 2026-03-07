@@ -141,6 +141,25 @@ NEW_SYNDROME_CASES = {
             {"selection": "continue_case_draft"},
         ],
     },
+    "tb_uveitis": {
+        "preset": "ophthalmology_visit",
+        "findings": [
+            "tbu_phenotype_choroiditis_tuberculoma",
+            "tbu_endemicity_endemic",
+            "tbu_tst_positive",
+            "tbu_igra_positive",
+            "tbu_chest_imaging_positive",
+        ],
+        "assistant_turns": [
+            {"selection": "continue_to_case"},
+            {"message": "This is an ophthalmology visit for choroidal tuberculoma in a patient from a TB endemic region."},
+            {"selection": "continue_case_draft"},
+            {"message": "Tuberculin skin test positive and QuantiFERON positive."},
+            {"selection": "continue_case_draft"},
+            {"message": "Chest x ray positive for healed or active TB signs."},
+            {"selection": "continue_case_draft"},
+        ],
+    },
 }
 
 

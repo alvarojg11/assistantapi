@@ -11,6 +11,7 @@ SUSC_STATES = {
     "sensitive": "Susceptible",
     "intermediate": "Intermediate",
     "resistant": "Resistant",
+    "resistance": "Resistant",
 }
 
 
@@ -122,7 +123,6 @@ ORAL_PREFERENCE_HINTS = (
     "oral step-down",
 )
 
-
 def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/+\-.,;: ]+", " ", text.lower())).strip()
 
@@ -214,10 +214,20 @@ def _extract_antibiotic_results(text_norm: str, organism: str) -> Dict[str, str]
 
     for alias, _antibiotic in ordered_aliases:
         pattern = re.compile(
-            rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])(?:\s+(?:is|was|reported as))?\s+(susceptible|sensitive|intermediate|resistant)\b"
+            rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])(?:\s+(?:is|was|reported as))?\s+(susceptible|sensitive|intermediate|resistant|resistance)\b"
         )
         for match in pattern.finditer(text_norm):
             state = SUSC_STATES.get(match.group(1))
+            antibiotic = resolve_antibiotic_name(organism, alias)
+            if state and antibiotic:
+                findings[antibiotic] = state
+
+        adjective = re.compile(
+            rf"(?<![a-z0-9]){re.escape(alias)}(?:[- ]resistant|[- ]intermediate|[- ]susceptible|[- ]sensitive)\b"
+        )
+        for match in adjective.finditer(text_norm):
+            token = match.group(0).rsplit("-", 1)[-1].rsplit(" ", 1)[-1]
+            state = SUSC_STATES.get(token)
             antibiotic = resolve_antibiotic_name(organism, alias)
             if state and antibiotic:
                 findings[antibiotic] = state

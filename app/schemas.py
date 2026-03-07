@@ -383,6 +383,7 @@ class ParserTrainingExample(BaseModel):
 
 AssistantStage = Literal[
     "select_module",
+    "select_syndrome_module",
     "select_consult_focus",
     "select_preset",
     "select_endo_blood_culture_context",

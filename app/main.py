@@ -85,6 +85,7 @@ from .services.mechid_trainer_guidance import MechIDTrainerGuidanceError, genera
 from .services.mechid_trainer_parser import MechIDTrainerParseError, parse_mechid_trainer_correction
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
 from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
+from .services.tb_uveitis_cots import analyze_tb_uveitis
 
 
 app = FastAPI(
@@ -104,6 +105,9 @@ app.add_middleware(
 store = InMemoryModuleStore()
 APP_DIR = Path(__file__).resolve().parent
 MECHID_EVAL_DATASET_PATH = APP_DIR / "data" / "mechid_eval_cases.json"
+PROBID_ASSISTANT_ID = "probid"
+PROBID_ASSISTANT_LABEL = "Clinical syndrome probability"
+PROBID_ASSISTANT_DESCRIPTION = "Estimate syndrome probability from clinical findings and test results."
 
 ASSISTANT_MODULE_LABELS = {
     "cap": "Community-acquired pneumonia (CAP)",
@@ -112,6 +116,7 @@ ASSISTANT_MODULE_LABELS = {
     "uti": "Urinary tract infection (UTI)",
     "endo": "Infective endocarditis",
     "active_tb": "Active tuberculosis (TB)",
+    "tb_uveitis": "Tuberculous uveitis",
     "pjp": "Pneumocystis jirovecii pneumonia (PJP)",
     "inv_candida": "Invasive candidiasis",
     "inv_mold": "Invasive mold infection",
@@ -187,8 +192,24 @@ MECHID_INTENT_TOKENS = (
 MECHID_THERAPY_INTENT_TOKENS = (
     "which antibiotics",
     "what antibiotics",
+    "what antibiotic",
     "what would you treat with",
     "how would you treat",
+    "how do i treat",
+    "how should i treat",
+    "how to treat",
+    "treat this",
+    "how do i manage",
+    "how should i manage",
+    "what should i use",
+    "what can i use",
+    "what do i use",
+    "what is the treatment",
+    "treatment for this isolate",
+    "which therapy",
+    "which treatment",
+    "antibiotic choice",
+    "antibiotic choices",
     "what would you use",
     "would you recommend",
     "recommend antibiotics",
@@ -363,6 +384,23 @@ MODULE_EVIDENCE_REFERENCES: Dict[str, List[Dict[str, str]]] = {
             "context": "Evidence base: Necrotizing soft tissue infection",
             "citation": "Fernando et al. NSTI diagnostic accuracy meta-analysis (2019)",
             "url": "https://pubmed.ncbi.nlm.nih.gov/29672405/",
+        },
+    ],
+    "tb_uveitis": [
+        {
+            "context": "Evidence base: Tuberculous uveitis consensus calculator",
+            "citation": "COTS Calculator",
+            "url": "https://www.oculartb.net/cots-calc",
+        },
+        {
+            "context": "Evidence base: Tuberculous choroiditis ATT initiation consensus",
+            "citation": "Agrawal et al. Collaborative Ocular Tuberculosis Study Report 1 (2021)",
+            "url": "https://doi.org/10.1016/j.ophtha.2020.01.008",
+        },
+        {
+            "context": "Evidence base: Anterior/intermediate/panuveitis/retinal vasculitis ATT initiation consensus",
+            "citation": "Agrawal et al. Collaborative Ocular Tuberculosis Study Report 2 (2021)",
+            "url": "https://doi.org/10.1016/j.ophtha.2020.06.052",
         },
     ],
 }
@@ -669,6 +707,88 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
         "tb_ct_na": (
             "Chest CT not done",
             "Chest CT completed",
+        ),
+    },
+    "tb_uveitis": {
+        "tbu_phenotype_au_first": (
+            "Anterior uveitis, first episode",
+            "Anterior uveitis, first episode not selected",
+        ),
+        "tbu_phenotype_au_recurrent": (
+            "Anterior uveitis, recurrent episode",
+            "Anterior uveitis, recurrent episode not selected",
+        ),
+        "tbu_phenotype_intermediate": (
+            "Intermediate uveitis",
+            "Intermediate uveitis not selected",
+        ),
+        "tbu_phenotype_panuveitis": (
+            "Panuveitis",
+            "Panuveitis not selected",
+        ),
+        "tbu_phenotype_rv_active": (
+            "Active retinal vasculitis",
+            "Active retinal vasculitis not selected",
+        ),
+        "tbu_phenotype_rv_inactive": (
+            "Inactive retinal vasculitis",
+            "Inactive retinal vasculitis not selected",
+        ),
+        "tbu_phenotype_choroiditis_serpiginoid": (
+            "Serpiginoid choroiditis",
+            "Serpiginoid choroiditis not selected",
+        ),
+        "tbu_phenotype_choroiditis_multifocal": (
+            "Multifocal or non-serpiginoid choroiditis",
+            "Multifocal or non-serpiginoid choroiditis not selected",
+        ),
+        "tbu_phenotype_choroiditis_tuberculoma": (
+            "Choroidal tuberculoma or nodule",
+            "Choroidal tuberculoma or nodule not selected",
+        ),
+        "tbu_endemicity_endemic": (
+            "Patient from TB-endemic region",
+            "Patient not from TB-endemic region",
+        ),
+        "tbu_endemicity_non_endemic": (
+            "Patient from TB-non-endemic region",
+            "Patient not from TB-non-endemic region",
+        ),
+        "tbu_tst_positive": (
+            "Tuberculin skin test positive",
+            "Tuberculin skin test not positive",
+        ),
+        "tbu_tst_negative": (
+            "Tuberculin skin test negative",
+            "Tuberculin skin test not negative",
+        ),
+        "tbu_tst_na": (
+            "Tuberculin skin test not done",
+            "Tuberculin skin test completed",
+        ),
+        "tbu_igra_positive": (
+            "IGRA or QuantiFERON positive",
+            "IGRA or QuantiFERON not positive",
+        ),
+        "tbu_igra_negative": (
+            "IGRA or QuantiFERON negative",
+            "IGRA or QuantiFERON not negative",
+        ),
+        "tbu_igra_na": (
+            "IGRA or QuantiFERON not done",
+            "IGRA or QuantiFERON completed",
+        ),
+        "tbu_chest_imaging_positive": (
+            "Chest X-ray or CT positive for healed or active TB signs",
+            "Chest X-ray or CT not positive for TB signs",
+        ),
+        "tbu_chest_imaging_negative": (
+            "Chest X-ray or CT negative for healed or active TB signs",
+            "Chest X-ray or CT not negative for TB signs",
+        ),
+        "tbu_chest_imaging_na": (
+            "Chest X-ray or CT not done",
+            "Chest X-ray or CT completed",
         ),
     },
     "pjp": {
@@ -2265,6 +2385,12 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
 
 def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
     module = _resolve_module(req)
+    if module.id == "tb_uveitis":
+        response = analyze_tb_uveitis(module, req)
+        if req.include_explanation:
+            response.explanation_for_user = _build_probid_consult_message(module, response)
+        return response
+
     prep = prepare_probid_inputs(module, req)
 
     base_pretest, adjusted_pretest, preset_id = resolve_pretest(
@@ -2474,11 +2600,16 @@ def analyze_text(req: TextAnalyzeRequest) -> TextAnalyzeResponse:
 
 
 def _assistant_module_options() -> List[AssistantOption]:
-    options: List[AssistantOption] = [
+    return [
         AssistantOption(
             value=MECHID_ASSISTANT_ID,
             label=MECHID_ASSISTANT_LABEL,
             description=MECHID_ASSISTANT_DESCRIPTION,
+        ),
+        AssistantOption(
+            value=PROBID_ASSISTANT_ID,
+            label=PROBID_ASSISTANT_LABEL,
+            description=PROBID_ASSISTANT_DESCRIPTION,
         ),
         AssistantOption(
             value=IMMUNOID_ASSISTANT_ID,
@@ -2486,6 +2617,10 @@ def _assistant_module_options() -> List[AssistantOption]:
             description=IMMUNOID_ASSISTANT_DESCRIPTION,
         ),
     ]
+
+
+def _assistant_syndrome_module_options() -> List[AssistantOption]:
+    options: List[AssistantOption] = []
     for summary in store.list_summaries():
         module = store.get(summary.id)
         options.append(
@@ -2495,6 +2630,7 @@ def _assistant_module_options() -> List[AssistantOption]:
                 description=(module.description[:120] + "...") if module and module.description and len(module.description) > 120 else (module.description if module else None),
             )
         )
+    options.append(AssistantOption(value="restart", label="Start new consult"))
     return options
 
 
@@ -4892,6 +5028,8 @@ def _assistant_mechid_intent_profile(message: str | None) -> Dict[str, bool]:
         "has_resistance_signal": False,
         "has_explicit_mechid_words": False,
         "has_explicit_therapy_words": False,
+        "has_treatment_question": False,
+        "has_isolate_context_words": False,
         "strong_mechid_trigger": False,
         "ambiguous_isolate_only": False,
     }
@@ -4922,11 +5060,18 @@ def _assistant_mechid_intent_profile(message: str | None) -> Dict[str, bool]:
     )
     has_explicit_mechid_words = any(token in text for token in MECHID_INTENT_TOKENS)
     has_explicit_therapy_words = any(token in text for token in MECHID_THERAPY_INTENT_TOKENS)
+    has_treatment_question = (
+        ("treat" in text or "therapy" in text or "antibiotic" in text or "manage" in text or "cover" in text)
+        and ("how" in text or "what" in text or "which" in text or "recommend" in text or "choice" in text)
+    )
+    has_isolate_context_words = any(token in text for token in ("isolate", "culture", "cultures", "organism", "bug"))
     strong_mechid_trigger = (
         has_ast
         or has_resistance_signal
         or has_explicit_mechid_words
         or has_explicit_therapy_words
+        or (has_isolate and has_treatment_question)
+        or (has_isolate_context_words and has_treatment_question)
     )
 
     profile.update(
@@ -4936,6 +5081,8 @@ def _assistant_mechid_intent_profile(message: str | None) -> Dict[str, bool]:
             "has_resistance_signal": has_resistance_signal,
             "has_explicit_mechid_words": has_explicit_mechid_words,
             "has_explicit_therapy_words": has_explicit_therapy_words,
+            "has_treatment_question": has_treatment_question,
+            "has_isolate_context_words": has_isolate_context_words,
             "strong_mechid_trigger": strong_mechid_trigger,
             "ambiguous_isolate_only": has_isolate and not strong_mechid_trigger,
         }
@@ -5896,6 +6043,8 @@ def _assistant_start_immunoid_from_text(
 
 def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     sel = (req.selection or "").strip()
+    if sel == PROBID_ASSISTANT_ID:
+        return sel
     if sel == MECHID_ASSISTANT_ID:
         return sel
     if sel == IMMUNOID_ASSISTANT_ID:
@@ -5910,6 +6059,8 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
         return MECHID_ASSISTANT_ID
     if _assistant_is_immunoid_intent(msg):
         return IMMUNOID_ASSISTANT_ID
+    if msg in {"syndrome", "probability", "clinical syndrome probability", "probid", "syndrome probability"}:
+        return PROBID_ASSISTANT_ID
 
     # Reuse text parser module inference for typed natural-language syndrome selection.
     parsed = parse_text_to_request(
@@ -6139,6 +6290,30 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
 
+            if chosen_module_id == PROBID_ASSISTANT_ID:
+                state.workflow = "probid"
+                state.stage = "select_syndrome_module"
+                state.module_id = None
+                state.preset_id = None
+                state.case_section = None
+                state.case_text = None
+                state.mechid_text = None
+                state.pretest_factor_ids = []
+                state.pretest_factor_labels = []
+                state.endo_blood_culture_context = None
+                state.endo_score_factor_ids = []
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Which clinical syndrome would you like to assess?"
+                    ),
+                    state=state,
+                    options=_assistant_syndrome_module_options(),
+                    tips=[
+                        "Choose the syndrome first, then I’ll ask for the setting and case details.",
+                        "You can also type the syndrome name in plain language.",
+                    ],
+                )
+
             if chosen_module_id == IMMUNOID_ASSISTANT_ID:
                 state.workflow = "immunoid"
                 state.stage = "immunoid_select_agents"
@@ -6192,12 +6367,49 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         return AssistantTurnResponse(
             assistantMessage=(
-                "I’m your ID Consultant Assistant. You can describe a syndrome case, an isolate plus AST pattern, or an immunosuppression exposure profile for screening and prophylaxis review."
+                "Hi, I'm your infectious diseases assistant. What question do you have, or how can I help?"
             ),
             state=state,
             options=_assistant_module_options(),
             tips=[
-                "I can run a ProbID syndrome workup, a MechID resistance-mechanism interpretation, or an ImmunoID screening/prophylaxis checklist.",
+                "Choose resistance mechanism and therapy, clinical syndrome probability, or immunosuppression screening and prophylaxis.",
+            ],
+        )
+
+    if state.stage == "select_syndrome_module":
+        chosen_module_id = _select_module_from_turn(req)
+        if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID}:
+            state.workflow = "probid"
+            _assistant_reset_immunoid_state(state)
+            state.module_id = chosen_module_id
+            state.mechid_text = None
+            state.endo_blood_culture_context = None
+            state.endo_score_factor_ids = []
+            state.case_section = None
+            module = store.get(chosen_module_id)
+            if module is None:
+                raise HTTPException(status_code=400, detail=f"Selected module '{chosen_module_id}' not found")
+            state.stage = "select_preset"
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Great, we’ll work on {_assistant_module_label(module)}. "
+                    "Which setting/pretest context fits this case best?"
+                ),
+                state=state,
+                options=_assistant_preset_options(module),
+                tips=[
+                    "You can click an option or type something like 'ED', 'ICU', or the preset name.",
+                    "Type 'restart' anytime to begin a new consult.",
+                ],
+            )
+
+        return AssistantTurnResponse(
+            assistantMessage="Which clinical syndrome would you like to assess?",
+            state=state,
+            options=_assistant_syndrome_module_options(),
+            tips=[
+                "Choose the syndrome first, then I’ll ask for the setting and case details.",
+                "You can also type the syndrome name in plain language.",
             ],
         )
 
@@ -6420,11 +6632,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "select_preset":
         if not state.module_id:
-            state.stage = "select_module"
+            state.stage = "select_syndrome_module"
             return AssistantTurnResponse(
                 assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
                 state=state,
-                options=_assistant_module_options(),
+                options=_assistant_syndrome_module_options(),
             )
 
         module = store.get(state.module_id)
@@ -6524,11 +6736,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             state.stage = "select_preset"
             module = store.get(state.module_id or "")
             if module is None:
-                state.stage = "select_module"
+                state.stage = "select_syndrome_module"
                 return AssistantTurnResponse(
                     assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
                     state=state,
-                    options=_assistant_module_options(),
+                    options=_assistant_syndrome_module_options(),
                 )
             return AssistantTurnResponse(
                 assistantMessage="Which setting/pretest context fits this case best?",
@@ -6600,11 +6812,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "select_pretest_factors":
         if not state.module_id:
-            state.stage = "select_module"
+            state.stage = "select_syndrome_module"
             return AssistantTurnResponse(
                 assistantMessage="I need the syndrome first. Which syndrome would you like to approach today?",
                 state=state,
-                options=_assistant_module_options(),
+                options=_assistant_syndrome_module_options(),
             )
 
         module = store.get(state.module_id)

@@ -12,6 +12,60 @@ NEGATION_RE = re.compile(r"\b(no|not|without|denies|deny|negative|normal|absent|
 WHITESPACE_RE = re.compile(r"\s+")
 NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
+TB_UVEITIS_ENDEMIC_COUNTRY_ALIASES = (
+    "mexico",
+    "india",
+    "pakistan",
+    "bangladesh",
+    "afghanistan",
+    "nepal",
+    "myanmar",
+    "cambodia",
+    "laos",
+    "thailand",
+    "mongolia",
+    "philippines",
+    "vietnam",
+    "china",
+    "indonesia",
+    "papua new guinea",
+    "haiti",
+    "peru",
+    "brazil",
+    "bolivia",
+    "ecuador",
+    "colombia",
+    "venezuela",
+    "guatemala",
+    "honduras",
+    "el salvador",
+    "nicaragua",
+    "dominican republic",
+    "somalia",
+    "ethiopia",
+    "eritrea",
+    "djibouti",
+    "kenya",
+    "uganda",
+    "tanzania",
+    "nigeria",
+    "cameroon",
+    "ghana",
+    "sierra leone",
+    "liberia",
+    "democratic republic of the congo",
+    "congo",
+    "angola",
+    "zambia",
+    "mozambique",
+    "zimbabwe",
+    "malawi",
+    "madagascar",
+    "rwanda",
+    "burundi",
+    "south africa",
+)
+
 
 MODULE_ALIASES: Dict[str, List[str]] = {
     "cap": ["cap", "community acquired pneumonia", "pneumonia", "pna"],
@@ -35,6 +89,14 @@ MODULE_ALIASES: Dict[str, List[str]] = {
         "e faecalis bacteremia",
     ],
     "active_tb": ["tb", "active tb", "tuberculosis", "pulmonary tb"],
+    "tb_uveitis": [
+        "tuberculous uveitis",
+        "tubercular uveitis",
+        "tb uveitis",
+        "ocular tb",
+        "ocular tuberculosis",
+        "tuberculous choroiditis",
+    ],
     "pjp": ["pjp", "pcp", "pneumocystis"],
     "inv_candida": ["invasive candidiasis", "candida", "candidemia"],
     "inv_mold": ["invasive mold", "aspergillus", "mucor", "mold infection"],
@@ -339,6 +401,113 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "tb_ct_na": {
         "present": ["chest ct not done", "ct chest not done"],
         "absent": ["chest ct completed", "ct chest completed"],
+    },
+    "tbu_phenotype_au_first": {
+        "present": [
+            "anterior uveitis first episode",
+            "first episode anterior uveitis",
+            "first episode of anterior uveitis",
+            "first anterior uveitis episode",
+        ],
+    },
+    "tbu_phenotype_au_recurrent": {
+        "present": [
+            "anterior uveitis recurrent",
+            "recurrent anterior uveitis",
+            "recurrent episode anterior uveitis",
+            "recurrent episode of anterior uveitis",
+        ],
+    },
+    "tbu_phenotype_intermediate": {
+        "present": ["intermediate uveitis"],
+    },
+    "tbu_phenotype_panuveitis": {
+        "present": ["panuveitis"],
+    },
+    "tbu_phenotype_rv_active": {
+        "present": ["active retinal vasculitis", "retinal vasculitis active"],
+    },
+    "tbu_phenotype_rv_inactive": {
+        "present": ["inactive retinal vasculitis", "retinal vasculitis inactive"],
+    },
+    "tbu_phenotype_choroiditis_serpiginoid": {
+        "present": ["serpiginoid choroiditis", "serpiginous like choroiditis", "tb slc"],
+    },
+    "tbu_phenotype_choroiditis_multifocal": {
+        "present": ["multifocal choroiditis", "non serpiginoid choroiditis", "nonserpiginoid choroiditis"],
+    },
+    "tbu_phenotype_choroiditis_tuberculoma": {
+        "present": ["choroidal tuberculoma", "choroidal nodule", "tuberculoma"],
+    },
+    "tbu_endemicity_endemic": {
+        "present": ["tb endemic region", "from endemic region", "from tb endemic area", "high burden tb country"],
+    },
+    "tbu_endemicity_non_endemic": {
+        "present": ["tb non endemic region", "from non endemic region", "from tb non endemic area"],
+    },
+    "tbu_tst_positive": {
+        "present": ["tst positive", "mantoux positive", "tuberculin skin test positive", "ppd positive"],
+    },
+    "tbu_tst_negative": {
+        "present": ["tst negative", "mantoux negative", "tuberculin skin test negative", "ppd negative"],
+    },
+    "tbu_tst_na": {
+        "present": ["tst not done", "mantoux not done", "tuberculin skin test not done", "ppd not done"],
+    },
+    "tbu_igra_positive": {
+        "present": [
+            "igra positive",
+            "igra is positive",
+            "quantiferon positive",
+            "quantiferon is positive",
+            "qft positive",
+            "qft is positive",
+            "t spot positive",
+            "t spot is positive",
+        ],
+    },
+    "tbu_igra_negative": {
+        "present": [
+            "igra negative",
+            "igra is negative",
+            "quantiferon negative",
+            "quantiferon is negative",
+            "qft negative",
+            "qft is negative",
+            "t spot negative",
+            "t spot is negative",
+        ],
+    },
+    "tbu_igra_na": {
+        "present": ["igra not done", "quantiferon not done", "qft not done", "t spot not done"],
+    },
+    "tbu_chest_imaging_positive": {
+        "present": [
+            "chest x ray positive for tb",
+            "chest xray positive for tb",
+            "chest ct positive for tb",
+            "chest imaging positive for tb",
+            "chest imaging with healed tb signs",
+            "chest imaging with active tb signs",
+        ],
+    },
+    "tbu_chest_imaging_negative": {
+        "present": [
+            "chest x ray negative for tb",
+            "chest xray negative for tb",
+            "chest ct negative for tb",
+            "chest imaging negative for tb",
+            "normal chest radiograph",
+            "chest radiograph is normal",
+            "normal chest x ray",
+            "chest x ray is normal",
+            "normal chest xray",
+            "chest xray is normal",
+            "chest radiograph normal",
+        ],
+    },
+    "tbu_chest_imaging_na": {
+        "present": ["chest imaging not done", "chest x ray not done", "chest xray not done", "chest ct not done"],
     },
     "pjp_host_no_ppx": {
         "present": ["lack of tmp smx prophylaxis despite indication", "tmp smx prophylaxis missing despite indication"],
@@ -1158,6 +1327,41 @@ def _module_score(text_norm: str, module: SyndromeModule) -> int:
             score += 3
     if _contains_phrase(text_norm, module.name):
         score += 2
+    if module.id == "tb_uveitis":
+        phenotype_terms = (
+            "anterior uveitis",
+            "intermediate uveitis",
+            "panuveitis",
+            "retinal vasculitis",
+            "serpiginoid choroiditis",
+            "serpiginous like choroiditis",
+            "multifocal choroiditis",
+            "choroidal tuberculoma",
+            "choroidal nodule",
+        )
+        tb_terms = (
+            "igra",
+            "quantiferon",
+            "quanti feron",
+            "t spot",
+            "tuberculin skin test",
+            "mantoux",
+            "ppd",
+            "tb endemic",
+            "high burden tb",
+            "chest radiograph",
+            "chest xray",
+            "chest x ray",
+            "ocular tb",
+            "tuberculous",
+            "tubercular",
+        )
+        has_phenotype = any(_contains_phrase(text_norm, term) for term in phenotype_terms)
+        has_tb_context = any(_contains_phrase(text_norm, term) for term in tb_terms) or any(
+            _contains_phrase(text_norm, country) for country in TB_UVEITIS_ENDEMIC_COUNTRY_ALIASES
+        )
+        if has_phenotype and has_tb_context:
+            score += 6
     return score
 
 
@@ -1263,6 +1467,8 @@ def _choose_preset(module: SyndromeModule, text: str, preset_hint: str | None) -
     presets = module.pretest_presets
     if not presets:
         return None, warnings
+    if len(presets) == 1:
+        return presets[0].id, warnings
 
     if preset_hint:
         for p in presets:
@@ -1394,6 +1600,35 @@ def _match_item_state(text_norm: str, item) -> Tuple[Optional[str], Optional[int
     return None, None, None
 
 
+def _augment_tb_uveitis_findings(
+    text_norm: str,
+    findings: Dict[str, str],
+    match_alias: Dict[str, str],
+) -> None:
+    if "tbu_endemicity_endemic" not in findings and "tbu_endemicity_non_endemic" not in findings:
+        for country in TB_UVEITIS_ENDEMIC_COUNTRY_ALIASES:
+            if _contains_phrase(text_norm, country):
+                findings["tbu_endemicity_endemic"] = "present"
+                match_alias["tbu_endemicity_endemic"] = country
+                break
+
+    if "tbu_chest_imaging_negative" not in findings and "tbu_chest_imaging_positive" not in findings:
+        negative_imaging_phrases = (
+            "normal chest radiograph",
+            "chest radiograph is normal",
+            "chest radiograph normal",
+            "normal chest x ray",
+            "chest x ray is normal",
+            "normal chest xray",
+            "chest xray is normal",
+        )
+        for phrase in negative_imaging_phrases:
+            if _contains_phrase(text_norm, phrase):
+                findings["tbu_chest_imaging_negative"] = "present"
+                match_alias["tbu_chest_imaging_negative"] = phrase
+                break
+
+
 def _extract_findings(module: SyndromeModule, text: str) -> tuple[Dict[str, str], List[str], Dict[str, str]]:
     text_norm = normalize(text)
     findings: Dict[str, str] = {}
@@ -1408,6 +1643,9 @@ def _extract_findings(module: SyndromeModule, text: str) -> tuple[Dict[str, str]
         findings[item.id] = state
         match_pos[item.id] = pos
         match_alias[item.id] = alias
+
+    if module.id == "tb_uveitis":
+        _augment_tb_uveitis_findings(text_norm, findings, match_alias)
 
     if not findings:
         warnings.append("No findings/tests were confidently extracted from text.")
