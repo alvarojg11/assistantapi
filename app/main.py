@@ -818,6 +818,22 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
             "Major ATT hepatotoxicity risk",
             "Major ATT hepatotoxicity risk not selected",
         ),
+        "tbu_harm_cld_mild": (
+            "Mild chronic liver disease risk",
+            "Mild chronic liver disease risk not selected",
+        ),
+        "tbu_harm_cld_moderate": (
+            "Moderate chronic liver disease risk",
+            "Moderate chronic liver disease risk not selected",
+        ),
+        "tbu_harm_cld_severe": (
+            "Severe chronic liver disease risk",
+            "Severe chronic liver disease risk not selected",
+        ),
+        "tbu_harm_ethambutol_ocular_risk": (
+            "Higher ethambutol ocular-toxicity risk",
+            "Higher ethambutol ocular-toxicity risk not selected",
+        ),
         "tbu_harm_major_drug_interaction_or_intolerance": (
             "Major rifamycin interaction, prior ATT intolerance, or resistance concern",
             "Major rifamycin interaction, prior ATT intolerance, or resistance concern not selected",

@@ -582,6 +582,44 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
             "significant liver injury risk",
         ],
     },
+    "tbu_harm_cld_mild": {
+        "present": [
+            "child pugh a",
+            "child-pugh a",
+            "child class a",
+            "compensated cirrhosis",
+            "mild chronic liver disease",
+        ],
+    },
+    "tbu_harm_cld_moderate": {
+        "present": [
+            "child pugh b",
+            "child-pugh b",
+            "child class b",
+            "moderate chronic liver disease",
+        ],
+    },
+    "tbu_harm_cld_severe": {
+        "present": [
+            "child pugh c",
+            "child-pugh c",
+            "child class c",
+            "decompensated cirrhosis",
+            "hepatic decompensation",
+            "severe chronic liver disease",
+        ],
+    },
+    "tbu_harm_ethambutol_ocular_risk": {
+        "present": [
+            "high ethambutol ocular toxicity risk",
+            "high ethambutol optic neuropathy risk",
+            "baseline optic neuropathy",
+            "history of optic neuropathy",
+            "renal dysfunction",
+            "chronic kidney disease",
+            "older age with ethambutol risk",
+        ],
+    },
     "tbu_harm_major_drug_interaction_or_intolerance": {
         "present": [
             "major rifamycin interaction",
@@ -1712,6 +1750,37 @@ def _augment_tb_uveitis_findings(
                 findings["tbu_chest_imaging_negative"] = "present"
                 match_alias["tbu_chest_imaging_negative"] = phrase
                 break
+
+    cld_ids = (
+        "tbu_harm_cld_mild",
+        "tbu_harm_cld_moderate",
+        "tbu_harm_cld_severe",
+    )
+    if not any(item_id in findings for item_id in cld_ids):
+        child_pugh_patterns = (
+            (r"\bchild(?:\s*-\s*|\s+)pugh\s*a\b|\bchild class a\b", "tbu_harm_cld_mild", "child-pugh a"),
+            (r"\bchild(?:\s*-\s*|\s+)pugh\s*b\b|\bchild class b\b", "tbu_harm_cld_moderate", "child-pugh b"),
+            (r"\bchild(?:\s*-\s*|\s+)pugh\s*c\b|\bchild class c\b", "tbu_harm_cld_severe", "child-pugh c"),
+        )
+        for pattern, item_id, alias in child_pugh_patterns:
+            if re.search(pattern, text_norm):
+                findings[item_id] = "present"
+                match_alias[item_id] = alias
+                break
+
+    if not any(item_id in findings for item_id in cld_ids):
+        meld_match = re.search(r"\bmeld(?:\s*-\s*na|\s+na)?\s*(?:score\s*)?[:=]?\s*(\d{1,2})\b", text_norm)
+        if meld_match:
+            meld_value = int(meld_match.group(1))
+            if meld_value >= 20:
+                findings["tbu_harm_cld_severe"] = "present"
+                match_alias["tbu_harm_cld_severe"] = f"meld-na {meld_value}"
+            elif meld_value >= 10:
+                findings["tbu_harm_cld_moderate"] = "present"
+                match_alias["tbu_harm_cld_moderate"] = f"meld-na {meld_value}"
+            else:
+                findings["tbu_harm_cld_mild"] = "present"
+                match_alias["tbu_harm_cld_mild"] = f"meld-na {meld_value}"
 
 
 def _extract_findings(module: SyndromeModule, text: str) -> tuple[Dict[str, str], List[str], Dict[str, str]]:

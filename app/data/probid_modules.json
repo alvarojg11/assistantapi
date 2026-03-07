@@ -4496,6 +4496,49 @@
         }
       },
       {
+        "id": "tbu_harm_cld_mild",
+        "label": "Mild chronic liver disease risk (for example Child-Pugh A or MELD-Na under 10)",
+        "category": "harm",
+        "group": "tbu_harm_cld",
+        "notes": "Harm-only modifier: mild chronic liver disease raises ATT treatment harm modestly.",
+        "source": {
+          "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
+          "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
+        }
+      },
+      {
+        "id": "tbu_harm_cld_moderate",
+        "label": "Moderate chronic liver disease risk (for example Child-Pugh B or MELD-Na 10-19)",
+        "category": "harm",
+        "group": "tbu_harm_cld",
+        "notes": "Harm-only modifier: moderate chronic liver disease raises ATT treatment harm substantially.",
+        "source": {
+          "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
+          "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
+        }
+      },
+      {
+        "id": "tbu_harm_cld_severe",
+        "label": "Severe chronic liver disease risk (for example Child-Pugh C or MELD-Na 20 or higher)",
+        "category": "harm",
+        "group": "tbu_harm_cld",
+        "notes": "Harm-only modifier: severe chronic liver disease raises ATT treatment harm markedly.",
+        "source": {
+          "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
+          "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
+        }
+      },
+      {
+        "id": "tbu_harm_ethambutol_ocular_risk",
+        "label": "Higher ethambutol ocular-toxicity risk",
+        "category": "harm",
+        "notes": "Harm-only modifier: raises the treatment threshold when baseline optic-neuropathy risk is higher than usual (for example older age, renal dysfunction, or prior optic neuropathy).",
+        "source": {
+          "short": "Ethambutol optic neuropathy literature",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/39474613/"
+        }
+      },
+      {
         "id": "tbu_harm_major_drug_interaction_or_intolerance",
         "label": "Major rifamycin interaction, prior ATT intolerance, or resistance concern",
         "category": "harm",

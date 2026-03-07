@@ -102,8 +102,8 @@ BASE_HARM_BY_MODULE: Dict[str, dict] = {
     },
     "tb_uveitis": {
         "missedDx": 14,
-        "unnecessaryTx": 10,
-        "evidence": {"short": "Collaborative Ocular Tuberculosis Study (COTS)", "url": "https://www.oculartb.net/cots-calc"},
+        "unnecessaryTx": 7,
+        "evidence": {"short": "ATT toxicity calibration: hepatotoxicity + ethambutol optic toxicity literature", "url": "https://pubmed.ncbi.nlm.nih.gov/36249736/"},
     },
     "pjp": {
         "missedDx": 16,
@@ -531,6 +531,14 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
             )
 
     if module_id == "tb_uveitis":
+        has_cld_severity = any(
+            has(item_id)
+            for item_id in (
+                "tbu_harm_cld_mild",
+                "tbu_harm_cld_moderate",
+                "tbu_harm_cld_severe",
+            )
+        )
         if has("tbu_phenotype_choroiditis_tuberculoma") or has("tbu_phenotype_choroiditis_serpiginoid") or has("tbu_harm_macular_or_vision_threatening_lesion"):
             add_missed_dx_driver(
                 5,
@@ -555,15 +563,39 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 "Host immunosuppression selected, which raises concern about uncontrolled ocular TB if therapy is withheld.",
                 _evidence("COTS Calculator", "https://www.oculartb.net/cots-calc"),
             )
-        if has("tbu_harm_hepatotoxicity_risk"):
+        if has("tbu_harm_cld_mild"):
             add_unnecessary_tx_driver(
-                4,
+                1,
+                "Mild chronic liver disease severity selected (for example Child-Pugh A or MELD-Na under 10).",
+                _evidence("ATS/CDC/ERS/IDSA TB Treatment Guideline", "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"),
+            )
+        if has("tbu_harm_cld_moderate"):
+            add_unnecessary_tx_driver(
+                3,
+                "Moderate chronic liver disease severity selected (for example Child-Pugh B or MELD-Na 10-19).",
+                _evidence("ATS/CDC/ERS/IDSA TB Treatment Guideline", "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"),
+            )
+        if has("tbu_harm_cld_severe"):
+            add_unnecessary_tx_driver(
+                5,
+                "Severe chronic liver disease severity selected (for example Child-Pugh C or MELD-Na 20 or higher).",
+                _evidence("ATS/CDC/ERS/IDSA TB Treatment Guideline", "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"),
+            )
+        if has("tbu_harm_hepatotoxicity_risk") and not has_cld_severity:
+            add_unnecessary_tx_driver(
+                3,
                 "Major hepatotoxicity risk selected, which raises the expected harm of empiric ATT.",
-                _evidence("LiverTox / ATS TB drug toxicity guidance"),
+                _evidence("Wang et al. ATLI meta-analysis", "https://pubmed.ncbi.nlm.nih.gov/36249736/"),
+            )
+        if has("tbu_harm_ethambutol_ocular_risk"):
+            add_unnecessary_tx_driver(
+                2,
+                "Ethambutol ocular-toxicity risk selected, which raises the expected harm of empiric ATT in an ophthalmology patient.",
+                _evidence("Kim et al. Ethambutol optic neuropathy cohort", "https://pubmed.ncbi.nlm.nih.gov/39474613/"),
             )
         if has("tbu_harm_major_drug_interaction_or_intolerance"):
             add_unnecessary_tx_driver(
-                4,
+                2,
                 "Major rifamycin interaction, prior ATT intolerance, or treatment-complexity risk selected.",
                 _evidence("ATS/CDC/ERS/IDSA TB Treatment Guideline", "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"),
             )

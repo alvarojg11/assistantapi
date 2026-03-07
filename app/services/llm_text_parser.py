@@ -58,7 +58,7 @@ EXCLUSIVE_RESULT_GROUPS: Dict[str, set[str]] = {
     "cdi": {"cdi_test"},
     "endo": {"endo_virsta", "endo_denova", "endo_handoc", "endo_micro", "endo_tte", "endo_pet"},
     "active_tb": {"tb_cxr", "tb_ct"},
-    "tb_uveitis": {"tbu_phenotype", "tbu_endemicity", "tbu_tst", "tbu_igra", "tbu_chest_imaging"},
+    "tb_uveitis": {"tbu_phenotype", "tbu_endemicity", "tbu_tst", "tbu_igra", "tbu_chest_imaging", "tbu_harm_cld"},
 }
 
 
