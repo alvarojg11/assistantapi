@@ -67,6 +67,7 @@ from .schemas import (
 )
 from .services.module_store import InMemoryModuleStore
 from .services.consult_narrator import (
+    narrate_immunoid_assistant_message,
     narrate_mechid_assistant_message,
     narrate_mechid_review_message,
     narrate_probid_assistant_message,
@@ -5801,8 +5802,15 @@ def _assistant_immunoid_response(
         question = result.follow_up_questions[0]
         options = _assistant_immunoid_followup_options(question.id)
         options.extend(_assistant_immunoid_extra_context_options(state))
+        fallback_message = ((prefix or "") + _assistant_immunoid_followup_message(result)).strip()
+        narrated_message, narration_refined = narrate_immunoid_assistant_message(
+            immunoid_result=result,
+            fallback_message=fallback_message,
+            follow_up_stage=True,
+        )
         return AssistantTurnResponse(
-            assistantMessage=((prefix or "") + _assistant_immunoid_followup_message(result)).strip(),
+            assistantMessage=narrated_message,
+            assistantNarrationRefined=narration_refined,
             state=state,
             options=options,
             immunoidAnalysis=result,
@@ -5818,8 +5826,15 @@ def _assistant_immunoid_response(
         AssistantOption(value="restart", label="Start new consult"),
     ]
     options.extend(_assistant_immunoid_extra_context_options(state))
+    fallback_message = ((prefix or "") + _assistant_immunoid_final_message(result)).strip()
+    narrated_message, narration_refined = narrate_immunoid_assistant_message(
+        immunoid_result=result,
+        fallback_message=fallback_message,
+        follow_up_stage=False,
+    )
     return AssistantTurnResponse(
-        assistantMessage=((prefix or "") + _assistant_immunoid_final_message(result)).strip(),
+        assistantMessage=narrated_message,
+        assistantNarrationRefined=narration_refined,
         state=state,
         options=options,
         immunoidAnalysis=result,

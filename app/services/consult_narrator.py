@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, Dict, List, Tuple
 
-from ..schemas import MechIDTextAnalyzeResponse, TextAnalyzeResponse
+from ..schemas import ImmunoAnalyzeResponse, MechIDTextAnalyzeResponse, TextAnalyzeResponse
 from .mechid_consult_examples import select_mechid_consult_examples
 from .llm_text_parser import LLMParserError, _try_import_openai
 
@@ -184,6 +184,43 @@ def narrate_mechid_review_message(
         "If example outputs are provided, use them as style references only when they fit the same type of case. Do not copy unsupported claims.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 2 short paragraphs. Plain text only."
+    )
+    try:
+        return _call_consult_model(prompt=prompt, payload=payload), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_immunoid_assistant_message(
+    *,
+    immunoid_result: ImmunoAnalyzeResponse,
+    fallback_message: str,
+    follow_up_stage: bool,
+) -> Tuple[str, bool]:
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    payload = {
+        "fallbackMessage": fallback_message,
+        "followUpStage": follow_up_stage,
+        "selectedRegimens": [item.model_dump(by_alias=True) for item in immunoid_result.selected_regimens],
+        "selectedAgents": [item.model_dump(by_alias=True) for item in immunoid_result.selected_agents],
+        "riskFlags": list(immunoid_result.risk_flags),
+        "recommendations": [item.model_dump(by_alias=True) for item in immunoid_result.recommendations],
+        "followUpQuestions": [item.model_dump(by_alias=True) for item in immunoid_result.follow_up_questions],
+        "exposureSummary": [item.model_dump(by_alias=True) for item in immunoid_result.exposure_summary],
+        "warnings": list(immunoid_result.warnings),
+    }
+    prompt = (
+        "You are an infectious diseases consultant rewriting a deterministic ImmunoID screening and prophylaxis result into a concise clinician-facing answer.\n"
+        "The JSON input is the full source of truth. Do not invent drugs, regimens, endemic exposures, screening tests, prophylaxis, monitoring, or specialist referrals.\n"
+        "Do not add recommendations that are not present in the JSON. Do not imply that any recommendation is universal if the JSON frames it as context-dependent or review-based.\n"
+        "If there are follow-up questions, your job is to briefly summarize what is already triggered and then ask only the next missing question that appears in the JSON.\n"
+        "If there are no follow-up questions, summarize the current rule-backed checklist in a practical consultant tone.\n"
+        "Preserve uncertainty exactly. If serologies, geography, or neutropenia details are missing, say that plainly and only based on the JSON.\n"
+        "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
+        "Do not use markdown bullets, asterisks, or arrow symbols.\n"
+        "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
         return _call_consult_model(prompt=prompt, payload=payload), True
