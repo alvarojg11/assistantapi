@@ -4203,8 +4203,8 @@
       {
         "id": "ophthalmology_visit",
         "label": "Ophthalmology visit",
-        "p": 0.15,
-        "notes": "Anchor pretest used only to back-calculate a display LR. The main result comes from the COTS consensus matrix rather than an epidemiologic baseline.",
+        "p": 0.05,
+        "notes": "Conservative fallback pretest used only when phenotype is still missing or no override is provided. Once phenotype is known, the starting pretest is derived from the phenotype/endemicity COTS baseline rather than this fallback anchor.",
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
@@ -4423,6 +4423,86 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_pretest_prior_tb_or_ltbi",
+        "label": "Prior TB disease or known latent TB infection",
+        "category": "host",
+        "notes": "Pretest-only modifier: general TB epidemiologic context calibrated for ocular TB, not part of the COTS matrix.",
+        "source": {
+          "short": "Calibrated TB pretest modifier"
+        }
+      },
+      {
+        "id": "tbu_pretest_close_tb_contact",
+        "label": "Close TB contact or household TB exposure",
+        "category": "host",
+        "notes": "Pretest-only modifier: general TB contact-risk context calibrated for ocular TB, not part of the COTS matrix.",
+        "source": {
+          "short": "Calibrated TB pretest modifier"
+        }
+      },
+      {
+        "id": "tbu_harm_macular_or_vision_threatening_lesion",
+        "label": "Macular or other vision-threatening lesion",
+        "category": "harm",
+        "notes": "Harm-only modifier: lowers the treatment threshold because delayed therapy risks central vision loss.",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
+        }
+      },
+      {
+        "id": "tbu_harm_bilateral_or_only_seeing_eye",
+        "label": "Bilateral disease or only-seeing eye",
+        "category": "harm",
+        "notes": "Harm-only modifier: lowers the treatment threshold because a missed diagnosis carries higher visual disability risk.",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_harm_progressive_vision_loss_or_severe_inflammation",
+        "label": "Progressive vision loss, severe inflammation, or steroid-dependent course",
+        "category": "harm",
+        "notes": "Harm-only modifier: lowers the treatment threshold when the ocular course is vision-threatening.",
+        "source": {
+          "short": "Agrawal et al. Ophthalmology",
+          "year": 2021,
+          "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
+        }
+      },
+      {
+        "id": "tbu_harm_immunosuppressed",
+        "label": "Host immunosuppression",
+        "category": "harm",
+        "notes": "Harm-only modifier: lowers the treatment threshold because missed ocular TB may progress more aggressively.",
+        "source": {
+          "short": "COTS Calculator",
+          "url": "https://www.oculartb.net/cots-calc"
+        }
+      },
+      {
+        "id": "tbu_harm_hepatotoxicity_risk",
+        "label": "Major ATT hepatotoxicity risk",
+        "category": "harm",
+        "notes": "Harm-only modifier: raises the treatment threshold when empiric ATT is riskier than usual.",
+        "source": {
+          "short": "LiverTox",
+          "url": "https://www.ncbi.nlm.nih.gov/books/NBK547852/"
+        }
+      },
+      {
+        "id": "tbu_harm_major_drug_interaction_or_intolerance",
+        "label": "Major rifamycin interaction, prior ATT intolerance, or resistance concern",
+        "category": "harm",
+        "notes": "Harm-only modifier: raises the treatment threshold when ATT is logistically or biologically riskier than usual.",
+        "source": {
+          "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
+          "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
         }
       }
     ]

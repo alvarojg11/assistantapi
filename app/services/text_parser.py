@@ -509,6 +509,91 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "tbu_chest_imaging_na": {
         "present": ["chest imaging not done", "chest x ray not done", "chest xray not done", "chest ct not done"],
     },
+    "tbu_pretest_prior_tb_or_ltbi": {
+        "present": [
+            "prior tb",
+            "previous tb",
+            "history of tb",
+            "latent tb infection",
+            "ltbi",
+            "treated tuberculosis",
+            "prior pulmonary tb",
+        ],
+    },
+    "tbu_pretest_close_tb_contact": {
+        "present": [
+            "tb contact",
+            "close tb contact",
+            "household tb contact",
+            "family member with tb",
+            "tb exposure",
+            "known exposure to tuberculosis",
+        ],
+    },
+    "tbu_harm_macular_or_vision_threatening_lesion": {
+        "present": [
+            "macular involvement",
+            "macula involved",
+            "posterior pole involvement",
+            "foveal involvement",
+            "vision threatening lesion",
+            "sight threatening lesion",
+            "central vision threatening lesion",
+        ],
+    },
+    "tbu_harm_bilateral_or_only_seeing_eye": {
+        "present": [
+            "bilateral uveitis",
+            "bilateral disease",
+            "only seeing eye",
+            "only functional eye",
+            "monocular patient",
+            "one seeing eye",
+        ],
+    },
+    "tbu_harm_progressive_vision_loss_or_severe_inflammation": {
+        "present": [
+            "progressive vision loss",
+            "worsening vision",
+            "declining vision",
+            "severe inflammation",
+            "vision rapidly worsening",
+            "steroid dependent uveitis",
+            "steroid dependent inflammation",
+        ],
+    },
+    "tbu_harm_immunosuppressed": {
+        "present": [
+            "immunosuppressed",
+            "immunocompromised",
+            "on immunosuppression",
+            "receiving biologic therapy",
+            "transplant recipient",
+            "hiv positive",
+        ],
+    },
+    "tbu_harm_hepatotoxicity_risk": {
+        "present": [
+            "baseline liver disease",
+            "cirrhosis",
+            "chronic hepatitis",
+            "high hepatotoxicity risk",
+            "baseline transaminitis",
+            "significant liver injury risk",
+        ],
+    },
+    "tbu_harm_major_drug_interaction_or_intolerance": {
+        "present": [
+            "major rifamycin interaction",
+            "major drug interaction with rifampin",
+            "rifampin interaction",
+            "prior att intolerance",
+            "prior tb drug intolerance",
+            "history of severe att toxicity",
+            "concern for drug resistant tb",
+            "previous tuberculosis treatment",
+        ],
+    },
     "pjp_host_no_ppx": {
         "present": ["lack of tmp smx prophylaxis despite indication", "tmp smx prophylaxis missing despite indication"],
         "absent": ["receiving tmp smx prophylaxis when indicated", "on tmp smx prophylaxis when indicated"],

@@ -100,6 +100,11 @@ BASE_HARM_BY_MODULE: Dict[str, dict] = {
         "unnecessaryTx": 8,
         "evidence": {"short": "WHO Global TB Report 2024", "url": "https://www.who.int/publications/i/item/9789240101531"},
     },
+    "tb_uveitis": {
+        "missedDx": 14,
+        "unnecessaryTx": 10,
+        "evidence": {"short": "Collaborative Ocular Tuberculosis Study (COTS)", "url": "https://www.oculartb.net/cots-calc"},
+    },
     "pjp": {
         "missedDx": 16,
         "unnecessaryTx": 5,
@@ -458,6 +463,11 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
         drivers.append(HarmDriver(label=label, delta=delta, evidence=evidence))
         rationale.append(label)
 
+    def add_unnecessary_tx_driver(delta: float, label: str, evidence: HarmEvidence | None = None) -> None:
+        nonlocal unnecessary_tx
+        unnecessary_tx += delta
+        rationale.append(label)
+
     if module_id == "cap":
         if has("cap_hypox") or has("cap_rr"):
             add_missed_dx_driver(
@@ -518,6 +528,44 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 2,
                 "High-risk transmission setting selected.",
                 _evidence("Cords et al. Lancet Public Health", "https://doi.org/10.1016/S2468-2667(21)00025-6"),
+            )
+
+    if module_id == "tb_uveitis":
+        if has("tbu_phenotype_choroiditis_tuberculoma") or has("tbu_phenotype_choroiditis_serpiginoid") or has("tbu_harm_macular_or_vision_threatening_lesion"):
+            add_missed_dx_driver(
+                5,
+                "Posterior segment or macula-threatening phenotype selected, which raises the harm of delayed treatment.",
+                _evidence("Agrawal et al. Ophthalmology", "https://doi.org/10.1016/j.ophtha.2020.01.008"),
+            )
+        if has("tbu_phenotype_panuveitis") or has("tbu_phenotype_rv_active") or has("tbu_harm_progressive_vision_loss_or_severe_inflammation"):
+            add_missed_dx_driver(
+                4,
+                "Progressive inflammation, active retinal vasculitis, or panuveitis selected, which increases the risk of visual loss if TBU is missed.",
+                _evidence("Agrawal et al. Ophthalmology", "https://doi.org/10.1016/j.ophtha.2020.06.052"),
+            )
+        if has("tbu_harm_bilateral_or_only_seeing_eye"):
+            add_missed_dx_driver(
+                6,
+                "Bilateral disease or an only-seeing eye selected, which makes a missed diagnosis much more consequential.",
+                _evidence("COTS Calculator", "https://www.oculartb.net/cots-calc"),
+            )
+        if has("tbu_harm_immunosuppressed"):
+            add_missed_dx_driver(
+                2,
+                "Host immunosuppression selected, which raises concern about uncontrolled ocular TB if therapy is withheld.",
+                _evidence("COTS Calculator", "https://www.oculartb.net/cots-calc"),
+            )
+        if has("tbu_harm_hepatotoxicity_risk"):
+            add_unnecessary_tx_driver(
+                4,
+                "Major hepatotoxicity risk selected, which raises the expected harm of empiric ATT.",
+                _evidence("LiverTox / ATS TB drug toxicity guidance"),
+            )
+        if has("tbu_harm_major_drug_interaction_or_intolerance"):
+            add_unnecessary_tx_driver(
+                4,
+                "Major rifamycin interaction, prior ATT intolerance, or treatment-complexity risk selected.",
+                _evidence("ATS/CDC/ERS/IDSA TB Treatment Guideline", "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"),
             )
 
     if module_id == "pjp":

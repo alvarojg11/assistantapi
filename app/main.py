@@ -790,6 +790,38 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
             "Chest X-ray or CT not done",
             "Chest X-ray or CT completed",
         ),
+        "tbu_pretest_prior_tb_or_ltbi": (
+            "Prior TB disease or known latent TB infection",
+            "Prior TB disease or known latent TB infection not selected",
+        ),
+        "tbu_pretest_close_tb_contact": (
+            "Close TB contact or household TB exposure",
+            "Close TB contact or household TB exposure not selected",
+        ),
+        "tbu_harm_macular_or_vision_threatening_lesion": (
+            "Macular or vision-threatening lesion",
+            "Macular or vision-threatening lesion not selected",
+        ),
+        "tbu_harm_bilateral_or_only_seeing_eye": (
+            "Bilateral disease or only-seeing eye",
+            "Bilateral disease or only-seeing eye not selected",
+        ),
+        "tbu_harm_progressive_vision_loss_or_severe_inflammation": (
+            "Progressive vision loss or severe inflammation",
+            "Progressive vision loss or severe inflammation not selected",
+        ),
+        "tbu_harm_immunosuppressed": (
+            "Immunosuppressed host",
+            "Immunosuppressed host not selected",
+        ),
+        "tbu_harm_hepatotoxicity_risk": (
+            "Major ATT hepatotoxicity risk",
+            "Major ATT hepatotoxicity risk not selected",
+        ),
+        "tbu_harm_major_drug_interaction_or_intolerance": (
+            "Major rifamycin interaction, prior ATT intolerance, or resistance concern",
+            "Major rifamycin interaction, prior ATT intolerance, or resistance concern not selected",
+        ),
     },
     "pjp": {
         "pjp_host_no_ppx": (
@@ -2893,6 +2925,22 @@ def _friendly_probid_probability_and_harm(module: SyndromeModule, analysis: Anal
             analysis.pretest.preset_id,
         )
     probability = analysis.posttest_probability
+    if module.id == "tb_uveitis":
+        intro = (
+            f"The mapped COTS post-test probability is {probability:.1%}."
+            f" The current action thresholds are observe at or below {analysis.thresholds.observe_probability:.1%}"
+            f" and treat at or above {analysis.thresholds.treat_probability:.1%}."
+        )
+        if preset_label:
+            intro = (
+                f"The fallback preset is '{preset_label}', but the starting pretest is {analysis.pretest.base_probability:.1%} "
+                "after deriving the baseline from the selected phenotype/endemicity context when available. "
+                + intro
+            )
+        return (
+            intro
+            + " In this module, the displayed combined LR and stepwise LR values are back-calculated scenario effects from mapped COTS probabilities, not independent pooled diagnostic LRs."
+        )
     threshold_sentence = (
         f"Post-test probability is {probability:.1%} after a combined LR of {analysis.combined_lr:.2f}. "
         f"The current action thresholds are observe at or below {analysis.thresholds.observe_probability:.1%} "

@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Dict, List
 
 from ..schemas import AppliedFinding, AnalyzeRequest, AnalyzeResponse, DecisionThresholds, PretestSummary, StepwiseUpdate, SyndromeModule
+from ..engine import derive_decision_thresholds, estimate_harms, recommendation_for_probability, resolve_harms
+from ..pretest_factors import get_pretest_factor_tuning, resolve_pretest_factor_specs
 
 
 TB_UVEITIS_MODULE_ID = "tb_uveitis"
-TB_UVEITIS_OBSERVE_THRESHOLD = 0.20
-TB_UVEITIS_TREAT_THRESHOLD = 0.60
 TB_UVEITIS_MEDIAN_TO_PROBABILITY = {
     1: 0.10,
     2: 0.30,
@@ -67,6 +67,11 @@ def _prob_to_odds(probability: float) -> float:
     return p / (1 - p)
 
 
+def _odds_to_prob(odds: float) -> float:
+    oo = max(odds, 0.0)
+    return oo / (1 + oo)
+
+
 @lru_cache(maxsize=1)
 def _load_lookup() -> Dict[str, Dict[str, int]]:
     data_path = Path(__file__).resolve().parents[1] / "data" / "tb_uveitis_cots_lookup.json"
@@ -105,12 +110,9 @@ def _lookup_result(codes: Dict[str, str]) -> tuple[int, int]:
     return int(payload["median"]), int(payload["iqr"])
 
 
-def _recommendation_for_probability(probability: float) -> str:
-    if probability >= TB_UVEITIS_TREAT_THRESHOLD:
-        return "treat"
-    if probability <= TB_UVEITIS_OBSERVE_THRESHOLD:
-        return "observe"
-    return "test"
+def _raw_cots_probability(codes: Dict[str, str]) -> float:
+    median, _ = _lookup_result(codes)
+    return TB_UVEITIS_MEDIAN_TO_PROBABILITY[median]
 
 
 def _consensus_summary(iqr: int) -> str:
@@ -129,6 +131,7 @@ def _build_stepwise_updates(
     module: SyndromeModule,
     selected_item_ids: Dict[str, str],
     selected_codes: Dict[str, str],
+    pretest_odds_multiplier: float,
 ) -> List[StepwiseUpdate]:
     if "tbu_phenotype" not in selected_item_ids:
         return []
@@ -136,19 +139,13 @@ def _build_stepwise_updates(
     items_by_id = {item.id: item for item in module.items}
     current_codes = dict(TB_UVEITIS_DEFAULT_CODES)
     current_codes["q1"] = TB_UVEITIS_ITEM_TO_CODE[selected_item_ids["tbu_phenotype"]]
-    current_probability = TB_UVEITIS_MEDIAN_TO_PROBABILITY[_lookup_result(current_codes)[0]]
+    if "tbu_endemicity" in selected_item_ids:
+        current_codes["q2"] = selected_codes["q2"]
+    current_probability = baseline_probability
 
-    steps = [
-        StepwiseUpdate(
-            id=selected_item_ids["tbu_phenotype"],
-            label=items_by_id[selected_item_ids["tbu_phenotype"]].label,
-            state="present",
-            lrUsed=max(_prob_to_odds(current_probability) / _prob_to_odds(baseline_probability), 1e-6),
-            pAfter=current_probability,
-        )
-    ]
+    steps: List[StepwiseUpdate] = []
 
-    for group_id, code_key in TB_UVEITIS_GROUPS[1:]:
+    for group_id, code_key in TB_UVEITIS_GROUPS[2:]:
         item_id = selected_item_ids.get(group_id)
         if item_id is None:
             continue
@@ -157,7 +154,7 @@ def _build_stepwise_updates(
             continue
         previous_probability = current_probability
         current_codes[code_key] = next_code
-        current_probability = TB_UVEITIS_MEDIAN_TO_PROBABILITY[_lookup_result(current_codes)[0]]
+        current_probability = _odds_to_prob(_prob_to_odds(_raw_cots_probability(current_codes)) * pretest_odds_multiplier)
         lr_used = max(_prob_to_odds(current_probability) / _prob_to_odds(previous_probability), 1e-6)
         steps.append(
             StepwiseUpdate(
@@ -170,6 +167,34 @@ def _build_stepwise_updates(
         )
 
     return steps
+
+
+def _baseline_context_codes(selected_item_ids: Dict[str, str], selected_codes: Dict[str, str]) -> Dict[str, str] | None:
+    if "tbu_phenotype" not in selected_item_ids:
+        return None
+    codes = dict(TB_UVEITIS_DEFAULT_CODES)
+    codes["q1"] = selected_codes["q1"]
+    codes["q2"] = selected_codes.get("q2", TB_UVEITIS_DEFAULT_CODES["q2"])
+    return codes
+
+
+def _direct_pretest_odds_multiplier(module: SyndromeModule, findings: Dict[str, str]) -> tuple[float, List[str]]:
+    specs = {spec.id: spec for spec in resolve_pretest_factor_specs(module)}
+    selected_ids = [spec_id for spec_id in specs if findings.get(spec_id) == "present"]
+    if not selected_ids:
+        return 1.0, []
+    raw_multiplier = 1.0
+    for factor_id in selected_ids:
+        raw_multiplier *= specs[factor_id].weight
+    tuning = get_pretest_factor_tuning(module.id)
+    applied_multiplier = min(max(pow(raw_multiplier, tuning.shrink_exponent), 1.0), tuning.max_multiplier)
+    labels = [specs[factor_id].label for factor_id in selected_ids]
+    note = (
+        f"Non-COTS baseline TB risk modifiers applied ({', '.join(labels)}): raw OR-like product {raw_multiplier:.2f}, "
+        f"shrunk/capped multiplier {applied_multiplier:.2f}."
+    )
+    note += " These modifiers are calibrated for ocular TB pretest adjustment and are not pooled ocular-specific ORs."
+    return applied_multiplier, [note]
 
 
 def _build_applied_findings(steps: List[StepwiseUpdate]) -> List[AppliedFinding]:
@@ -240,13 +265,22 @@ def _build_recommendation_summary(
 
 def analyze_tb_uveitis(module: SyndromeModule, req: AnalyzeRequest) -> AnalyzeResponse:
     preset = next((preset for preset in module.pretest_presets if preset.id == req.preset_id), None) or module.pretest_presets[0]
-    adjusted_pretest = float(req.pretest_probability if req.pretest_probability is not None else preset.p)
-
     selected_item_ids, selected_codes, notes = _scenario_inputs(module, req.findings)
-    thresholds = DecisionThresholds(
-        observeProbability=TB_UVEITIS_OBSERVE_THRESHOLD,
-        treatProbability=TB_UVEITIS_TREAT_THRESHOLD,
-    )
+    baseline_codes = _baseline_context_codes(selected_item_ids, selected_codes)
+    base_pretest = float(req.pretest_probability if req.pretest_probability is not None else preset.p)
+    if req.pretest_probability is None and baseline_codes is not None:
+        base_pretest = _raw_cots_probability(baseline_codes)
+        notes.append(
+            f"Starting pretest was derived from the phenotype/endemicity baseline COTS scenario {baseline_codes['q1']}|{baseline_codes['q2']}|ND|ND|ND."
+        )
+    direct_multiplier, direct_multiplier_notes = _direct_pretest_odds_multiplier(module, req.findings)
+    effective_pretest_multiplier = req.pretest_odds_multiplier * direct_multiplier
+    adjusted_pretest = _odds_to_prob(_prob_to_odds(base_pretest) * effective_pretest_multiplier)
+    notes.extend(direct_multiplier_notes)
+
+    harms = resolve_harms(module, req, states_override=req.findings)
+    thresholds = derive_decision_thresholds(harms)
+    harm_estimate = estimate_harms(module.id, req.findings) if req.harms is None and module.default_harms is None else None
 
     if "tbu_phenotype" not in selected_item_ids:
         summary, next_steps = _build_recommendation_summary(
@@ -273,7 +307,10 @@ def analyze_tb_uveitis(module: SyndromeModule, req: AnalyzeRequest) -> AnalyzeRe
             stepwise=[],
             reasons=[
                 "Tuberculous uveitis uses a COTS consensus lookup rather than an independent likelihood-ratio stack.",
+                "Any displayed LR values in this module are back-calculated display effects from mapped COTS probabilities, not pooled diagnostic test LRs.",
                 "A phenotype selection is required before the published COTS matrix can be applied.",
+                f"Harm-adjusted thresholds: observe <= {thresholds.observe_probability:.1%}, treat >= {thresholds.treat_probability:.1%} from unnecessary treatment harm {harms.unnecessary_treatment:.1f} and missed diagnosis harm {harms.missed_diagnosis:.1f}.",
+                *([f"Harm model: {' '.join(harm_estimate.rationale)}"] if harm_estimate and harm_estimate.rationale else []),
                 *notes,
             ],
             riskFlags=["no_findings_selected"],
@@ -282,14 +319,16 @@ def analyze_tb_uveitis(module: SyndromeModule, req: AnalyzeRequest) -> AnalyzeRe
         return response
 
     median, iqr = _lookup_result(selected_codes)
-    posttest_probability = TB_UVEITIS_MEDIAN_TO_PROBABILITY[median]
+    raw_posttest_probability = TB_UVEITIS_MEDIAN_TO_PROBABILITY[median]
+    posttest_probability = _odds_to_prob(_prob_to_odds(raw_posttest_probability) * effective_pretest_multiplier)
     combined_lr = _prob_to_odds(posttest_probability) / _prob_to_odds(adjusted_pretest)
-    recommendation = _recommendation_for_probability(posttest_probability)
+    recommendation = recommendation_for_probability(posttest_probability, thresholds)
     stepwise = _build_stepwise_updates(
         baseline_probability=adjusted_pretest,
         module=module,
         selected_item_ids=selected_item_ids,
         selected_codes=selected_codes,
+        pretest_odds_multiplier=effective_pretest_multiplier,
     )
     applied_findings = _build_applied_findings(stepwise)
     recommendation_summary, next_steps = _build_recommendation_summary(
@@ -331,8 +370,14 @@ def analyze_tb_uveitis(module: SyndromeModule, req: AnalyzeRequest) -> AnalyzeRe
             "Tuberculous uveitis uses the published COTS consensus matrix instead of independent pooled LRs.",
             f"COTS scenario: phenotype {selected_codes['q1']}, endemicity {selected_codes['q2']}, TST {selected_codes['q3']}, IGRA {selected_codes['q4']}, chest imaging {selected_codes['q5']}.",
             f"COTS output: median score {median} and IQR {iqr} ({_consensus_summary(iqr)}).",
-            f"Median score {median} was mapped to an approximate ATT-initiation probability midpoint of {int(posttest_probability * 100)}%.",
+            f"Baseline pretest was {base_pretest:.1%}, adjusted to {adjusted_pretest:.1%} after any non-COTS pretest modifiers.",
+            f"Median score {median} was mapped to an approximate ATT-initiation probability midpoint of {int(raw_posttest_probability * 100)}%, then adjusted to {int(posttest_probability * 100)}% after pretest modifiers.",
+            f"Harm-adjusted thresholds: observe <= {thresholds.observe_probability:.1%}, treat >= {thresholds.treat_probability:.1%} from unnecessary treatment harm {harms.unnecessary_treatment:.1f} and missed diagnosis harm {harms.missed_diagnosis:.1f}.",
+            "Displayed combined LR and stepwise lrUsed values are back-calculated as odds(p_after) / odds(p_before) from the mapped COTS probabilities.",
+            "For chest imaging, the displayed lrUsed compares the mapped probability with chest imaging fixed at + or - against the same phenotype/endemicity/TST/IGRA scenario with chest imaging left ND.",
+            "Because COTS is a discrete consensus matrix rather than a multiplicative diagnostic LR model, these display LRs can be 1.0 or occasionally look counterintuitive.",
             "This output estimates expert willingness to initiate ATT, not a microbiologic gold-standard disease probability.",
+            *([f"Harm model: {' '.join(harm_estimate.rationale)}"] if harm_estimate and harm_estimate.rationale else []),
             *notes,
         ],
         riskFlags=risk_flags,

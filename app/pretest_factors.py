@@ -66,6 +66,7 @@ def _explicit_ref(
 PRETEST_FACTOR_TUNING: Dict[str, PretestFactorTuning] = {
     "vap": PretestFactorTuning(shrink_exponent=0.5, max_multiplier=6.0),
     "endo": PretestFactorTuning(shrink_exponent=0.5, max_multiplier=5.0),
+    "tb_uveitis": PretestFactorTuning(shrink_exponent=0.5, max_multiplier=3.5),
 }
 
 
@@ -293,6 +294,22 @@ PRETEST_FACTOR_CONFIG: Dict[str, Tuple[PretestFactorRef, ...]] = {
         _item_ref("tb_smoking"),
         _item_ref("tb_undernutrition"),
         _item_ref("tb_alcohol_use"),
+    ),
+    "tb_uveitis": (
+        _explicit_ref(
+            "tbu_pretest_prior_tb_or_ltbi",
+            label="Prior TB disease or known latent TB infection",
+            weight=2.0,
+            source_note="General TB epidemiologic pretest modifier calibrated for ocular TB; not a pooled ocular-specific OR.",
+            source_url="https://www.who.int/publications/i/item/9789240101531",
+        ),
+        _explicit_ref(
+            "tbu_pretest_close_tb_contact",
+            label="Close TB contact or household TB exposure",
+            weight=1.8,
+            source_note="General TB contact-risk pretest modifier calibrated for ocular TB; not a pooled ocular-specific OR.",
+            source_url="https://doi.org/10.1371/journal.pmed.1001432",
+        ),
     ),
     "pjp": (
         _item_ref("pjp_host_hiv_cd4_sot"),
