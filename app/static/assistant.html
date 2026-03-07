@@ -660,7 +660,7 @@
         if (!options.length) return;
         const currentStage = state.assistantState?.stage || null;
         const supportsInsertMode = ["describe_case", "confirm_case"].includes(currentStage);
-        const useSingleLineChoices = ["select_module", "select_preset", "select_endo_blood_culture_context", "confirm_case", "mechid_describe", "mechid_confirm", "done"].includes(currentStage);
+        const useSingleLineChoices = ["select_module", "select_preset", "select_endo_blood_culture_context", "confirm_case", "mechid_describe", "mechid_confirm", "immunoid_select_agents", "immunoid_collect_context", "done"].includes(currentStage);
         const hasCaseHelpers = options.some(
           (opt) => typeof opt.value === "string" && opt.value.startsWith("insert_text:")
         );
@@ -888,19 +888,31 @@
         const currentSection = s.caseSection || null;
         const currentSectionLabel = sectionLabelMap[currentSection] || "—";
         els.summaryStage.textContent = s.stage || "—";
-        els.summaryModule.textContent = workflow === "mechid" ? "Resistance mechanism + therapy" : (s.moduleId || "—");
+        els.summaryModule.textContent = workflow === "mechid"
+          ? "Resistance mechanism + therapy"
+          : workflow === "immunoid"
+            ? "Immunosuppression screening + prophylaxis"
+            : (s.moduleId || "—");
         els.summaryPreset.textContent = s.presetId || "—";
         els.summaryCaseSection.textContent = currentSectionLabel;
-        const factorLabels = s.pretestFactorLabels || [];
+        const factorLabels = workflow === "immunoid"
+          ? (((resp?.immunoidAnalysis?.selectedRegimens || []).map((item) => item.name)).length
+              ? (resp?.immunoidAnalysis?.selectedRegimens || []).map((item) => item.name)
+              : ((resp?.immunoidAnalysis?.selectedAgents || []).map((item) => item.name)))
+          : (s.pretestFactorLabels || []);
         els.summaryFactors.textContent = factorLabels.length ? factorLabels.join(", ") : "—";
         if (workflow === "mechid" && s.stage === "mechid_describe") {
           els.helpBanner.textContent = "Current step: paste the organism, AST pattern, and any treatment context you have.";
         } else if (workflow === "mechid" && s.stage === "mechid_confirm") {
           els.helpBanner.textContent = "Current step: review the extracted organism and susceptibility pattern, then run the interpretation.";
+        } else if (workflow === "immunoid" && s.stage === "immunoid_select_agents") {
+          els.helpBanner.textContent = "Current step: add the planned immunosuppressive agents.";
+        } else if (workflow === "immunoid" && s.stage === "immunoid_collect_context") {
+          els.helpBanner.textContent = "Current step: answer the missing context question that changes the screening or prophylaxis checklist.";
         } else {
           els.helpBanner.textContent = currentSection
             ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
-          : "I’m your ID Consultant Assistant. Describe a syndrome case in plain language, or use the resistance mechanism pathway for organism plus AST interpretation.";
+            : "I’m your ID Consultant Assistant. Describe a syndrome case, an isolate plus AST pattern, or an immunosuppression exposure profile.";
         }
       }
 
@@ -914,6 +926,79 @@
         const narrationRefined = !!resp?.assistantNarrationRefined;
         els.narrationBadge.textContent = narrationRefined ? "narrative: gpt-4.1-mini" : "narrative: deterministic";
         els.narrationBadge.className = `badge ${narrationRefined ? "good" : "warn"}`;
+
+        const immunoidResult = resp?.immunoidAnalysis;
+        if (immunoidResult) {
+          const selectedRegimens = immunoidResult.selectedRegimens || [];
+          const selectedAgents = immunoidResult.selectedAgents || [];
+          const recommendations = immunoidResult.recommendations || [];
+          const followUps = immunoidResult.followUpQuestions || [];
+          const exposureSummary = immunoidResult.exposureSummary || [];
+          const warnings = immunoidResult.warnings || [];
+          const riskFlags = immunoidResult.riskFlags || [];
+          els.parserBadge.textContent = "rules: deterministic";
+          els.parserBadge.className = `badge ${(warnings.length || followUps.length) ? "warn" : "good"}`;
+
+          const recommendationItems = recommendations
+            .map((item) => `<li><strong>${escapeHtml(item.title)}</strong><br />${escapeHtml(item.summary)}</li>`)
+            .join("");
+          const followUpItems = followUps
+            .map((item) => `<li><strong>${escapeHtml(item.prompt)}</strong><br /><span class="muted">${escapeHtml(item.reason)}</span></li>`)
+            .join("");
+          const citationItems = recommendations
+            .flatMap((item) => (item.citations || []).map((ref) => {
+              const context = escapeHtml(ref.context || "");
+              const citation = escapeHtml(ref.citation || "");
+              if (ref.url) {
+                return `<li><span class="muted">${context}</span><br /><a href="${escapeHtml(ref.url)}" target="_blank" rel="noreferrer">${citation}</a></li>`;
+              }
+              return `<li><span class="muted">${context}</span><br />${citation}</li>`;
+            }))
+            .join("");
+
+          els.analysisSummary.innerHTML = `
+            <h3>Analysis</h3>
+            <div class="decision ${followUps.length ? "test" : "treat"}">
+              ${followUps.length ? "Needs more context" : "Rule-backed checklist ready"}
+            </div>
+            <div class="kv">
+              <div class="k">Selected regimens</div><div class="v">${selectedRegimens.length}</div>
+              <div class="k">Selected agents</div><div class="v">${selectedAgents.length}</div>
+              <div class="k">Recommendations</div><div class="v">${recommendations.length}</div>
+              <div class="k">Follow-up questions</div><div class="v">${followUps.length}</div>
+              <div class="k">Risk flags</div><div class="v">${riskFlags.length}</div>
+            </div>
+            ${recommendationItems ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Checklist</div><ul class="list">${recommendationItems}</ul></div>` : `<div class="muted" style="margin-top:8px;">No rule fired yet.</div>`}
+            ${followUpItems ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Missing context</div><ul class="list warn-list">${followUpItems}</ul></div>` : ""}
+          `;
+
+          els.parsedPanel.innerHTML = `
+            <h3>What I Picked Up</h3>
+            <div class="kv" style="margin-bottom:8px;">
+              <div class="k">Status</div><div class="v">${escapeHtml(immunoidResult.status || "—")}</div>
+              <div class="k">Unsupported regimens</div><div class="v">${(immunoidResult.unsupportedRegimenIds || []).length}</div>
+              <div class="k">Unsupported agents</div><div class="v">${(immunoidResult.unsupportedAgentIds || []).length}</div>
+            </div>
+            ${selectedRegimens.length ? `<div style="margin-bottom:6px;"><div class="muted" style="font-size:12px;">Regimens</div><ul class="list">${selectedRegimens.map((item) => `<li>${escapeHtml(item.name)} <span class="muted">(${escapeHtml((item.componentAgentNames || []).join(", "))})</span></li>`).join("")}</ul></div>` : ""}
+            ${selectedAgents.length ? `<div style="margin-bottom:6px;"><div class="muted" style="font-size:12px;">Agents</div><ul class="list">${selectedAgents.map((item) => `<li>${escapeHtml(item.name)} <span class="muted">(${escapeHtml(item.drugClass)})</span></li>`).join("")}</ul></div>` : `<div class="muted">No agents selected yet.</div>`}
+            ${exposureSummary.length ? `<div style="margin-bottom:6px;"><div class="muted" style="font-size:12px;">Exposure summary</div><ul class="list">${exposureSummary.map((item) => `<li>${escapeHtml(item.label)}: ${escapeHtml(item.value)} <span class="muted">(${escapeHtml(item.source || "provided")})</span></li>`).join("")}</ul></div>` : ""}
+            ${riskFlags.length ? `<div><div class="muted" style="font-size:12px;">Risk flags</div><ul class="list">${riskFlags.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
+            <details style="margin-top:8px;">
+              <summary>References</summary>
+              <div style="margin-top:8px;">${citationItems || `<div class="muted">No references available yet.</div>`}</div>
+            </details>
+          `;
+
+          if (warnings.length) {
+            els.warningsPanel.innerHTML = `
+              <h3>Warnings</h3>
+              <ul class="list warn-list">${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul>
+            `;
+          } else {
+            els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+          }
+          return;
+        }
 
         const mechidResult = resp?.mechidAnalysis;
         if (mechidResult) {
@@ -1328,6 +1413,10 @@
         const stage = state.assistantState?.stage || null;
         const moduleId = state.assistantState?.moduleId || null;
         const currentSection = state.assistantState?.caseSection || null;
+
+        if (stage === "immunoid_select_agents" || stage === "immunoid_collect_context") {
+          return "Rituximab and prednisone 20 mg daily are planned. HBsAg negative, anti-HBc positive, and prednisone will continue for 6 weeks.";
+        }
 
         if (stage === "select_endo_blood_culture_context") {
           return "Staphylococcus aureus";

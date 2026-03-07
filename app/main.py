@@ -9,7 +9,6 @@ from typing import Any, Dict, List
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.testclient import TestClient
 
 from .engine import (
     applied_finding_summaries,
@@ -33,6 +32,10 @@ from .schemas import (
     AnalyzeRequest,
     AnalyzeResponse,
     DecisionThresholds,
+    ImmunoAgentListResponse,
+    ImmunoAnalyzeRequest,
+    ImmunoAnalyzeResponse,
+    ImmunoRegimenListResponse,
     MechIDAnalyzeRequest,
     MechIDAnalyzeResponse,
     MechIDImageAnalyzeRequest,
@@ -70,6 +73,8 @@ from .services.consult_narrator import (
     narrate_probid_review_message,
 )
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
+from .services.immunoid_engine import analyze_immunoid, list_immunoid_agents, list_immunoid_regimens
+from .services.immunoid_regimens import IMMUNOID_REGIMENS
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
 from .services.mechid_eval import EvalStats, evaluate_mechid_case
 from .services.mechid_image_parser import parse_mechid_image_with_openai
@@ -122,6 +127,47 @@ MECHID_ASSISTANT_ID = "mechid"
 MECHID_ASSISTANT_LABEL = "Resistance mechanism + therapy"
 MECHID_ASSISTANT_DESCRIPTION = (
     "Interpret an organism plus susceptibility pattern to estimate likely resistance mechanisms and therapy options."
+)
+IMMUNOID_ASSISTANT_ID = "immunoid"
+IMMUNOID_ASSISTANT_LABEL = "Immunosuppression screening + prophylaxis"
+IMMUNOID_ASSISTANT_DESCRIPTION = (
+    "Review chemotherapy, steroids, biologics, or transplant immunosuppression for infection screening, prophylaxis, and geography-sensitive follow-up."
+)
+IMMUNOID_INTENT_TOKENS = (
+    "chemotherapy prophylaxis",
+    "biologic prophylaxis",
+    "before rituximab",
+    "before infliximab",
+    "before chemotherapy",
+    "before steroids",
+    "immunosuppression prophylaxis",
+    "screen before immunosuppression",
+    "screening before immunosuppression",
+    "hbv reactivation",
+    "tb screening",
+    "strongyloides",
+    "pjp prophylaxis",
+    "prophylaxis",
+)
+IMMUNOID_COMMON_AGENT_IDS = (
+    "prednisone_20",
+    "rituximab",
+    "infliximab",
+    "tofacitinib",
+    "cyclophosphamide",
+    "tacrolimus",
+    "mycophenolate_mofetil",
+    "eculizumab",
+)
+IMMUNOID_COMMON_REGIMEN_IDS = (
+    "r_chop",
+    "da_r_epoch",
+    "br",
+    "fcr",
+    "seven_plus_three",
+    "flag_ida",
+    "vrd",
+    "dara_vrd",
 )
 MECHID_INTENT_TOKENS = (
     "mechanism",
@@ -1363,6 +1409,8 @@ def mechid_trainer_delete_case(case_id: str) -> MechIDTrainerDeleteResponse:
 
 @app.post("/v1/trainer/mechid/evaluate-case", response_model=MechIDTrainerEvaluateResponse)
 def mechid_trainer_evaluate_case(req: MechIDTrainerEvaluateRequest) -> MechIDTrainerEvaluateResponse:
+    from fastapi.testclient import TestClient
+
     stats = EvalStats()
     client = TestClient(app)
     evaluate_mechid_case(
@@ -1709,6 +1757,21 @@ def list_mechid_supported_organisms() -> dict:
         return {"organisms": list_mechid_organisms()}
     except MechIDEngineError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/v1/immunoid/agents", response_model=ImmunoAgentListResponse)
+def list_immunoid_supported_agents() -> ImmunoAgentListResponse:
+    return ImmunoAgentListResponse(agents=list_immunoid_agents())
+
+
+@app.get("/v1/immunoid/regimens", response_model=ImmunoRegimenListResponse)
+def list_immunoid_supported_regimens() -> ImmunoRegimenListResponse:
+    return ImmunoRegimenListResponse(regimens=list_immunoid_regimens())
+
+
+@app.post("/v1/immunoid/analyze", response_model=ImmunoAnalyzeResponse)
+def analyze_immunoid_endpoint(req: ImmunoAnalyzeRequest) -> ImmunoAnalyzeResponse:
+    return ImmunoAnalyzeResponse(**analyze_immunoid(req.model_dump()))
 
 
 @app.post("/v1/mechid/analyze", response_model=MechIDAnalyzeResponse)
@@ -2415,7 +2478,12 @@ def _assistant_module_options() -> List[AssistantOption]:
             value=MECHID_ASSISTANT_ID,
             label=MECHID_ASSISTANT_LABEL,
             description=MECHID_ASSISTANT_DESCRIPTION,
-        )
+        ),
+        AssistantOption(
+            value=IMMUNOID_ASSISTANT_ID,
+            label=IMMUNOID_ASSISTANT_LABEL,
+            description=IMMUNOID_ASSISTANT_DESCRIPTION,
+        ),
     ]
     for summary in store.list_summaries():
         module = store.get(summary.id)
@@ -4741,6 +4809,7 @@ def _assistant_start_case_from_text(
         return None
 
     text_result, module, inferred_context, inferred_score_factor_ids = preview
+    _assistant_reset_immunoid_state(state)
     explicit_preset_supported = bool(preset_hint) or _assistant_text_explicitly_supports_preset(message_text, module)
     if module.pretest_presets and (not text_result.parsed_request.preset_id or not explicit_preset_supported):
         state.module_id = module.id
@@ -4911,6 +4980,7 @@ def _assistant_start_mechid_from_text(
     if mechid_result is None:
         return None
 
+    _assistant_reset_immunoid_state(state)
     state.workflow = "mechid"
     state.stage = "mechid_confirm"
     state.module_id = None
@@ -4937,9 +5007,883 @@ def _assistant_start_mechid_from_text(
     )
 
 
+def _assistant_immunoid_normalize(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+IMMUNOID_LOCATION_CONTEXT_MARKERS = (
+    "born in",
+    "from ",
+    "lived in",
+    "grew up in",
+    "travel to",
+    "traveled to",
+    "travelled to",
+    "resided in",
+    "immigrated from",
+    "visited",
+    "visit to",
+    "returned from",
+)
+
+IMMUNOID_TB_COUNTRY_ALIASES = (
+    "mexico",
+    "india",
+    "pakistan",
+    "bangladesh",
+    "afghanistan",
+    "nepal",
+    "myanmar",
+    "cambodia",
+    "laos",
+    "thailand",
+    "mongolia",
+    "philippines",
+    "vietnam",
+    "china",
+    "indonesia",
+    "papua new guinea",
+    "haiti",
+    "peru",
+    "brazil",
+    "bolivia",
+    "ecuador",
+    "colombia",
+    "venezuela",
+    "guatemala",
+    "honduras",
+    "el salvador",
+    "nicaragua",
+    "dominican republic",
+    "somalia",
+    "ethiopia",
+    "eritrea",
+    "djibouti",
+    "kenya",
+    "uganda",
+    "tanzania",
+    "nigeria",
+    "cameroon",
+    "ghana",
+    "sierra leone",
+    "liberia",
+    "democratic republic of the congo",
+    "congo",
+    "angola",
+    "zambia",
+    "mozambique",
+    "zimbabwe",
+    "malawi",
+    "madagascar",
+    "rwanda",
+    "burundi",
+    "south africa",
+    "sudan",
+    "south sudan",
+    "egypt",
+    "yemen",
+)
+
+IMMUNOID_STRONGY_COUNTRY_ALIASES = (
+    "mexico",
+    "guatemala",
+    "honduras",
+    "el salvador",
+    "nicaragua",
+    "costa rica",
+    "panama",
+    "colombia",
+    "venezuela",
+    "ecuador",
+    "peru",
+    "bolivia",
+    "brazil",
+    "paraguay",
+    "argentina",
+    "chile",
+    "uruguay",
+    "haiti",
+    "dominican republic",
+    "jamaica",
+    "cuba",
+    "puerto rico",
+    "egypt",
+    "morocco",
+    "algeria",
+    "tunisia",
+    "sudan",
+    "south sudan",
+    "ethiopia",
+    "eritrea",
+    "somalia",
+    "kenya",
+    "uganda",
+    "tanzania",
+    "nigeria",
+    "ghana",
+    "cameroon",
+    "angola",
+    "mozambique",
+    "madagascar",
+    "yemen",
+    "saudi arabia",
+    "iraq",
+    "iran",
+    "syria",
+    "lebanon",
+    "jordan",
+    "afghanistan",
+    "pakistan",
+    "india",
+    "bangladesh",
+    "sri lanka",
+    "nepal",
+    "thailand",
+    "laos",
+    "cambodia",
+    "myanmar",
+    "indonesia",
+    "philippines",
+    "vietnam",
+    "malaysia",
+    "timor leste",
+    "papua new guinea",
+    "fiji",
+)
+
+def _assistant_immunoid_has_location_context(normalized: str) -> bool:
+    return any(token in normalized for token in IMMUNOID_LOCATION_CONTEXT_MARKERS)
+
+
+def _assistant_immunoid_has_country_match(normalized: str, aliases: tuple[str, ...]) -> bool:
+    padded = f" {normalized} "
+    for alias in aliases:
+        if f" {alias} " not in padded:
+            continue
+        if alias == "mexico" and " new mexico " in padded:
+            continue
+        return True
+    return False
+
+
+def _assistant_immunoid_mentions_generic_steroid(message_text: str) -> bool:
+    normalized = _assistant_immunoid_normalize(message_text)
+    generic_tokens = (
+        " steroid ",
+        " steroids ",
+        " corticosteroid ",
+        " corticosteroids ",
+        " glucocorticoid ",
+        " glucocorticoids ",
+    )
+    padded = f" {normalized} "
+    if any(token in padded for token in generic_tokens):
+        return True
+    # If a specific steroid was already recognized we do not need the generic fallback.
+    if _assistant_detect_immunoid_agent_ids(message_text):
+        return False
+    return any(name in padded for name in (" prednisone ", " prednisolone ", " methylprednisolone ", " dexamethasone ", " hydrocortisone "))
+
+
+def _assistant_reset_immunoid_state(state: AssistantState) -> None:
+    state.immunoid_selected_regimen_ids = []
+    state.immunoid_selected_agent_ids = []
+    state.immunoid_planned_steroid_duration_days = None
+    state.immunoid_anticipated_prolonged_profound_neutropenia = None
+    state.immunoid_hbv_hbsag = "unknown"
+    state.immunoid_hbv_anti_hbc = "unknown"
+    state.immunoid_hbv_anti_hbs = "unknown"
+    state.immunoid_tb_screen_result = "unknown"
+    state.immunoid_tb_endemic_exposure = None
+    state.immunoid_strongyloides_exposure = None
+    state.immunoid_strongyloides_igg = "unknown"
+    state.immunoid_coccidioides_exposure = None
+    state.immunoid_histoplasma_exposure = None
+    state.immunoid_signal_sources = {}
+
+
+def _assistant_immunoid_agents_by_id() -> Dict[str, Dict[str, Any]]:
+    return {entry["id"]: entry for entry in list_immunoid_agents()}
+
+
+def _assistant_immunoid_regimens_by_id() -> Dict[str, Dict[str, Any]]:
+    return {entry["id"]: entry for entry in list_immunoid_regimens()}
+
+
+def _assistant_set_immunoid_signal_source(state: AssistantState, signal_id: str, source: str) -> None:
+    state.immunoid_signal_sources[signal_id] = source
+
+
+def _assistant_detect_immunoid_regimen_ids(message_text: str) -> List[str]:
+    normalized = f" {_assistant_immunoid_normalize(message_text)} "
+    matches: List[tuple[int, int, str]] = []
+    for regimen_id, entry in IMMUNOID_REGIMENS.items():
+        aliases = {
+            _assistant_immunoid_normalize(regimen_id.replace("_", " ")),
+            _assistant_immunoid_normalize(entry["name"]),
+            *(_assistant_immunoid_normalize(alias) for alias in entry.get("aliases", ())),
+        }
+        for alias in aliases:
+            if not alias:
+                continue
+            needle = f" {alias} "
+            index = normalized.find(needle)
+            if index >= 0:
+                matches.append((index, index + len(needle), regimen_id))
+                break
+    matches.sort(key=lambda item: (item[0], -(item[1] - item[0])))
+    ordered: List[str] = []
+    seen: set[str] = set()
+    occupied_spans: List[tuple[int, int]] = []
+    for start, end, regimen_id in matches:
+        if regimen_id in seen:
+            continue
+        if any(start >= existing_start and end <= existing_end for existing_start, existing_end in occupied_spans):
+            continue
+        seen.add(regimen_id)
+        ordered.append(regimen_id)
+        occupied_spans.append((start, end))
+    return ordered
+
+
+def _assistant_apply_immunoid_regimen_defaults(state: AssistantState, regimen_id: str) -> None:
+    regimen = IMMUNOID_REGIMENS.get(regimen_id)
+    if regimen is None:
+        return
+    defaults = regimen.get("defaults", {})
+    steroid_days = defaults.get("planned_steroid_duration_days")
+    if steroid_days is not None and state.immunoid_planned_steroid_duration_days is None:
+        state.immunoid_planned_steroid_duration_days = steroid_days
+        _assistant_set_immunoid_signal_source(state, "planned_steroid_duration_days", "regimen")
+    anticipated_neutropenia = defaults.get("anticipated_prolonged_profound_neutropenia")
+    if anticipated_neutropenia is not None and state.immunoid_anticipated_prolonged_profound_neutropenia is None:
+        state.immunoid_anticipated_prolonged_profound_neutropenia = anticipated_neutropenia
+        _assistant_set_immunoid_signal_source(state, "anticipated_prolonged_profound_neutropenia", "regimen")
+
+
+def _assistant_detect_immunoid_agent_ids(message_text: str) -> List[str]:
+    normalized = f" {_assistant_immunoid_normalize(message_text)} "
+    matches: List[tuple[int, str]] = []
+    for entry in list_immunoid_agents():
+        aliases = {
+            _assistant_immunoid_normalize(entry["name"]),
+            _assistant_immunoid_normalize(entry["id"].replace("_", " ")),
+        }
+        for alias in aliases:
+            if not alias:
+                continue
+            needle = f" {alias} "
+            index = normalized.find(needle)
+            if index >= 0:
+                matches.append((index, entry["id"]))
+                break
+    matches.sort(key=lambda item: item[0])
+    ordered: List[str] = []
+    seen: set[str] = set()
+    for _, agent_id in matches:
+        if agent_id in seen:
+            continue
+        seen.add(agent_id)
+        ordered.append(agent_id)
+    return ordered
+
+
+def _assistant_is_immunoid_intent(message_text: str) -> bool:
+    normalized = _normalize_choice(message_text)
+    if any(token in normalized for token in IMMUNOID_INTENT_TOKENS):
+        return True
+    if _assistant_immunoid_mentions_generic_steroid(message_text):
+        return True
+    if _assistant_detect_immunoid_regimen_ids(message_text):
+        return True
+    detected_agents = _assistant_detect_immunoid_agent_ids(message_text)
+    if len(detected_agents) >= 2:
+        return True
+    if not detected_agents:
+        return False
+    keywords = ("prophyl", "screen", "immunosupp", "chemotherapy", "steroid", "biologic", "reactivation")
+    return any(keyword in normalized for keyword in keywords)
+
+
+def _assistant_parse_immunoid_serology_state(message_text: str, aliases: List[str]) -> str | None:
+    normalized = _assistant_immunoid_normalize(message_text)
+    for alias in aliases:
+        alias_norm = _assistant_immunoid_normalize(alias)
+        if not alias_norm:
+            continue
+        patterns = (
+            rf"{re.escape(alias_norm)}\s+(?:is\s+)?(positive|negative|unknown|pos|neg)",
+            rf"(positive|negative|unknown|pos|neg)\s+{re.escape(alias_norm)}",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, normalized)
+            if not match:
+                continue
+            token = match.group(1)
+            if token in {"positive", "pos"}:
+                return "positive"
+            if token in {"negative", "neg"}:
+                return "negative"
+            return "unknown"
+    return None
+
+
+def _assistant_parse_immunoid_tb_state(message_text: str) -> str | None:
+    normalized = _assistant_immunoid_normalize(message_text)
+    aliases = ("igra", "quantiferon", "quanti feron", "qft", "t spot", "tspot", "tst", "ppd", "tb screen")
+    for alias in aliases:
+        patterns = (
+            rf"{re.escape(alias)}\s+(?:is\s+)?(positive|negative|indeterminate|pos|neg|indet)",
+            rf"(positive|negative|indeterminate|pos|neg|indet)\s+{re.escape(alias)}",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, normalized)
+            if not match:
+                continue
+            token = match.group(1)
+            if token in {"positive", "pos"}:
+                return "positive"
+            if token in {"negative", "neg"}:
+                return "negative"
+            return "indeterminate"
+    return None
+
+
+def _assistant_parse_immunoid_duration_days(message_text: str) -> int | None:
+    normalized = _assistant_immunoid_normalize(message_text)
+    match = re.search(r"(\d+)\s*(day|days|week|weeks|month|months)", normalized)
+    if not match:
+        return None
+    value = int(match.group(1))
+    unit = match.group(2)
+    if unit.startswith("week"):
+        return value * 7
+    if unit.startswith("month"):
+        return value * 30
+    return value
+
+
+def _assistant_parse_immunoid_yes_no_unknown(message_text: str) -> bool | None | str:
+    normalized = _normalize_choice(message_text)
+    if any(token in normalized for token in ("not sure", "unknown", "unclear", "unsure")):
+        return "unknown"
+    if any(token in normalized for token in ("no", "none", "not", "doesn't", "does not", "nope", "absent")):
+        return False
+    if any(token in normalized for token in ("yes", "yep", "present", "does", "has", "expected", "will")):
+        return True
+    return None
+
+
+def _assistant_parse_immunoid_context_from_text(state: AssistantState, message_text: str) -> List[str]:
+    updates: List[str] = []
+    for regimen_id in _assistant_detect_immunoid_regimen_ids(message_text):
+        if regimen_id not in state.immunoid_selected_regimen_ids:
+            state.immunoid_selected_regimen_ids.append(regimen_id)
+            updates.append(f"regimen:{regimen_id}")
+        for agent_id in IMMUNOID_REGIMENS.get(regimen_id, {}).get("component_agent_ids", ()):
+            if agent_id not in state.immunoid_selected_agent_ids:
+                state.immunoid_selected_agent_ids.append(agent_id)
+                updates.append(f"agent:{agent_id}")
+        _assistant_apply_immunoid_regimen_defaults(state, regimen_id)
+
+    for agent_id in _assistant_detect_immunoid_agent_ids(message_text):
+        if agent_id not in state.immunoid_selected_agent_ids:
+            state.immunoid_selected_agent_ids.append(agent_id)
+            updates.append(f"agent:{agent_id}")
+
+    hbsag = _assistant_parse_immunoid_serology_state(message_text, ["hbsag", "surface antigen"])
+    if hbsag and hbsag != state.immunoid_hbv_hbsag:
+        state.immunoid_hbv_hbsag = hbsag
+        _assistant_set_immunoid_signal_source(state, "hbv_hbsag", "text")
+        updates.append("hbv_hbsag")
+
+    anti_hbc = _assistant_parse_immunoid_serology_state(message_text, ["anti hbc", "anti h b c", "core antibody", "hbcab"])
+    if anti_hbc and anti_hbc != state.immunoid_hbv_anti_hbc:
+        state.immunoid_hbv_anti_hbc = anti_hbc
+        _assistant_set_immunoid_signal_source(state, "hbv_anti_hbc", "text")
+        updates.append("hbv_anti_hbc")
+
+    anti_hbs = _assistant_parse_immunoid_serology_state(message_text, ["anti hbs", "anti h b s", "surface antibody", "hbsab"])
+    if anti_hbs and anti_hbs != state.immunoid_hbv_anti_hbs:
+        state.immunoid_hbv_anti_hbs = anti_hbs
+        _assistant_set_immunoid_signal_source(state, "hbv_anti_hbs", "text")
+        updates.append("hbv_anti_hbs")
+
+    tb_state = _assistant_parse_immunoid_tb_state(message_text)
+    if tb_state and tb_state != state.immunoid_tb_screen_result:
+        state.immunoid_tb_screen_result = tb_state
+        _assistant_set_immunoid_signal_source(state, "tb_screen_result", "text")
+        updates.append("tb_screen")
+
+    strongy_igg = _assistant_parse_immunoid_serology_state(message_text, ["strongyloides igg", "strongy igg", "strongyloides serology"])
+    if strongy_igg and strongy_igg != state.immunoid_strongyloides_igg:
+        state.immunoid_strongyloides_igg = strongy_igg
+        _assistant_set_immunoid_signal_source(state, "strongyloides_igg", "text")
+        updates.append("strongyloides_igg")
+
+    duration_days = _assistant_parse_immunoid_duration_days(message_text)
+    if duration_days is not None and duration_days != state.immunoid_planned_steroid_duration_days:
+        state.immunoid_planned_steroid_duration_days = duration_days
+        _assistant_set_immunoid_signal_source(state, "planned_steroid_duration_days", "text")
+        updates.append("steroid_duration")
+
+    neutropenia_norm = _assistant_immunoid_normalize(message_text)
+    if "neutropenia" in neutropenia_norm:
+        yes_no = _assistant_parse_immunoid_yes_no_unknown(message_text)
+        if yes_no in {True, False} and yes_no != state.immunoid_anticipated_prolonged_profound_neutropenia:
+            state.immunoid_anticipated_prolonged_profound_neutropenia = yes_no
+            _assistant_set_immunoid_signal_source(state, "anticipated_prolonged_profound_neutropenia", "text")
+            updates.append("neutropenia")
+
+    tb_endemic_regions = (
+        "tb endemic",
+        "tb high incidence",
+        "asia",
+        "africa",
+        "latin america",
+        "india",
+        "philippines",
+        "china",
+        "vietnam",
+        "peru",
+        "brazil",
+        "haiti",
+        "sub saharan africa",
+    )
+    tb_exposure_markers = IMMUNOID_LOCATION_CONTEXT_MARKERS + (
+        "incarceration",
+        "jail",
+        "prison",
+        "homeless shelter",
+        "nursing home",
+        "tb contact",
+        "close contact with tb",
+    )
+    tb_negative_markers = (
+        "no tb endemic exposure",
+        "no tb travel",
+        "no tb risk factors",
+        "no travel to tb endemic area",
+        "no known tb exposure",
+    )
+    if any(token in neutropenia_norm for token in tb_negative_markers):
+        if state.immunoid_tb_endemic_exposure is not False:
+            state.immunoid_tb_endemic_exposure = False
+            _assistant_set_immunoid_signal_source(state, "tb_endemic_exposure", "text")
+            updates.append("tb_endemic_exposure")
+    elif (
+        any(token in neutropenia_norm for token in tb_endemic_regions)
+        and any(token in neutropenia_norm for token in tb_exposure_markers)
+    ) or (
+        _assistant_immunoid_has_location_context(neutropenia_norm)
+        and _assistant_immunoid_has_country_match(neutropenia_norm, IMMUNOID_TB_COUNTRY_ALIASES)
+    ) or "tb endemic exposure" in neutropenia_norm:
+        if state.immunoid_tb_endemic_exposure is not True:
+            state.immunoid_tb_endemic_exposure = True
+            _assistant_set_immunoid_signal_source(state, "tb_endemic_exposure", "text")
+            updates.append("tb_endemic_exposure")
+
+    cocci_locations = (
+        "arizona",
+        "california central valley",
+        "new mexico",
+        "west texas",
+        "southern nevada",
+        "utah",
+        "washington state",
+        "northern mexico",
+    )
+    cocci_negative_markers = ("no coccidioides exposure", "no cocci exposure", "no arizona exposure", "no arizona travel")
+    if any(token in neutropenia_norm for token in cocci_negative_markers):
+        if state.immunoid_coccidioides_exposure is not False:
+            state.immunoid_coccidioides_exposure = False
+            _assistant_set_immunoid_signal_source(state, "coccidioides_exposure", "text")
+            updates.append("cocci_exposure")
+    elif any(token in neutropenia_norm for token in cocci_locations):
+        if state.immunoid_coccidioides_exposure is not True:
+            state.immunoid_coccidioides_exposure = True
+            _assistant_set_immunoid_signal_source(state, "coccidioides_exposure", "text")
+            updates.append("cocci_exposure")
+
+    strongy_regions = (
+        "latin america",
+        "caribbean",
+        "sub saharan africa",
+        "southeast asia",
+        "oceania",
+        "appalachia",
+        "southeastern us",
+        "peru",
+        "brazil",
+    )
+    strongy_negative_markers = ("no strongyloides exposure", "no endemic exposure", "no mexico exposure")
+    if any(token in neutropenia_norm for token in strongy_negative_markers):
+        if state.immunoid_strongyloides_exposure is not False:
+            state.immunoid_strongyloides_exposure = False
+            _assistant_set_immunoid_signal_source(state, "strongyloides_exposure", "text")
+            updates.append("strongyloides_exposure")
+    elif any(token in neutropenia_norm for token in strongy_regions) or (
+        _assistant_immunoid_has_location_context(neutropenia_norm)
+        and _assistant_immunoid_has_country_match(neutropenia_norm, IMMUNOID_STRONGY_COUNTRY_ALIASES)
+    ):
+        if state.immunoid_strongyloides_exposure is not True:
+            state.immunoid_strongyloides_exposure = True
+            _assistant_set_immunoid_signal_source(state, "strongyloides_exposure", "text")
+            updates.append("strongyloides_exposure")
+
+    histo_regions = (
+        "histoplasma",
+        "histoplasmosis",
+        "ohio river valley",
+        "mississippi river valley",
+        "central us",
+        "eastern us",
+        "central america",
+        "south america",
+        "missouri",
+        "arkansas",
+        "kentucky",
+        "tennessee",
+        "indiana",
+        "ohio",
+    )
+    histo_exposure_markers = (
+        "bat",
+        "bird droppings",
+        "bird guano",
+        "cave",
+        "spelunk",
+        "chicken coop",
+        "demolition",
+        "excavation",
+        "dusty soil",
+        "soil exposure",
+    )
+    histo_negative_markers = (
+        "no histoplasma exposure",
+        "no histoplasmosis exposure",
+        "no bat exposure",
+        "no cave exposure",
+        "no bird droppings exposure",
+    )
+    if any(token in neutropenia_norm for token in histo_negative_markers):
+        if state.immunoid_histoplasma_exposure is not False:
+            state.immunoid_histoplasma_exposure = False
+            _assistant_set_immunoid_signal_source(state, "histoplasma_exposure", "text")
+            updates.append("histoplasma_exposure")
+    elif any(token in neutropenia_norm for token in histo_regions) or any(
+        token in neutropenia_norm for token in histo_exposure_markers
+    ):
+        if state.immunoid_histoplasma_exposure is not True:
+            state.immunoid_histoplasma_exposure = True
+            _assistant_set_immunoid_signal_source(state, "histoplasma_exposure", "text")
+            updates.append("histoplasma_exposure")
+    return updates
+
+
+def _assistant_immunoid_request_from_state(state: AssistantState) -> ImmunoAnalyzeRequest:
+    return ImmunoAnalyzeRequest(
+        selectedRegimenIds=state.immunoid_selected_regimen_ids,
+        selectedAgentIds=state.immunoid_selected_agent_ids,
+        plannedSteroidDurationDays=state.immunoid_planned_steroid_duration_days,
+        anticipatedProlongedProfoundNeutropenia=state.immunoid_anticipated_prolonged_profound_neutropenia,
+        hbvHbsAg=state.immunoid_hbv_hbsag,
+        hbvAntiHbc=state.immunoid_hbv_anti_hbc,
+        hbvAntiHbs=state.immunoid_hbv_anti_hbs,
+        tbScreenResult=state.immunoid_tb_screen_result,
+        tbEndemicExposure=state.immunoid_tb_endemic_exposure,
+        strongyloidesExposure=state.immunoid_strongyloides_exposure,
+        strongyloidesIgg=state.immunoid_strongyloides_igg,
+        coccidioidesExposure=state.immunoid_coccidioides_exposure,
+        histoplasmaExposure=state.immunoid_histoplasma_exposure,
+    )
+
+
+def _assistant_immunoid_analysis_from_state(state: AssistantState) -> ImmunoAnalyzeResponse:
+    result = ImmunoAnalyzeResponse(**analyze_immunoid(_assistant_immunoid_request_from_state(state).model_dump()))
+    for item in result.exposure_summary:
+        source = state.immunoid_signal_sources.get(item.id)
+        if source:
+            item.source = source
+    return result
+
+
+def _assistant_immunoid_agent_options(state: AssistantState) -> List[AssistantOption]:
+    regimens_by_id = _assistant_immunoid_regimens_by_id()
+    agents_by_id = _assistant_immunoid_agents_by_id()
+    options: List[AssistantOption] = []
+    for regimen_id in IMMUNOID_COMMON_REGIMEN_IDS:
+        entry = regimens_by_id.get(regimen_id)
+        if entry is None:
+            continue
+        options.append(
+            AssistantOption(
+                value=f"immunoid_regimen:{regimen_id}",
+                label=entry["name"],
+                description=", ".join(entry["componentAgentNames"][:3]),
+            )
+        )
+    for agent_id in IMMUNOID_COMMON_AGENT_IDS:
+        entry = agents_by_id.get(agent_id)
+        if entry is None:
+            continue
+        options.append(
+            AssistantOption(
+                value=f"immunoid_agent:{agent_id}",
+                label=entry["name"],
+                description=entry["drugClass"],
+            )
+        )
+    if state.immunoid_selected_agent_ids or state.immunoid_selected_regimen_ids:
+        options.append(AssistantOption(value="immunoid_continue", label="Continue"))
+        options.append(AssistantOption(value="immunoid_clear_agents", label="Clear selections"))
+    options.append(AssistantOption(value="restart", label="Start new consult"))
+    return options
+
+
+def _assistant_immunoid_steroid_options() -> List[AssistantOption]:
+    return [
+        AssistantOption(value="immunoid_agent:prednisone_20", label="Prednisone >= 20 mg/day"),
+        AssistantOption(value="immunoid_agent:prednisolone_20", label="Prednisolone >= 20 mg/day"),
+        AssistantOption(value="immunoid_agent:methylpred_16", label="Methylprednisolone >= 16 mg/day"),
+        AssistantOption(value="immunoid_agent:dexamethasone_3", label="Dexamethasone >= 3 mg/day"),
+        AssistantOption(value="immunoid_agent:hydrocortisone_80", label="Hydrocortisone >= 80 mg/day"),
+        AssistantOption(value="restart", label="Start new consult"),
+    ]
+
+
+def _assistant_immunoid_followup_options(question_id: str) -> List[AssistantOption]:
+    if question_id == "steroid_duration":
+        return [
+            AssistantOption(value="immunoid_answer:steroid_duration:28_plus", label="28 days or more"),
+            AssistantOption(value="immunoid_answer:steroid_duration:lt_28", label="Less than 28 days"),
+            AssistantOption(value="immunoid_answer:steroid_duration:unknown", label="Not sure"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ]
+    return [
+        AssistantOption(value=f"immunoid_answer:{question_id}:yes", label="Yes"),
+        AssistantOption(value=f"immunoid_answer:{question_id}:no", label="No"),
+        AssistantOption(value=f"immunoid_answer:{question_id}:unknown", label="Not sure"),
+        AssistantOption(value="restart", label="Start new consult"),
+    ]
+
+
+def _assistant_immunoid_extra_context_options(state: AssistantState) -> List[AssistantOption]:
+    options: List[AssistantOption] = []
+    if any(agent_id in state.immunoid_selected_agent_ids for agent_id in {"rituximab", "obinutuzumab", "ocrelizumab", "ofatumumab", "ofatumumab_kesimpta", "ublituximab"}):
+        options.extend(
+            [
+                AssistantOption(value="immunoid_set:hbv_hbsag:positive", label="HBsAg positive"),
+                AssistantOption(value="immunoid_set:hbv_hbsag:negative", label="HBsAg negative"),
+                AssistantOption(value="immunoid_set:hbv_anti_hbc:positive", label="anti-HBc positive"),
+                AssistantOption(value="immunoid_set:hbv_anti_hbc:negative", label="anti-HBc negative"),
+            ]
+        )
+    if any(agent_id in state.immunoid_selected_agent_ids for agent_id in {"infliximab", "adalimumab", "etanercept", "certolizumab", "golimumab", "tofacitinib", "baricitinib", "upadacitinib", "ruxolitinib"}):
+        options.extend(
+            [
+                AssistantOption(value="immunoid_set:tb_screen:positive", label="TB screen positive"),
+                AssistantOption(value="immunoid_set:tb_screen:negative", label="TB screen negative"),
+                AssistantOption(value="immunoid_set:tb_screen:indeterminate", label="TB screen indeterminate"),
+            ]
+        )
+    return options[:6]
+
+
+def _assistant_apply_immunoid_selection(state: AssistantState, selection: str) -> bool:
+    if selection.startswith("immunoid_regimen:"):
+        regimen_id = selection.split(":", 1)[1]
+        regimen = IMMUNOID_REGIMENS.get(regimen_id)
+        if regimen is None:
+            return False
+        if regimen_id not in state.immunoid_selected_regimen_ids:
+            state.immunoid_selected_regimen_ids.append(regimen_id)
+        for agent_id in regimen.get("component_agent_ids", ()):
+            if agent_id not in state.immunoid_selected_agent_ids and agent_id in _assistant_immunoid_agents_by_id():
+                state.immunoid_selected_agent_ids.append(agent_id)
+        _assistant_apply_immunoid_regimen_defaults(state, regimen_id)
+        return True
+    if selection.startswith("immunoid_agent:"):
+        agent_id = selection.split(":", 1)[1]
+        if agent_id not in state.immunoid_selected_agent_ids and agent_id in _assistant_immunoid_agents_by_id():
+            state.immunoid_selected_agent_ids.append(agent_id)
+        return True
+    if selection == "immunoid_clear_agents":
+        state.immunoid_selected_regimen_ids = []
+        state.immunoid_selected_agent_ids = []
+        state.immunoid_planned_steroid_duration_days = None
+        state.immunoid_anticipated_prolonged_profound_neutropenia = None
+        state.immunoid_signal_sources.pop("planned_steroid_duration_days", None)
+        state.immunoid_signal_sources.pop("anticipated_prolonged_profound_neutropenia", None)
+        return True
+    if selection.startswith("immunoid_set:"):
+        _, field_id, value = selection.split(":", 2)
+        if field_id == "hbv_hbsag":
+            state.immunoid_hbv_hbsag = value
+            _assistant_set_immunoid_signal_source(state, "hbv_hbsag", "selection")
+        elif field_id == "hbv_anti_hbc":
+            state.immunoid_hbv_anti_hbc = value
+            _assistant_set_immunoid_signal_source(state, "hbv_anti_hbc", "selection")
+        elif field_id == "tb_screen":
+            state.immunoid_tb_screen_result = value
+            _assistant_set_immunoid_signal_source(state, "tb_screen_result", "selection")
+        return True
+    if selection.startswith("immunoid_answer:"):
+        _, question_id, value = selection.split(":", 2)
+        if question_id == "steroid_duration":
+            state.immunoid_planned_steroid_duration_days = 28 if value == "28_plus" else (14 if value == "lt_28" else None)
+            _assistant_set_immunoid_signal_source(state, "planned_steroid_duration_days", "selection")
+        elif question_id == "tb_endemic_exposure":
+            state.immunoid_tb_endemic_exposure = True if value == "yes" else (False if value == "no" else None)
+            _assistant_set_immunoid_signal_source(state, "tb_endemic_exposure", "selection")
+        elif question_id == "strongyloides_exposure":
+            state.immunoid_strongyloides_exposure = True if value == "yes" else (False if value == "no" else None)
+            _assistant_set_immunoid_signal_source(state, "strongyloides_exposure", "selection")
+        elif question_id == "coccidioides_exposure":
+            state.immunoid_coccidioides_exposure = True if value == "yes" else (False if value == "no" else None)
+            _assistant_set_immunoid_signal_source(state, "coccidioides_exposure", "selection")
+        elif question_id == "histoplasma_exposure":
+            state.immunoid_histoplasma_exposure = True if value == "yes" else (False if value == "no" else None)
+            _assistant_set_immunoid_signal_source(state, "histoplasma_exposure", "selection")
+        elif question_id == "prolonged_profound_neutropenia":
+            state.immunoid_anticipated_prolonged_profound_neutropenia = True if value == "yes" else (False if value == "no" else None)
+            _assistant_set_immunoid_signal_source(state, "anticipated_prolonged_profound_neutropenia", "selection")
+        return True
+    return False
+
+
+def _assistant_immunoid_followup_message(result: ImmunoAnalyzeResponse) -> str:
+    question = result.follow_up_questions[0]
+    selected_names = ", ".join(regimen.name for regimen in result.selected_regimens) or ", ".join(
+        agent.name for agent in result.selected_agents
+    ) or "the selected agents"
+    if result.recommendations:
+        preview = ", ".join(rec.title for rec in result.recommendations[:2])
+        return (
+            f"I identified these exposures: {selected_names}. I already have a preliminary checklist ({preview}), "
+            f"but one missing detail will change the result: {question.prompt}"
+        )
+    return (
+        f"I identified these exposures: {selected_names}. Before I finalize the screening and prophylaxis checklist, "
+        f"I need one more detail: {question.prompt}"
+    )
+
+
+def _assistant_immunoid_final_message(result: ImmunoAnalyzeResponse) -> str:
+    if not result.recommendations:
+        return (
+            "I mapped the selected immunosuppressive agents, but no current deterministic screening or prophylaxis rule fired "
+            "from the context you provided. Add more serologies, exposure history, or regimen details if you want me to refine it."
+        )
+    tests = [rec.summary for rec in result.recommendations if rec.category == "screening"]
+    prophylaxis = [rec.summary for rec in result.recommendations if rec.category == "prophylaxis"]
+    context_items = [rec.summary for rec in result.recommendations if rec.category in {"referral", "context", "monitoring"}]
+    parts: List[str] = []
+    if tests:
+        parts.append("Before therapy, check: " + " ".join(tests[:3]))
+    if prophylaxis:
+        parts.append("Prophylaxis or protocol review: " + " ".join(prophylaxis[:3]))
+    if context_items:
+        parts.append("Additional context: " + " ".join(context_items[:3]))
+    if not parts:
+        parts.append("I generated a rule-backed checklist from the selected immunosuppression profile.")
+    return "\n\n".join(parts)
+
+
+def _assistant_immunoid_response(
+    state: AssistantState,
+    *,
+    prefix: str | None = None,
+) -> AssistantTurnResponse:
+    result = _assistant_immunoid_analysis_from_state(state)
+    if result.follow_up_questions:
+        state.stage = "immunoid_collect_context"
+        question = result.follow_up_questions[0]
+        options = _assistant_immunoid_followup_options(question.id)
+        options.extend(_assistant_immunoid_extra_context_options(state))
+        return AssistantTurnResponse(
+            assistantMessage=((prefix or "") + _assistant_immunoid_followup_message(result)).strip(),
+            state=state,
+            options=options,
+            immunoidAnalysis=result,
+            tips=[
+                question.reason,
+                "You can answer in plain language or click one of the choices.",
+            ],
+        )
+
+    state.stage = "done"
+    options = [
+        AssistantOption(value="add_more_details", label="Update this case"),
+        AssistantOption(value="restart", label="Start new consult"),
+    ]
+    options.extend(_assistant_immunoid_extra_context_options(state))
+    return AssistantTurnResponse(
+        assistantMessage=((prefix or "") + _assistant_immunoid_final_message(result)).strip(),
+        state=state,
+        options=options,
+        immunoidAnalysis=result,
+        tips=[
+            "Add another serology result, exposure history point, or regimen detail if you want me to refine the same checklist.",
+            "Every recommendation shown here comes from the deterministic rule set and its attached citations.",
+        ],
+    )
+
+
+def _assistant_start_immunoid_from_text(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    if not message_text or not _assistant_is_immunoid_intent(message_text):
+        return None
+    detected_regimens = _assistant_detect_immunoid_regimen_ids(message_text)
+    detected_agents = _assistant_detect_immunoid_agent_ids(message_text)
+    if not detected_regimens and not detected_agents and not _assistant_immunoid_mentions_generic_steroid(message_text):
+        return None
+
+    state.workflow = "immunoid"
+    state.module_id = None
+    state.preset_id = None
+    state.pending_intake_text = None
+    state.case_section = None
+    state.case_text = None
+    state.mechid_text = None
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+    _assistant_reset_immunoid_state(state)
+    if not detected_agents and _assistant_immunoid_mentions_generic_steroid(message_text):
+        state.stage = "immunoid_select_agents"
+        return AssistantTurnResponse(
+            assistantMessage=(
+                "I picked up a steroid exposure, but I still need the specific corticosteroid and threshold. "
+                "Please tell me which steroid, the approximate daily dose, and whether it will be prednisone-equivalent "
+                "20 mg/day or more for at least 4 weeks."
+            ),
+            state=state,
+            options=_assistant_immunoid_steroid_options(),
+            tips=[
+                "A useful reply would be: 'prednisone 20 mg daily for 6 weeks' or 'methylprednisolone 8 mg daily for 10 days'.",
+                "That distinction matters because the PJP rule is tied to dose and duration.",
+            ],
+        )
+    state.immunoid_selected_regimen_ids = detected_regimens
+    state.immunoid_selected_agent_ids = detected_agents
+    for regimen_id in detected_regimens:
+        for agent_id in IMMUNOID_REGIMENS.get(regimen_id, {}).get("component_agent_ids", ()):
+            if agent_id not in state.immunoid_selected_agent_ids:
+                state.immunoid_selected_agent_ids.append(agent_id)
+        _assistant_apply_immunoid_regimen_defaults(state, regimen_id)
+    _assistant_parse_immunoid_context_from_text(state, message_text)
+    return _assistant_immunoid_response(state)
+
+
 def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     sel = (req.selection or "").strip()
     if sel == MECHID_ASSISTANT_ID:
+        return sel
+    if sel == IMMUNOID_ASSISTANT_ID:
         return sel
     if sel and store.get(sel):
         return sel
@@ -4949,6 +5893,8 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
         return None
     if _assistant_is_mechid_intent(msg):
         return MECHID_ASSISTANT_ID
+    if _assistant_is_immunoid_intent(msg):
+        return IMMUNOID_ASSISTANT_ID
 
     # Reuse text parser module inference for typed natural-language syndrome selection.
     parsed = parse_text_to_request(
@@ -4991,6 +5937,13 @@ def _assistant_start_pending_followup(state: AssistantState) -> AssistantTurnRes
         if response is not None:
             response.assistant_message = (
                 "I carried the same case into the resistance lane. " + response.assistant_message
+            )
+        return response
+    if pending_workflow == "immunoid":
+        response = _assistant_start_immunoid_from_text(pending_text, state)
+        if response is not None:
+            response.assistant_message = (
+                "I carried the same case into the immunosuppression checklist lane. " + response.assistant_message
             )
         return response
 
@@ -5073,6 +6026,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     if state.stage == "select_module":
         message_text = (req.message or "").strip()
         if message_text:
+            direct_immunoid_response = _assistant_start_immunoid_from_text(message_text, state)
+            if direct_immunoid_response is not None:
+                return direct_immunoid_response
             probid_preview = _assistant_preview_case_from_text(message_text, state, require_high_confidence=True)
             mechid_intent = _assistant_mechid_intent_profile(message_text)
             mechid_preview = _assistant_preview_mechid_from_text(message_text, state)
@@ -5143,6 +6099,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id:
             if chosen_module_id == MECHID_ASSISTANT_ID:
+                _assistant_reset_immunoid_state(state)
                 state.workflow = "mechid"
                 state.stage = "mechid_describe"
                 state.module_id = None
@@ -5167,7 +6124,35 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
 
+            if chosen_module_id == IMMUNOID_ASSISTANT_ID:
+                state.workflow = "immunoid"
+                state.stage = "immunoid_select_agents"
+                state.module_id = None
+                state.preset_id = None
+                state.case_section = None
+                state.case_text = None
+                state.mechid_text = None
+                state.pretest_factor_ids = []
+                state.pretest_factor_labels = []
+                state.endo_blood_culture_context = None
+                state.endo_score_factor_ids = []
+                _assistant_reset_immunoid_state(state)
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Tell me which chemotherapy, steroids, biologics, or transplant agents are planned. "
+                        "You can type them in plain language, for example: 'rituximab and prednisone 20 mg daily', "
+                        "or click a few common agents to get started."
+                    ),
+                    state=state,
+                    options=_assistant_immunoid_agent_options(state),
+                    tips=[
+                        "I will build a deterministic screening and prophylaxis checklist from the selected exposures.",
+                        "You can keep adding agents before continuing.",
+                    ],
+                )
+
             state.workflow = "probid"
+            _assistant_reset_immunoid_state(state)
             state.module_id = chosen_module_id
             state.mechid_text = None
             state.endo_blood_culture_context = None
@@ -5192,14 +6177,53 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         return AssistantTurnResponse(
             assistantMessage=(
-                "I’m your ID Consultant Assistant. You can describe a syndrome case in plain language, or choose the resistance mechanism pathway if you want organism plus AST interpretation."
+                "I’m your ID Consultant Assistant. You can describe a syndrome case, an isolate plus AST pattern, or an immunosuppression exposure profile for screening and prophylaxis review."
             ),
             state=state,
             options=_assistant_module_options(),
             tips=[
-                "I can either run a ProbID syndrome workup or a MechID resistance-mechanism interpretation.",
+                "I can run a ProbID syndrome workup, a MechID resistance-mechanism interpretation, or an ImmunoID screening/prophylaxis checklist.",
             ],
         )
+
+    if state.stage in {"immunoid_select_agents", "immunoid_collect_context"}:
+        state.workflow = "immunoid"
+        selection = (req.selection or "").strip()
+        if selection and _assistant_apply_immunoid_selection(state, selection):
+            if selection == "immunoid_clear_agents":
+                state.stage = "immunoid_select_agents"
+                return AssistantTurnResponse(
+                    assistantMessage="I cleared the current immunosuppression list. Add the planned agents again.",
+                    state=state,
+                    options=_assistant_immunoid_agent_options(state),
+                    tips=[
+                        "You can type the agents in plain language or click a few common ones.",
+                    ],
+                )
+            if state.immunoid_selected_agent_ids:
+                return _assistant_immunoid_response(state, prefix="I updated the ImmunoID context. ")
+
+        if req.message and req.message.strip():
+            updates = _assistant_parse_immunoid_context_from_text(state, req.message)
+            if state.immunoid_selected_agent_ids:
+                lead = "I updated the ImmunoID context. " if updates else ""
+                return _assistant_immunoid_response(state, prefix=lead)
+
+        if not state.immunoid_selected_agent_ids:
+            state.stage = "immunoid_select_agents"
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "I still need the planned immunosuppressive agents before I can build the checklist. "
+                    "Type them in plain language or click a few common options."
+                ),
+                state=state,
+                options=_assistant_immunoid_agent_options(state),
+                tips=[
+                    "Examples: rituximab, infliximab, prednisone 20 mg/day, cyclophosphamide, tacrolimus.",
+                ],
+            )
+
+        return _assistant_immunoid_response(state)
 
     if state.stage == "select_consult_focus":
         selected_focus = _select_consult_focus_from_turn(req)
@@ -5977,6 +7001,16 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "done":
         selection = (req.selection or "").strip()
+        if state.workflow == "immunoid" and selection and _assistant_apply_immunoid_selection(state, selection):
+            if not state.immunoid_selected_agent_ids:
+                state.stage = "immunoid_select_agents"
+                return AssistantTurnResponse(
+                    assistantMessage="I cleared the current immunosuppression list. Add the planned agents again.",
+                    state=state,
+                    options=_assistant_immunoid_agent_options(state),
+                    tips=["You can type the agents in plain language or click a few common ones."],
+                )
+            return _assistant_immunoid_response(state, prefix="I updated the immunosuppression checklist. ")
         if selection in {"continue_to_syndrome", "continue_to_resistance"}:
             followup_response = _assistant_start_pending_followup(state)
             if followup_response is not None:
@@ -5991,6 +7025,17 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     state=state,
                     options=[AssistantOption(value="restart", label="Start new consult")],
                     tips=["For example: 'cefepime resistant' or 'this is bacteremia rather than cystitis'."],
+                )
+            if state.workflow == "immunoid":
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Add the new serology result, exposure history, steroid duration, neutropenia expectation, or another immunosuppressive agent in plain language."
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                    tips=[
+                        "For example: 'anti-HBc positive', 'IGRA negative', 'lived in Arizona', or 'prednisone for 6 weeks'.",
+                    ],
                 )
             return AssistantTurnResponse(
                 assistantMessage=(
@@ -6105,6 +7150,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         analysis=updated_result,
                         tips=done_tips,
                     )
+            if state.workflow == "immunoid" and state.immunoid_selected_agent_ids:
+                _assistant_parse_immunoid_context_from_text(state, req.message)
+                return _assistant_immunoid_response(
+                    state,
+                    prefix="I updated the immunosuppression checklist with the new information. ",
+                )
 
     # done / fallback
     if restart_requested:
@@ -6134,6 +7185,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         state.case_section = None
         state.case_text = None
         state.mechid_text = None
+        _assistant_reset_immunoid_state(state)
         state.pretest_factor_ids = []
         state.pretest_factor_labels = []
 

@@ -265,6 +265,111 @@ class TextAnalyzeResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+ImmunoSerologyState = Literal["positive", "negative", "unknown"]
+ImmunoTBScreenState = Literal["positive", "negative", "indeterminate", "unknown"]
+ImmunoAnalyzeStatus = Literal["complete", "needs_more_info"]
+ImmunoRecommendationCategory = Literal["screening", "prophylaxis", "monitoring", "referral", "context"]
+ImmunoRecommendationPriority = Literal["high", "moderate"]
+ImmunoExposureSource = Literal["provided", "text", "selection", "regimen"]
+
+
+class ImmunoAgentSummary(BaseModel):
+    id: str
+    name: str
+    drug_class: str = Field(alias="drugClass")
+    risk_tags: List[str] = Field(default_factory=list, alias="riskTags")
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoAgentListResponse(BaseModel):
+    agents: List[ImmunoAgentSummary] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoRegimenSummary(BaseModel):
+    id: str
+    name: str
+    component_agent_ids: List[str] = Field(default_factory=list, alias="componentAgentIds")
+    component_agent_names: List[str] = Field(default_factory=list, alias="componentAgentNames")
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoRegimenListResponse(BaseModel):
+    regimens: List[ImmunoRegimenSummary] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoAnalyzeRequest(BaseModel):
+    selected_regimen_ids: List[str] = Field(default_factory=list, alias="selectedRegimenIds")
+    selected_agent_ids: List[str] = Field(default_factory=list, alias="selectedAgentIds")
+    planned_steroid_duration_days: Optional[int] = Field(default=None, ge=0, alias="plannedSteroidDurationDays")
+    anticipated_prolonged_profound_neutropenia: Optional[bool] = Field(
+        default=None,
+        alias="anticipatedProlongedProfoundNeutropenia",
+    )
+    hbv_hbsag: ImmunoSerologyState = Field(default="unknown", alias="hbvHbsAg")
+    hbv_anti_hbc: ImmunoSerologyState = Field(default="unknown", alias="hbvAntiHbc")
+    hbv_anti_hbs: ImmunoSerologyState = Field(default="unknown", alias="hbvAntiHbs")
+    tb_screen_result: ImmunoTBScreenState = Field(default="unknown", alias="tbScreenResult")
+    tb_endemic_exposure: Optional[bool] = Field(default=None, alias="tbEndemicExposure")
+    strongyloides_exposure: Optional[bool] = Field(default=None, alias="strongyloidesExposure")
+    strongyloides_igg: ImmunoSerologyState = Field(default="unknown", alias="strongyloidesIgg")
+    coccidioides_exposure: Optional[bool] = Field(default=None, alias="coccidioidesExposure")
+    histoplasma_exposure: Optional[bool] = Field(default=None, alias="histoplasmaExposure")
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoRecommendation(BaseModel):
+    id: str
+    title: str
+    category: ImmunoRecommendationCategory
+    priority: ImmunoRecommendationPriority
+    summary: str
+    rationale: str
+    triggered_by: List[str] = Field(default_factory=list, alias="triggeredBy")
+    citations: List[ReferenceEntry] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoFollowUpQuestion(BaseModel):
+    id: str
+    prompt: str
+    reason: str
+    related_recommendation_ids: List[str] = Field(default_factory=list, alias="relatedRecommendationIds")
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoExposureSummaryItem(BaseModel):
+    id: str
+    label: str
+    value: str
+    source: ImmunoExposureSource = "provided"
+
+    model_config = {"populate_by_name": True}
+
+
+class ImmunoAnalyzeResponse(BaseModel):
+    status: ImmunoAnalyzeStatus
+    selected_regimens: List[ImmunoRegimenSummary] = Field(default_factory=list, alias="selectedRegimens")
+    selected_agents: List[ImmunoAgentSummary] = Field(default_factory=list, alias="selectedAgents")
+    unsupported_regimen_ids: List[str] = Field(default_factory=list, alias="unsupportedRegimenIds")
+    unsupported_agent_ids: List[str] = Field(default_factory=list, alias="unsupportedAgentIds")
+    risk_flags: List[str] = Field(default_factory=list, alias="riskFlags")
+    recommendations: List[ImmunoRecommendation] = Field(default_factory=list)
+    follow_up_questions: List[ImmunoFollowUpQuestion] = Field(default_factory=list, alias="followUpQuestions")
+    exposure_summary: List[ImmunoExposureSummaryItem] = Field(default_factory=list, alias="exposureSummary")
+    warnings: List[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 class ParserTrainingExample(BaseModel):
     text: str = Field(min_length=1)
     module_id: Optional[str] = Field(default=None, alias="moduleId")
@@ -286,6 +391,8 @@ AssistantStage = Literal[
     "confirm_case",
     "mechid_describe",
     "mechid_confirm",
+    "immunoid_select_agents",
+    "immunoid_collect_context",
     "done",
 ]
 
@@ -302,11 +409,11 @@ class AssistantOption(BaseModel):
 
 class AssistantState(BaseModel):
     stage: AssistantStage = "select_module"
-    workflow: Literal["probid", "mechid"] = "probid"
+    workflow: Literal["probid", "mechid", "immunoid"] = "probid"
     module_id: Optional[str] = Field(default=None, alias="moduleId")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
     pending_intake_text: Optional[str] = Field(default=None, alias="pendingIntakeText")
-    pending_followup_workflow: Optional[Literal["probid", "mechid"]] = Field(default=None, alias="pendingFollowupWorkflow")
+    pending_followup_workflow: Optional[Literal["probid", "mechid", "immunoid"]] = Field(default=None, alias="pendingFollowupWorkflow")
     pending_followup_text: Optional[str] = Field(default=None, alias="pendingFollowupText")
     endo_blood_culture_context: Optional[
         Literal["staph", "strep", "enterococcus", "other_unknown_pending"]
@@ -317,6 +424,23 @@ class AssistantState(BaseModel):
     ] = Field(default=None, alias="caseSection")
     case_text: Optional[str] = Field(default=None, alias="caseText")
     mechid_text: Optional[str] = Field(default=None, alias="mechidText")
+    immunoid_selected_regimen_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedRegimenIds")
+    immunoid_selected_agent_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedAgentIds")
+    immunoid_planned_steroid_duration_days: Optional[int] = Field(default=None, alias="immunoidPlannedSteroidDurationDays")
+    immunoid_anticipated_prolonged_profound_neutropenia: Optional[bool] = Field(
+        default=None,
+        alias="immunoidAnticipatedProlongedProfoundNeutropenia",
+    )
+    immunoid_hbv_hbsag: ImmunoSerologyState = Field(default="unknown", alias="immunoidHbvHbsAg")
+    immunoid_hbv_anti_hbc: ImmunoSerologyState = Field(default="unknown", alias="immunoidHbvAntiHbc")
+    immunoid_hbv_anti_hbs: ImmunoSerologyState = Field(default="unknown", alias="immunoidHbvAntiHbs")
+    immunoid_tb_screen_result: ImmunoTBScreenState = Field(default="unknown", alias="immunoidTbScreenResult")
+    immunoid_tb_endemic_exposure: Optional[bool] = Field(default=None, alias="immunoidTbEndemicExposure")
+    immunoid_strongyloides_exposure: Optional[bool] = Field(default=None, alias="immunoidStrongyloidesExposure")
+    immunoid_strongyloides_igg: ImmunoSerologyState = Field(default="unknown", alias="immunoidStrongyloidesIgg")
+    immunoid_coccidioides_exposure: Optional[bool] = Field(default=None, alias="immunoidCoccidioidesExposure")
+    immunoid_histoplasma_exposure: Optional[bool] = Field(default=None, alias="immunoidHistoplasmaExposure")
+    immunoid_signal_sources: Dict[str, ImmunoExposureSource] = Field(default_factory=dict, alias="immunoidSignalSources")
     pretest_factor_ids: List[str] = Field(default_factory=list, alias="pretestFactorIds")
     pretest_factor_labels: List[str] = Field(default_factory=list, alias="pretestFactorLabels")
     parser_strategy: Literal["auto", "rule", "local", "openai"] = Field(default="auto", alias="parserStrategy")
@@ -345,6 +469,7 @@ class AssistantTurnResponse(BaseModel):
     options: List[AssistantOption] = Field(default_factory=list)
     analysis: Optional[TextAnalyzeResponse] = None
     mechid_analysis: Optional["MechIDTextAnalyzeResponse"] = Field(default=None, alias="mechidAnalysis")
+    immunoid_analysis: Optional[ImmunoAnalyzeResponse] = Field(default=None, alias="immunoidAnalysis")
     tips: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}

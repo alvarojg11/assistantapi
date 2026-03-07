@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
-from fastapi.testclient import TestClient
+if TYPE_CHECKING:
+    from fastapi.testclient import TestClient
 
 
 @dataclass
@@ -121,7 +122,7 @@ def _check_contains_list(
 
 def evaluate_mechid_case(
     *,
-    client: TestClient,
+    client: "TestClient",
     case: Dict[str, Any],
     stats: EvalStats,
     check_assistant: bool,
