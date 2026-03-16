@@ -1486,7 +1486,8 @@
         if (doseidResult) {
           const recommendations = doseidResult.recommendations || [];
           const assumptions = doseidResult.assumptions || [];
-          const warnings = [...(doseidResult.warnings || []), ...(doseidResult.missingInputs || []).map((item) => `Still needed: ${item}`)];
+          const followUpQuestions = doseidResult.followUpQuestions || [];
+          const warnings = [...(doseidResult.warnings || []), ...followUpQuestions.map((item) => `Follow-up: ${item.prompt}`)];
           const context = doseidResult.patientContext || {};
           const medicationItems = (doseidResult.medications || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
           const recommendationItems = recommendations.map((item) => {
@@ -1524,6 +1525,7 @@
               <div class="k">Regimens</div><div class="v">${recommendations.length}</div>
             </div>
             ${recommendationItems ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Recommended regimens</div><ul class="list">${recommendationItems}</ul></div>` : `<div class="muted" style="margin-top:8px;">Add the drug plus renal context and patient details to calculate a regimen.</div>`}
+            ${followUpQuestions.length ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Next questions</div><ul class="list">${followUpQuestions.map((item) => `<li>${escapeHtml(item.prompt)} <span class="muted">(${escapeHtml(item.reason || "")})</span></li>`).join("")}</ul></div>` : ""}
             ${assumptions.length ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Assumptions used</div><ul class="list warn-list">${assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
           `;
 

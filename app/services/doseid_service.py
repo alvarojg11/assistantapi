@@ -1874,7 +1874,7 @@ def _liposomal_amphotericin_b(
 
 
 def _foscarnet(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
-    cmv_induction = indication_id == "cmv_disease_induction"
+    cmv_induction = indication_id == "cmv_induction"
     dose_weight = adjusted_weight_over_120_ibw(patient)
     adjusted_crcl = foscarnet_adjusted_crcl_ml_min_per_kg(patient)
     renal_band = (

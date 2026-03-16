@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DoseID Calculator</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+      :root {
+        --bg: #f3efe5;
+        --bg-alt: #e7dfcf;
+        --ink: #1f1c18;
+        --muted: #665e52;
+        --line: #c8bea9;
+        --panel: rgba(255, 252, 245, 0.94);
+        --brand: #0e6b5b;
+        --brand-2: #d17a2f;
+        --brand-3: #234a8a;
+        --danger: #aa3e2a;
+        --shadow: 0 14px 38px rgba(28, 24, 19, 0.11);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--ink);
+        font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(1000px 480px at 8% -8%, rgba(35, 74, 138, 0.10), transparent 65%),
+          radial-gradient(920px 520px at 96% 8%, rgba(14, 107, 91, 0.10), transparent 60%),
+          linear-gradient(180deg, var(--bg) 0%, #efe8d8 100%);
+      }
+
+      .shell {
+        max-width: 1260px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .hero, .panel {
+        background: var(--panel);
+        border: 1px solid rgba(200, 190, 169, 0.8);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 20px;
+        margin-bottom: 18px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+
+      h1, h2, h3 {
+        font-family: "Fraunces", Georgia, serif;
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.8rem, 2.8vw, 2.6rem);
+        margin-top: 8px;
+        margin-bottom: 8px;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 68ch;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .links {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .link-pill, button, select, input {
+        font: inherit;
+      }
+
+      .link-pill, .secondary-btn, .primary-btn, .ghost-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        padding: 10px 14px;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      .link-pill, .ghost-btn {
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.68);
+      }
+
+      .primary-btn {
+        color: white;
+        background: linear-gradient(135deg, var(--brand), #15927b);
+        border-color: rgba(14, 107, 91, 0.4);
+      }
+
+      .secondary-btn {
+        color: var(--ink);
+        background: linear-gradient(135deg, rgba(209, 122, 47, 0.18), rgba(209, 122, 47, 0.1));
+      }
+
+      .link-pill:hover, .secondary-btn:hover, .primary-btn:hover, .ghost-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 26px rgba(28, 24, 19, 0.10);
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+        gap: 18px;
+      }
+
+      .panel {
+        padding: 18px;
+      }
+
+      .panel + .panel {
+        margin-top: 16px;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field.full {
+        grid-column: 1 / -1;
+      }
+
+      label {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      input, select {
+        width: 100%;
+        padding: 11px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(200, 190, 169, 0.95);
+        background: rgba(255, 255, 255, 0.86);
+        color: var(--ink);
+      }
+
+      .med-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .med-row {
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        border-radius: 16px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.62);
+      }
+
+      .med-row-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(200, 190, 169, 0.85);
+      }
+
+      .badge.good {
+        color: var(--brand);
+        border-color: rgba(14, 107, 91, 0.28);
+        background: rgba(14, 107, 91, 0.08);
+      }
+
+      .badge.warn {
+        color: var(--brand-2);
+        border-color: rgba(209, 122, 47, 0.28);
+        background: rgba(209, 122, 47, 0.08);
+      }
+
+      .badge.bad {
+        color: var(--danger);
+        border-color: rgba(170, 62, 42, 0.28);
+        background: rgba(170, 62, 42, 0.08);
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .card {
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        border-radius: 16px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.64);
+      }
+
+      .card h3 {
+        font-size: 1.05rem;
+        margin-bottom: 10px;
+      }
+
+      .kv {
+        display: grid;
+        grid-template-columns: minmax(120px, auto) 1fr;
+        gap: 8px 12px;
+        font-size: 14px;
+      }
+
+      .kv .k {
+        color: var(--muted);
+      }
+
+      .list {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      .list li + li {
+        margin-top: 6px;
+      }
+
+      .empty {
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .alert {
+        border-radius: 14px;
+        padding: 12px 14px;
+        border: 1px solid rgba(209, 122, 47, 0.3);
+        background: rgba(209, 122, 47, 0.08);
+      }
+
+      .alert.error {
+        border-color: rgba(170, 62, 42, 0.32);
+        background: rgba(170, 62, 42, 0.08);
+      }
+
+      @media (max-width: 980px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          padding: 16px;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">Direct Endpoint Client</div>
+        <h1>DoseID Calculator</h1>
+        <p>
+          This page calls the deterministic DoseID API directly. You can submit partial patient data, and the
+          calculator will either return regimens or structured follow-up questions for the exact missing fields.
+        </p>
+        <div class="links">
+          <a class="link-pill" href="/assistant">Open Guided Assistant</a>
+          <a class="link-pill" href="/docs">Open API Docs</a>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div>
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Build Request</h2>
+                <div class="muted">Pick one or more medications and add whichever patient fields you already have.</div>
+              </div>
+              <span id="catalogStatus" class="badge">Loading catalog...</span>
+            </div>
+
+            <div class="field full" style="margin-bottom: 14px;">
+              <label for="renalMode">Renal mode</label>
+              <select id="renalMode">
+                <option value="standard">Standard renal pathway</option>
+                <option value="ihd">Intermittent hemodialysis</option>
+                <option value="crrt">CRRT</option>
+              </select>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="ageYears">Age</label>
+                <input id="ageYears" inputmode="numeric" placeholder="e.g. 67" />
+              </div>
+              <div class="field">
+                <label for="sex">Sex</label>
+                <select id="sex">
+                  <option value="">Not provided</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="weightKg">Weight (kg)</label>
+                <input id="weightKg" inputmode="decimal" placeholder="e.g. 82.5" />
+              </div>
+              <div class="field">
+                <label for="heightCm">Height (cm)</label>
+                <input id="heightCm" inputmode="decimal" placeholder="e.g. 170" />
+              </div>
+              <div class="field">
+                <label for="serumCreatinine">Serum creatinine (mg/dL)</label>
+                <input id="serumCreatinine" inputmode="decimal" placeholder="e.g. 1.2" />
+              </div>
+              <div class="field">
+                <label for="crcl">Direct CrCl (mL/min)</label>
+                <input id="crcl" inputmode="decimal" placeholder="e.g. 35" />
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Medication Selection</h2>
+                <div class="muted">Each row becomes one `selection` in the DoseID request.</div>
+              </div>
+              <button id="addMedicationBtn" class="secondary-btn" type="button">Add Medication</button>
+            </div>
+            <div id="medicationRows" class="med-list"></div>
+            <div class="actions">
+              <button id="calculateBtn" class="primary-btn" type="button">Calculate Dose</button>
+              <button id="resetBtn" class="ghost-btn" type="button">Reset Form</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Response</h2>
+                <div class="muted">This mirrors the direct `/v1/doseid/calculate` payload.</div>
+              </div>
+              <span id="responseStatus" class="badge">Idle</span>
+            </div>
+            <div id="responseSummary" class="empty">Submit a request to see dosing results or next-step questions.</div>
+          </section>
+
+          <section class="panel">
+            <h2 style="margin-bottom: 12px;">Raw JSON</h2>
+            <pre id="rawJson" class="card" style="margin: 0; overflow: auto; white-space: pre-wrap;">No response yet.</pre>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <template id="medicationRowTemplate">
+      <div class="med-row">
+        <div class="med-row-head">
+          <strong>Medication</strong>
+          <button class="ghost-btn remove-med-btn" type="button">Remove</button>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Medication</label>
+            <select class="medication-select"></select>
+          </div>
+          <div class="field">
+            <label>Indication</label>
+            <select class="indication-select"></select>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <script>
+      const state = {
+        catalog: [],
+      };
+
+      const els = {
+        catalogStatus: document.getElementById("catalogStatus"),
+        medicationRows: document.getElementById("medicationRows"),
+        medicationRowTemplate: document.getElementById("medicationRowTemplate"),
+        addMedicationBtn: document.getElementById("addMedicationBtn"),
+        calculateBtn: document.getElementById("calculateBtn"),
+        resetBtn: document.getElementById("resetBtn"),
+        renalMode: document.getElementById("renalMode"),
+        ageYears: document.getElementById("ageYears"),
+        sex: document.getElementById("sex"),
+        weightKg: document.getElementById("weightKg"),
+        heightCm: document.getElementById("heightCm"),
+        serumCreatinine: document.getElementById("serumCreatinine"),
+        crcl: document.getElementById("crcl"),
+        responseStatus: document.getElementById("responseStatus"),
+        responseSummary: document.getElementById("responseSummary"),
+        rawJson: document.getElementById("rawJson"),
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function parseOptionalNumber(value) {
+        const trimmed = String(value || "").trim();
+        if (!trimmed) return undefined;
+        const num = Number(trimmed);
+        return Number.isFinite(num) ? num : undefined;
+      }
+
+      function medicationById(medicationId) {
+        return state.catalog.find((item) => item.id === medicationId) || null;
+      }
+
+      function indicationOptions(medicationId) {
+        return medicationById(medicationId)?.indications || [];
+      }
+
+      function renderMedicationOptions(selectEl, selectedId) {
+        const options = [`<option value="">Select medication</option>`];
+        state.catalog.forEach((item) => {
+          const selected = item.id === selectedId ? " selected" : "";
+          options.push(`<option value="${escapeHtml(item.id)}"${selected}>${escapeHtml(item.name)}</option>`);
+        });
+        selectEl.innerHTML = options.join("");
+      }
+
+      function renderIndicationOptions(selectEl, medicationId, selectedId) {
+        const indications = indicationOptions(medicationId);
+        if (!medicationId || !indications.length) {
+          selectEl.innerHTML = `<option value="">Default indication</option>`;
+          return;
+        }
+        selectEl.innerHTML = indications
+          .map((item, index) => {
+            const effectiveSelected = selectedId ? item.id === selectedId : index === 0;
+            return `<option value="${escapeHtml(item.id)}"${effectiveSelected ? " selected" : ""}>${escapeHtml(item.label)}</option>`;
+          })
+          .join("");
+      }
+
+      function addMedicationRow(initialMedicationId = "", initialIndicationId = "") {
+        const node = els.medicationRowTemplate.content.firstElementChild.cloneNode(true);
+        const medicationSelect = node.querySelector(".medication-select");
+        const indicationSelect = node.querySelector(".indication-select");
+        const removeBtn = node.querySelector(".remove-med-btn");
+
+        renderMedicationOptions(medicationSelect, initialMedicationId);
+        renderIndicationOptions(indicationSelect, initialMedicationId, initialIndicationId);
+
+        medicationSelect.addEventListener("change", () => {
+          renderIndicationOptions(indicationSelect, medicationSelect.value, "");
+        });
+
+        removeBtn.addEventListener("click", () => {
+          node.remove();
+          if (!els.medicationRows.children.length) addMedicationRow();
+        });
+
+        els.medicationRows.appendChild(node);
+      }
+
+      function collectSelections() {
+        return Array.from(els.medicationRows.querySelectorAll(".med-row"))
+          .map((row) => {
+            const medicationId = row.querySelector(".medication-select")?.value || "";
+            const indicationId = row.querySelector(".indication-select")?.value || "";
+            if (!medicationId) return null;
+            return indicationId ? { medicationId, indicationId } : { medicationId };
+          })
+          .filter(Boolean);
+      }
+
+      function buildPayload() {
+        const patient = {};
+        const ageYears = parseOptionalNumber(els.ageYears.value);
+        const totalBodyWeightKg = parseOptionalNumber(els.weightKg.value);
+        const heightCm = parseOptionalNumber(els.heightCm.value);
+        const serumCreatinineMgDl = parseOptionalNumber(els.serumCreatinine.value);
+        const crclMlMin = parseOptionalNumber(els.crcl.value);
+
+        if (ageYears !== undefined) patient.ageYears = Math.round(ageYears);
+        if (els.sex.value) patient.sex = els.sex.value;
+        if (totalBodyWeightKg !== undefined) patient.totalBodyWeightKg = totalBodyWeightKg;
+        if (heightCm !== undefined) patient.heightCm = heightCm;
+        if (serumCreatinineMgDl !== undefined) patient.serumCreatinineMgDl = serumCreatinineMgDl;
+        if (crclMlMin !== undefined) patient.crclMlMin = crclMlMin;
+
+        return {
+          patient,
+          renalMode: els.renalMode.value,
+          selections: collectSelections(),
+        };
+      }
+
+      function formatDoseWeight(doseWeight) {
+        if (!doseWeight) return "Not specified";
+        return `${String(doseWeight.basis || "").toUpperCase()} ${doseWeight.kg} kg`;
+      }
+
+      function renderResponse(body) {
+        els.rawJson.textContent = JSON.stringify(body, null, 2);
+        const status = body?.status || "ready";
+        els.responseStatus.textContent = status === "needs_more_info" ? "Needs More Info" : "Ready";
+        els.responseStatus.className = `badge ${status === "needs_more_info" ? "warn" : "good"}`;
+
+        const context = body?.patientContext || {};
+        const contextHtml = `
+          <div class="card">
+            <h3>Parsed Patient Context</h3>
+            <div class="kv">
+              <div class="k">Renal mode</div><div>${escapeHtml(context.renalMode || "standard")}</div>
+              <div class="k">Age</div><div>${escapeHtml(context.ageYears ?? "—")}</div>
+              <div class="k">Sex</div><div>${escapeHtml(context.sex || "—")}</div>
+              <div class="k">Weight</div><div>${escapeHtml(context.totalBodyWeightKg ?? "—")}</div>
+              <div class="k">Height</div><div>${escapeHtml(context.heightCm ?? "—")}</div>
+              <div class="k">SCr</div><div>${escapeHtml(context.serumCreatinineMgDl ?? "—")}</div>
+              <div class="k">CrCl</div><div>${escapeHtml(context.crclMlMin ?? "—")}</div>
+            </div>
+          </div>
+        `;
+
+        const recommendations = body?.recommendations || [];
+        const followUps = body?.followUpQuestions || [];
+        const warnings = body?.warnings || [];
+        const assumptions = body?.assumptions || [];
+
+        const followUpHtml = followUps.length
+          ? `
+            <div class="card">
+              <h3>Next Questions</h3>
+              <ul class="list">
+                ${followUps.map((item) => `<li><strong>${escapeHtml(item.prompt)}</strong><br /><span class="muted">${escapeHtml(item.reason || "")}</span></li>`).join("")}
+              </ul>
+            </div>
+          `
+          : "";
+
+        const recommendationHtml = recommendations.length
+          ? `
+            <div class="card">
+              <h3>Regimens</h3>
+              <ul class="list">
+                ${recommendations.map((item) => `
+                  <li>
+                    <strong>${escapeHtml(item.medicationName || "Medication")}</strong>: ${escapeHtml(item.regimen || "—")}
+                    <div class="muted">Indication: ${escapeHtml(item.indicationLabel || "Default")}</div>
+                    <div class="muted">Renal pathway: ${escapeHtml(item.renalBucket || "—")}</div>
+                    ${item.doseWeight ? `<div class="muted">Dose weight: ${escapeHtml(formatDoseWeight(item.doseWeight))}</div>` : ""}
+                    ${(item.notes || []).length ? `<ul class="list">${item.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}
+                  </li>
+                `).join("")}
+              </ul>
+            </div>
+          `
+          : `<div class="card"><h3>Regimens</h3><div class="empty">No regimens returned yet.</div></div>`;
+
+        const warningsHtml = warnings.length || assumptions.length
+          ? `
+            <div class="card">
+              <h3>Warnings And Assumptions</h3>
+              ${warnings.length ? `<ul class="list">${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+              ${assumptions.length ? `<ul class="list">${assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+            </div>
+          `
+          : "";
+
+        els.responseSummary.innerHTML = `
+          ${status === "needs_more_info" ? `<div class="alert">The API accepted the partial request and is asking for the next required field(s) before dosing.</div>` : `<div class="alert">The API had enough information to calculate the regimen.</div>`}
+          ${followUpHtml}
+          ${recommendationHtml}
+          ${warningsHtml}
+          ${contextHtml}
+        `;
+      }
+
+      function renderError(message) {
+        els.responseStatus.textContent = "Error";
+        els.responseStatus.className = "badge bad";
+        els.responseSummary.innerHTML = `<div class="alert error">${escapeHtml(message)}</div>`;
+        els.rawJson.textContent = message;
+      }
+
+      async function loadCatalog() {
+        els.catalogStatus.textContent = "Loading catalog...";
+        try {
+          const res = await fetch("/v1/doseid/medications");
+          if (!res.ok) throw new Error(`Catalog request failed (${res.status})`);
+          const body = await res.json();
+          state.catalog = body.medications || [];
+          els.catalogStatus.textContent = `${state.catalog.length} meds loaded`;
+          els.catalogStatus.className = "badge good";
+          els.medicationRows.innerHTML = "";
+          addMedicationRow();
+        } catch (err) {
+          els.catalogStatus.textContent = "Catalog unavailable";
+          els.catalogStatus.className = "badge bad";
+          renderError(err.message || "Unable to load the DoseID medication catalog.");
+        }
+      }
+
+      async function calculateDose() {
+        const payload = buildPayload();
+        if (!payload.selections.length) {
+          renderError("Select at least one medication before calculating.");
+          return;
+        }
+        els.responseStatus.textContent = "Calculating...";
+        els.responseStatus.className = "badge";
+        try {
+          const res = await fetch("/v1/doseid/calculate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await res.json();
+          if (!res.ok) throw new Error(body?.detail || `Dose calculation failed (${res.status})`);
+          renderResponse(body);
+        } catch (err) {
+          renderError(err.message || "Dose calculation failed.");
+        }
+      }
+
+      function resetForm() {
+        els.renalMode.value = "standard";
+        els.ageYears.value = "";
+        els.sex.value = "";
+        els.weightKg.value = "";
+        els.heightCm.value = "";
+        els.serumCreatinine.value = "";
+        els.crcl.value = "";
+        els.medicationRows.innerHTML = "";
+        addMedicationRow();
+        els.responseStatus.textContent = "Idle";
+        els.responseStatus.className = "badge";
+        els.responseSummary.innerHTML = `Submit a request to see dosing results or next-step questions.`;
+        els.rawJson.textContent = "No response yet.";
+      }
+
+      els.addMedicationBtn.addEventListener("click", () => addMedicationRow());
+      els.calculateBtn.addEventListener("click", calculateDose);
+      els.resetBtn.addEventListener("click", resetForm);
+
+      loadCatalog();
+    </script>
+  </body>
+</html>

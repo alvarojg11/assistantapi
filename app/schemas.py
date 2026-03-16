@@ -485,6 +485,7 @@ class DoseIDAssistantAnalysis(BaseModel):
     assumptions: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
     missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+    follow_up_questions: List["DoseIDFollowUpQuestion"] = Field(default_factory=list, alias="followUpQuestions")
 
     model_config = {"populate_by_name": True}
 
@@ -512,6 +513,23 @@ class DoseIDPatientInput(BaseModel):
     serum_creatinine_mg_dl: float = Field(alias="serumCreatinineMgDl", gt=0)
 
     model_config = {"populate_by_name": True}
+
+
+class DoseIDCalculatePatientInput(BaseModel):
+    age_years: Optional[int] = Field(default=None, alias="ageYears", ge=18, le=120)
+    sex: Optional[Literal["male", "female"]] = None
+    total_body_weight_kg: Optional[float] = Field(default=None, alias="totalBodyWeightKg", gt=0)
+    height_cm: Optional[float] = Field(default=None, alias="heightCm", gt=0)
+    serum_creatinine_mg_dl: Optional[float] = Field(default=None, alias="serumCreatinineMgDl", gt=0)
+    crcl_ml_min: Optional[float] = Field(default=None, alias="crclMlMin", gt=0)
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDFollowUpQuestion(BaseModel):
+    id: str
+    prompt: str
+    reason: str
 
 
 class DoseIDIndicationOption(BaseModel):
@@ -557,7 +575,7 @@ class DoseIDDoseRecommendation(BaseModel):
 
 
 class DoseIDCalculateRequest(BaseModel):
-    patient: DoseIDPatientInput
+    patient: DoseIDCalculatePatientInput
     renal_mode: Literal["standard", "ihd", "crrt"] = Field(default="standard", alias="renalMode")
     selections: List[DoseIDMedicationSelection] = Field(default_factory=list)
 
@@ -565,7 +583,15 @@ class DoseIDCalculateRequest(BaseModel):
 
 
 class DoseIDCalculateResponse(BaseModel):
+    status: Literal["ready", "needs_more_info"] = "ready"
     recommendations: List[DoseIDDoseRecommendation] = Field(default_factory=list)
+    patient_context: DoseIDAssistantPatientContext = Field(alias="patientContext")
+    assumptions: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+    follow_up_questions: List[DoseIDFollowUpQuestion] = Field(default_factory=list, alias="followUpQuestions")
+
+    model_config = {"populate_by_name": True}
 
 
 class DoseIDCatalogResponse(BaseModel):

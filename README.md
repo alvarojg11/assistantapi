@@ -60,6 +60,7 @@ uvicorn app.main:app --reload
 
 Open docs at `http://127.0.0.1:8000/docs`.
 Open the guided web UI at `http://127.0.0.1:8000/assistant`.
+Open the direct DoseID calculator at `http://127.0.0.1:8000/doseid`.
 Open the MechID trainer at `http://127.0.0.1:8000/trainer`.
 
 ## Evaluate parser quality

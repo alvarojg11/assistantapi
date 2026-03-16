@@ -38,6 +38,7 @@ from .schemas import (
     DoseIDCalculateResponse,
     DoseIDCatalogResponse,
     DoseIDDoseRecommendation,
+    DoseIDFollowUpQuestion,
     DoseIDMedicationCatalogEntry,
     DoseIDIndicationOption,
     ImmunoAgentListResponse,
@@ -1478,6 +1479,11 @@ def assistant_web() -> FileResponse:
     return FileResponse(APP_DIR / "static" / "assistant.html")
 
 
+@app.get("/doseid")
+def doseid_web() -> FileResponse:
+    return FileResponse(APP_DIR / "static" / "doseid.html")
+
+
 @app.get("/trainer")
 def trainer_web() -> FileResponse:
     return FileResponse(APP_DIR / "static" / "trainer.html")
@@ -2055,28 +2061,44 @@ def list_doseid_medications() -> DoseIDCatalogResponse:
 @app.post("/v1/doseid/calculate", response_model=DoseIDCalculateResponse)
 def calculate_doseid_endpoint(req: DoseIDCalculateRequest) -> DoseIDCalculateResponse:
     try:
-        patient = normalize_patient(
-            age_years=req.patient.age_years,
-            sex=req.patient.sex,
-            total_body_weight_kg=req.patient.total_body_weight_kg,
-            height_cm=req.patient.height_cm,
-            serum_creatinine_mg_dl=req.patient.serum_creatinine_mg_dl,
-        )
-        recommendations = [
-            _doseid_recommendation_model(
-                calculate_medication(
-                    medication_id=selection.medication_id,
-                    patient=patient,
-                    renal_mode=req.renal_mode,
-                    indication_id=selection.indication_id,
-                )
-            )
+        patient_context = _doseid_patient_context_from_partial_input(req.patient, renal_mode=req.renal_mode)
+        medication_ids = [selection.medication_id for selection in req.selections]
+        indication_ids = {
+            selection.medication_id: selection.indication_id or default_indication_id(selection.medication_id)
             for selection in req.selections
-        ]
+        }
+        follow_up_questions = _doseid_missing_input_questions(
+            medication_ids=medication_ids,
+            indication_ids=indication_ids,
+            patient_context=patient_context,
+        )
+        if follow_up_questions:
+            return DoseIDCalculateResponse(
+                status="needs_more_info",
+                recommendations=[],
+                patientContext=patient_context,
+                assumptions=[],
+                warnings=[],
+                missingInputs=[DOSEID_FIELD_LABELS[item.id] for item in follow_up_questions],
+                followUpQuestions=follow_up_questions,
+            )
+        recommendations, assumptions, warnings = _doseid_recommendations_ready(
+            medication_ids=medication_ids,
+            indication_ids=indication_ids,
+            patient_context=patient_context,
+        )
     except DoseIDError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    return DoseIDCalculateResponse(recommendations=recommendations)
+    return DoseIDCalculateResponse(
+        status="ready",
+        recommendations=recommendations,
+        patientContext=patient_context,
+        assumptions=assumptions,
+        warnings=warnings,
+        missingInputs=[],
+        followUpQuestions=[],
+    )
 
 
 @app.get("/v1/immunoid/agents", response_model=ImmunoAgentListResponse)
@@ -6638,7 +6660,7 @@ def _assistant_start_immunoid_from_text(
 
 
 def _assistant_doseid_normalize(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+    return re.sub(r"[^a-z0-9.]+", " ", (value or "").lower()).strip()
 
 
 def _assistant_doseid_medications_by_id() -> Dict[str, Any]:
@@ -6661,7 +6683,7 @@ def _assistant_doseid_alias_map() -> Dict[str, List[str]]:
         elif med.id == "tmp_smx":
             aliases.update({"tmp smx", "tmp-smx", "bactrim", "trimethoprim sulfamethoxazole"})
         elif med.id == "vancomycin_iv":
-            aliases.update({"vanc", "iv vancomycin"})
+            aliases.update({"vanc", "iv vancomycin", "vancomycin"})
         elif med.id == "liposomal_amphotericin_b":
             aliases.update({"ambisome", "l ampho", "liposomal amphotericin"})
         elif med.id == "moxifloxacin_tb":
@@ -6708,9 +6730,9 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
         renal_mode = "ihd"
 
     age_years = None
-    age_match = re.search(r"\b(\d{1,3})\s*(?:yo|y/o|year old|years old)\b", normalized)
+    age_match = re.search(r"\bage\s*(?:is|=|:)?\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:yo|y/o|year old|years old)\b", normalized)
     if age_match:
-        age_years = int(age_match.group(1))
+        age_years = int(age_match.group(1) or age_match.group(2))
 
     sex = None
     if re.search(r"\bmale\b|\bman\b", normalized):
@@ -6794,60 +6816,294 @@ def _assistant_doseid_indication_for_query(medication_id: str, message_text: str
     return default_indication_id(medication_id)
 
 
+DOSEID_STANDARD_NONRENAL_MEDICATION_IDS = {
+    "ceftriaxone",
+    "linezolid",
+    "clindamycin",
+    "nafcillin",
+    "isoniazid",
+    "rifampin",
+    "moxifloxacin_tb",
+    "caspofungin",
+    "isavuconazole",
+    "posaconazole",
+    "micafungin",
+    "voriconazole",
+    "liposomal_amphotericin_b",
+}
+DOSEID_ALWAYS_WEIGHT_BASED_MEDICATION_IDS = {
+    "daptomycin",
+    "vancomycin_iv",
+    "isoniazid",
+    "ethambutol",
+    "pyrazinamide",
+    "voriconazole",
+    "liposomal_amphotericin_b",
+    "foscarnet",
+    "acyclovir_iv",
+    "ganciclovir_iv",
+}
+DOSEID_WEIGHT_BASED_TMP_SMX_INDICATION_IDS = {
+    "staph_bone_joint",
+    "gnr_bacteremia",
+    "stenotrophomonas",
+    "pjp_treatment",
+}
+DOSEID_HEIGHT_REQUIRED_MEDICATION_IDS = {
+    "daptomycin",
+    "ethambutol",
+    "pyrazinamide",
+    "voriconazole",
+    "liposomal_amphotericin_b",
+    "foscarnet",
+    "acyclovir_iv",
+    "ganciclovir_iv",
+}
+DOSEID_SEX_REQUIRED_MEDICATION_IDS = {
+    "ethambutol",
+    "pyrazinamide",
+    "voriconazole",
+    "liposomal_amphotericin_b",
+    "foscarnet",
+    "ganciclovir_iv",
+}
+DOSEID_FIELD_LABELS = {
+    "medication": "medication or regimen",
+    "renal_function": "serum creatinine or CrCl",
+    "serum_creatinine": "serum creatinine",
+    "age": "age",
+    "sex": "sex",
+    "weight": "weight",
+    "height": "height",
+}
+DOSEID_FOLLOW_UP_FIELD_ORDER = (
+    "medication",
+    "renal_function",
+    "serum_creatinine",
+    "age",
+    "sex",
+    "weight",
+    "height",
+)
+
+
+def _doseid_patient_context_from_partial_input(
+    patient: Any,
+    *,
+    renal_mode: str,
+) -> DoseIDAssistantPatientContext:
+    return DoseIDAssistantPatientContext(
+        ageYears=getattr(patient, "age_years", None),
+        sex=getattr(patient, "sex", None),
+        totalBodyWeightKg=getattr(patient, "total_body_weight_kg", None),
+        heightCm=getattr(patient, "height_cm", None),
+        serumCreatinineMgDl=getattr(patient, "serum_creatinine_mg_dl", None),
+        crclMlMin=getattr(patient, "crcl_ml_min", None),
+        renalMode=renal_mode,
+    )
+
+
+def _doseid_standard_renal_inputs_required(medication_id: str) -> bool:
+    return medication_id not in DOSEID_STANDARD_NONRENAL_MEDICATION_IDS
+
+
+def _doseid_requires_weight(medication_id: str, indication_id: str) -> bool:
+    if medication_id in DOSEID_ALWAYS_WEIGHT_BASED_MEDICATION_IDS:
+        return True
+    if medication_id == "tmp_smx" and indication_id in DOSEID_WEIGHT_BASED_TMP_SMX_INDICATION_IDS:
+        return True
+    if medication_id == "ceftriaxone" and indication_id == "standard_dose":
+        return True
+    return False
+
+
+def _doseid_requires_height(medication_id: str, indication_id: str) -> bool:
+    if medication_id in DOSEID_HEIGHT_REQUIRED_MEDICATION_IDS:
+        return True
+    if medication_id == "tmp_smx" and indication_id in DOSEID_WEIGHT_BASED_TMP_SMX_INDICATION_IDS:
+        return True
+    if medication_id == "ceftriaxone" and indication_id == "standard_dose":
+        return True
+    return False
+
+
+def _doseid_requires_sex(medication_id: str) -> bool:
+    return medication_id in DOSEID_SEX_REQUIRED_MEDICATION_IDS
+
+
+def _doseid_add_missing_reason(
+    reasons_by_field: Dict[str, List[str]],
+    field_id: str,
+    reason: str,
+) -> None:
+    bucket = reasons_by_field.setdefault(field_id, [])
+    if reason not in bucket:
+        bucket.append(reason)
+
+
+def _doseid_reason_text(reasons: List[str]) -> str:
+    if not reasons:
+        return ""
+    if len(reasons) == 1:
+        return reasons[0]
+    return ", ".join(reasons[:-1]) + f", and {reasons[-1]}"
+
+
+def _doseid_follow_up_question(field_id: str, reasons: List[str]) -> DoseIDFollowUpQuestion:
+    reason_text = _doseid_reason_text(reasons)
+    if field_id == "medication":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="Which medication or regimen do you want dosed?",
+            reason="The dose pathway starts with the drug or regimen.",
+        )
+    if field_id == "renal_function":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="What is the serum creatinine, or do you already have a creatinine clearance (CrCl)?",
+            reason=f"I need renal function to place the regimen in the correct renal bucket for {reason_text}.",
+        )
+    if field_id == "serum_creatinine":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="What is the serum creatinine?",
+            reason=f"I need the serum creatinine for {reason_text}.",
+        )
+    if field_id == "age":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="How old is the patient? If you already have a Cockcroft-Gault CrCl, you can send that instead.",
+            reason=f"I need age for {reason_text}.",
+        )
+    if field_id == "sex":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="What is the patient's sex? If you already have a Cockcroft-Gault CrCl, you can send that instead.",
+            reason=f"I need sex for {reason_text}.",
+        )
+    if field_id == "weight":
+        return DoseIDFollowUpQuestion(
+            id=field_id,
+            prompt="What is the patient's weight in kg?",
+            reason=f"I need weight for {reason_text}.",
+        )
+    return DoseIDFollowUpQuestion(
+        id=field_id,
+        prompt="What is the patient's height in cm?",
+        reason=f"I need height for {reason_text}.",
+    )
+
+
+def _doseid_missing_input_questions(
+    *,
+    medication_ids: List[str],
+    indication_ids: Dict[str, str],
+    patient_context: DoseIDAssistantPatientContext,
+) -> List[DoseIDFollowUpQuestion]:
+    reasons_by_field: Dict[str, List[str]] = {}
+    meds_by_id = _assistant_doseid_medications_by_id()
+    if not medication_ids:
+        _doseid_add_missing_reason(reasons_by_field, "medication", "the requested dosing pathway")
+    for medication_id in medication_ids:
+        indication_id = indication_ids.get(medication_id) or default_indication_id(medication_id)
+        medication_label = meds_by_id.get(medication_id).name if meds_by_id.get(medication_id) is not None else medication_id.replace("_", " ")
+        if _doseid_requires_weight(medication_id, indication_id) and patient_context.total_body_weight_kg is None:
+            _doseid_add_missing_reason(reasons_by_field, "weight", f"{medication_label} dosing")
+        if _doseid_requires_height(medication_id, indication_id) and patient_context.height_cm is None:
+            _doseid_add_missing_reason(reasons_by_field, "height", f"{medication_label} body-size adjustment")
+        if _doseid_requires_sex(medication_id) and patient_context.sex is None:
+            _doseid_add_missing_reason(reasons_by_field, "sex", f"{medication_label} body-size adjustment")
+
+        if patient_context.renal_mode != "standard":
+            continue
+
+        if medication_id == "foscarnet":
+            if patient_context.serum_creatinine_mg_dl is None:
+                _doseid_add_missing_reason(reasons_by_field, "serum_creatinine", "foscarnet adjusted creatinine clearance")
+            if patient_context.age_years is None:
+                _doseid_add_missing_reason(reasons_by_field, "age", "foscarnet adjusted creatinine clearance")
+            if patient_context.sex is None:
+                _doseid_add_missing_reason(reasons_by_field, "sex", "foscarnet adjusted creatinine clearance")
+            if patient_context.total_body_weight_kg is None:
+                _doseid_add_missing_reason(reasons_by_field, "weight", "foscarnet mg/kg dosing")
+            if patient_context.height_cm is None:
+                _doseid_add_missing_reason(reasons_by_field, "height", "foscarnet obesity-adjusted dosing weight")
+            continue
+
+        if not _doseid_standard_renal_inputs_required(medication_id):
+            continue
+        if patient_context.crcl_ml_min is not None:
+            continue
+        if patient_context.serum_creatinine_mg_dl is None:
+            _doseid_add_missing_reason(reasons_by_field, "renal_function", f"{medication_label} renal dosing")
+            continue
+        if patient_context.age_years is None:
+            _doseid_add_missing_reason(reasons_by_field, "age", "Cockcroft-Gault renal dosing")
+        if patient_context.sex is None:
+            _doseid_add_missing_reason(reasons_by_field, "sex", "Cockcroft-Gault renal dosing")
+        if patient_context.total_body_weight_kg is None:
+            _doseid_add_missing_reason(reasons_by_field, "weight", "Cockcroft-Gault renal dosing")
+
+    return [
+        _doseid_follow_up_question(field_id, reasons_by_field[field_id])
+        for field_id in DOSEID_FOLLOW_UP_FIELD_ORDER
+        if field_id in reasons_by_field
+    ]
+
+
+def _doseid_recommendations_ready(
+    *,
+    medication_ids: List[str],
+    indication_ids: Dict[str, str],
+    patient_context: DoseIDAssistantPatientContext,
+) -> tuple[List[DoseIDDoseRecommendation], List[str], List[str]]:
+    warnings: List[str] = []
+    recommendations: List[DoseIDDoseRecommendation] = []
+    patient, _ = normalize_patient_from_available_inputs(
+        total_body_weight_kg=patient_context.total_body_weight_kg,
+        age_years=patient_context.age_years,
+        sex=patient_context.sex,
+        height_cm=patient_context.height_cm,
+        serum_creatinine_mg_dl=patient_context.serum_creatinine_mg_dl,
+        crcl_ml_min=patient_context.crcl_ml_min,
+        renal_mode=patient_context.renal_mode,
+    )
+    if patient_context.crcl_ml_min is not None and patient_context.serum_creatinine_mg_dl is None:
+        warnings.append("Direct CrCl was used for renal bucketing. If the underlying estimate is uncertain, confirm the final regimen manually.")
+    for medication_id in medication_ids[:6]:
+        payload = calculate_medication(
+            medication_id=medication_id,
+            patient=patient,
+            renal_mode=patient_context.renal_mode,
+            indication_id=indication_ids.get(medication_id),
+        )
+        recommendations.append(_doseid_recommendation_model(payload))
+    return recommendations, [], warnings
+
+
 def _assistant_build_doseid_analysis(message_text: str) -> DoseIDAssistantAnalysis:
     medication_ids = _assistant_detect_doseid_medication_ids(message_text)
     patient_context = _assistant_parse_doseid_patient_context(message_text)
-    assumptions: List[str] = []
     warnings: List[str] = []
-    missing_inputs: List[str] = []
-
-    if not medication_ids:
-        missing_inputs.append("medication or regimen")
-
-    weight_sensitive_medications = {
-        "daptomycin",
-        "tmp_smx",
-        "isoniazid",
-        "ethambutol",
-        "pyrazinamide",
-        "voriconazole",
-        "liposomal_amphotericin_b",
-        "foscarnet",
-        "acyclovir_iv",
-        "ganciclovir_iv",
+    indication_ids = {
+        medication_id: _assistant_doseid_indication_for_query(medication_id, message_text)
+        for medication_id in medication_ids
     }
-    if any(med_id in weight_sensitive_medications for med_id in medication_ids) and patient_context.total_body_weight_kg is None:
-        missing_inputs.append("weight")
-
-    needs_renal_info = any(patient_context.renal_mode == "standard" for _ in medication_ids)
-    if needs_renal_info and patient_context.crcl_ml_min is None and patient_context.serum_creatinine_mg_dl is None:
-        missing_inputs.append("renal function (serum creatinine or CrCl)")
+    follow_up_questions = _doseid_missing_input_questions(
+        medication_ids=medication_ids,
+        indication_ids=indication_ids,
+        patient_context=patient_context,
+    )
+    missing_inputs = [DOSEID_FIELD_LABELS[item.id] for item in follow_up_questions]
 
     recommendations: List[DoseIDDoseRecommendation] = []
-    if medication_ids and not missing_inputs:
-        patient, patient_assumptions = normalize_patient_from_available_inputs(
-            total_body_weight_kg=patient_context.total_body_weight_kg,
-            age_years=patient_context.age_years,
-            sex=patient_context.sex,
-            height_cm=patient_context.height_cm,
-            serum_creatinine_mg_dl=patient_context.serum_creatinine_mg_dl,
-            crcl_ml_min=patient_context.crcl_ml_min,
-            renal_mode=patient_context.renal_mode,
+    assumptions: List[str] = []
+    if medication_ids and not follow_up_questions:
+        recommendations, assumptions, warnings = _doseid_recommendations_ready(
+            medication_ids=medication_ids,
+            indication_ids=indication_ids,
+            patient_context=patient_context,
         )
-        assumptions.extend(patient_assumptions)
-        if patient_context.crcl_ml_min is not None and patient_context.serum_creatinine_mg_dl is None:
-            warnings.append("Direct CrCl was used for renal bucketing. If the underlying estimate is uncertain, confirm the final regimen manually.")
-        if any(med_id in {"ethambutol", "pyrazinamide", "voriconazole", "liposomal_amphotericin_b", "foscarnet", "ganciclovir_iv"} for med_id in medication_ids):
-            if patient_context.height_cm is None or patient_context.sex is None:
-                warnings.append("Height and/or sex were not provided, so obesity-sensitive body-size estimates may shift with the actual values.")
-        for medication_id in medication_ids[:6]:
-            payload = calculate_medication(
-                medication_id=medication_id,
-                patient=patient,
-                renal_mode=patient_context.renal_mode,
-                indication_id=_assistant_doseid_indication_for_query(medication_id, message_text),
-            )
-            recommendations.append(_doseid_recommendation_model(payload))
 
     medication_names = [
         _assistant_doseid_medications_by_id().get(med_id).name
@@ -6861,6 +7117,7 @@ def _assistant_build_doseid_analysis(message_text: str) -> DoseIDAssistantAnalys
         assumptions=assumptions,
         warnings=warnings,
         missingInputs=missing_inputs,
+        followUpQuestions=follow_up_questions,
     )
 
 
@@ -6870,10 +7127,13 @@ def _assistant_doseid_message(result: DoseIDAssistantAnalysis) -> str:
             "I can help with antimicrobial dosing here. Tell me the medication or regimen plus the renal context, "
             "for example 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35'."
         )
-    if result.missing_inputs:
-        missing = ", ".join(result.missing_inputs)
+    if result.follow_up_questions:
         meds = ", ".join(result.medications)
-        return f"I picked up {meds}, but I still need {missing} to give a dosing recommendation."
+        primary_question = result.follow_up_questions[0].prompt
+        if len(result.follow_up_questions) == 1:
+            return f"I picked up {meds}. {primary_question}"
+        remaining = ", ".join(DOSEID_FIELD_LABELS[item.id] for item in result.follow_up_questions[1:])
+        return f"I picked up {meds}. {primary_question} After that, I’ll also need {remaining}."
     if not result.recommendations:
         return "I picked up the dosing question, but I still need a little more clinical detail before I can calculate a regimen."
     recommendation_summary = "; ".join(
