@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .llm_text_parser import LLMParserError, _extract_json, _try_import_openai
 from .mechid_engine import canonical_antibiotic_aliases, list_mechid_organisms, normalize_organism, resolve_antibiotic_name
-from .mechid_text_parser import parse_mechid_text
+from .mechid_text_parser import infer_phenotype_defaults, parse_mechid_text
 
 
 ASTResult = Literal["Susceptible", "Intermediate", "Resistant"]
@@ -63,8 +63,9 @@ def _build_instructions(catalog: Dict[str, Any]) -> str:
         "You extract lay or clinical microbiology questions into a MechID input JSON.\n"
         "Return JSON only.\n"
         "Your job is to identify the organism, named susceptibility results, and basic treatment context.\n"
+        "The case may involve gram-negatives, staphylococci, enterococci, streptococci, anaerobes, or mycobacteria.\n"
         "If multiple organisms are explicitly mentioned, set organism to null and list them in mentionedOrganisms.\n"
-        "Use resistancePhenotypes for terms like MRSA, MSSA, VRE, ESBL, or CRE when they are explicitly stated.\n"
+        "Use resistancePhenotypes for explicit labels such as MRSA, MSSA, MR-CoNS, VRE, VRSA, penicillin-resistant pneumococcus, ESBL, CRE, or named carbapenemases.\n"
         "Use only organism names and antibiotics present in the provided catalog.\n"
         "Do not infer susceptibility results that were not actually stated.\n"
         "Normalize susceptibility values to exactly one of: Susceptible, Intermediate, Resistant.\n"
@@ -145,7 +146,16 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
     warnings: List[str] = []
     organism = payload.organism
     mentioned_organisms = [item for item in payload.mentioned_organisms if item]
-    resistance_phenotypes = [item for item in payload.resistance_phenotypes if item]
+    resistance_phenotypes: List[str] = []
+    for item in payload.resistance_phenotypes:
+        if not item:
+            continue
+        rule_labels = parse_mechid_text(str(item)).get("resistancePhenotypes", [])
+        if rule_labels:
+            resistance_phenotypes.extend(rule_labels)
+        else:
+            resistance_phenotypes.append(str(item).strip())
+    resistance_phenotypes = list(dict.fromkeys(item for item in resistance_phenotypes if item))
     susceptibility_results: Dict[str, ASTResult] = {}
     tx_context = {
         "syndrome": payload.tx_context.get("syndrome", "Not specified") or "Not specified",
@@ -173,6 +183,9 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
             normalized_mentions.append(entry)
     mentioned_organisms = list(dict.fromkeys(normalized_mentions))
 
+    organism, phenotype_defaults, phenotype_warnings = infer_phenotype_defaults(organism, resistance_phenotypes)
+    warnings.extend(phenotype_warnings)
+
     if organism:
         for raw_name, raw_state in payload.susceptibility_results.items():
             embedded_carb = _embedded_carbapenemase_row(raw_name, raw_state)
@@ -191,6 +204,8 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
                 warnings.append(f"Ignored unsupported antibiotic for {organism}: {raw_name}")
                 continue
             susceptibility_results[antibiotic] = raw_state
+        for antibiotic, state in phenotype_defaults.items():
+            susceptibility_results.setdefault(antibiotic, state)
 
     requires_confirmation = payload.confidence == "low" or organism is None or not susceptibility_results
     if payload.ambiguities:

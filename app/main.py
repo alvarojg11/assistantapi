@@ -3305,6 +3305,8 @@ def _friendly_mechid_therapy(
     result: MechIDAnalyzeResponse,
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
+    organism_local = parsed.organism if parsed is not None else None
+
     def _option_overview(
         syndrome_local: str,
         focus_local: str,
@@ -3418,21 +3420,102 @@ def _friendly_mechid_therapy(
 
         return None
 
-    def _select_preferred_agent(susceptible_agents: list[str]) -> str | None:
+    def _narrow_agent_preference(
+        susceptible_agents: list[str],
+        syndrome_local: str,
+        focus_local: str,
+    ) -> str | None:
+        susceptible = list(dict.fromkeys(susceptible_agents))
+        susceptible_set = set(susceptible)
+        if not susceptible:
+            return None
+
+        if syndrome_local == "Uncomplicated cystitis":
+            for candidate in ("Nitrofurantoin", "Trimethoprim/Sulfamethoxazole", "Fosfomycin"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local == "Staphylococcus aureus":
+            for candidate in ("Nafcillin/Oxacillin", "Cefazolin", "Linezolid", "Daptomycin", "Vancomycin"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local == "Staphylococcus lugdunensis":
+            for candidate in ("Nafcillin/Oxacillin", "Cefazolin", "Vancomycin", "Linezolid"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local and organism_local.startswith("Enterococcus"):
+            for candidate in ("Ampicillin", "Penicillin", "Vancomycin", "Linezolid", "Daptomycin"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local == "Streptococcus pneumoniae":
+            if syndrome_local == "CNS infection":
+                for candidate in ("Ceftriaxone", "Cefotaxime", "Vancomycin"):
+                    if candidate in susceptible_set:
+                        return candidate
+            for candidate in ("Penicillin", "Ceftriaxone", "Cefotaxime", "Levofloxacin"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local in {"β-hemolytic Streptococcus (GAS/GBS)", "Viridans group streptococci (VGS)"}:
+            for candidate in ("Penicillin", "Ceftriaxone", "Vancomycin"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local in {
+            "Escherichia coli",
+            "Klebsiella pneumoniae",
+            "Klebsiella oxytoca",
+            "Citrobacter koseri",
+            "Proteus mirabilis",
+            "Salmonella enterica",
+        }:
+            if syndrome_local == "Complicated UTI / pyelonephritis":
+                for candidate in ("Ceftriaxone", "Trimethoprim/Sulfamethoxazole", "Ciprofloxacin", "Levofloxacin", "Cefepime"):
+                    if candidate in susceptible_set:
+                        return candidate
+            if syndrome_local == "Bloodstream infection" and focus_local != "Endocarditis":
+                for candidate in ("Ceftriaxone", "Cefepime", "Piperacillin/Tazobactam"):
+                    if candidate in susceptible_set:
+                        return candidate
+            for candidate in ("Ceftriaxone", "Cefepime", "Piperacillin/Tazobactam", "Aztreonam"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local in {
+            "Enterobacter cloacae complex",
+            "Klebsiella aerogenes",
+            "Citrobacter freundii complex",
+            "Serratia marcescens",
+            "Morganella morganii",
+            "Proteus vulgaris group",
+        }:
+            for candidate in ("Cefepime", "Meropenem", "Imipenem", "Ertapenem", "Piperacillin/Tazobactam"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        if organism_local == "Pseudomonas aeruginosa":
+            for candidate in ("Cefepime", "Piperacillin/Tazobactam", "Ceftazidime", "Aztreonam", "Meropenem", "Imipenem"):
+                if candidate in susceptible_set:
+                    return candidate
+
+        carbapenem_agents = {"Meropenem", "Imipenem", "Ertapenem", "Doripenem"}
+        non_carbapenems = [agent for agent in susceptible if agent not in carbapenem_agents]
+        if non_carbapenems:
+            return non_carbapenems[0]
+        return susceptible[0]
+
+    def _select_preferred_agent(susceptible_agents: list[str], syndrome_local: str, focus_local: str) -> str | None:
         carbapenem_agents = {"Meropenem", "Imipenem", "Ertapenem", "Doripenem"}
         carbapenem_resistance_present = any(
             (provided_results or result.final_results).get(agent) == "Resistant"
             for agent in carbapenem_agents
         )
         if carbapenem_resistance_present:
-            non_carbapenems = [agent for agent in susceptible_agents if agent not in carbapenem_agents]
-            if non_carbapenems:
-                return non_carbapenems[0]
-            return None
-        for candidate in ("Meropenem", "Imipenem", "Ertapenem"):
-            if candidate in susceptible_agents:
-                return candidate
-        return susceptible_agents[0] if susceptible_agents else None
+            return _narrow_agent_preference(susceptible_agents, syndrome_local, focus_local)
+        return _narrow_agent_preference(susceptible_agents, syndrome_local, focus_local)
 
     def _recommendation_sentence(
         selected_note_local: str | None,
@@ -3508,6 +3591,10 @@ def _friendly_mechid_therapy(
                 for token in ("serious infections", "high-risk syndrome", "invasive disease", "severe sepsis", "bacteremia", "pneumonia")
             ):
                 score += 4
+            if any(token in note_lower for token in ("narrower cephalosporin", "ceftriaxone is preferred", "narrowest dependable iv")):
+                score += 3
+            if "broadly susceptible enterobacterales pattern" in note_lower:
+                score += 5
             if syndrome_local == "Uncomplicated cystitis" and any(token in note_lower for token in ("cystitis", "urinary", "oral option")):
                 score += 4
             if syndrome_local == "Complicated UTI / pyelonephritis" and any(
@@ -3516,6 +3603,8 @@ def _friendly_mechid_therapy(
                 score += 4
             if syndrome_local == "Pneumonia (HAP/VAP or severe CAP)" and "pneumonia" in note_lower:
                 score += 4
+            if carbapenemase_result_local != "Positive" and any(token in note_lower for token in ("meropenem", "imipenem", "ertapenem", "carbapenem")):
+                score -= 2
             if carbapenemase_result_local == "Positive" and any(
                 token in note_lower
                 for token in (
@@ -3550,7 +3639,7 @@ def _friendly_mechid_therapy(
     severity = parsed.tx_context.severity if parsed is not None else "Not specified"
     focus = parsed.tx_context.focus_detail if parsed is not None else "Not specified"
     selected_note = _select_mechid_therapy_note()
-    preferred = _select_preferred_agent(susceptible_agents)
+    preferred = _select_preferred_agent(susceptible_agents, syndrome, focus)
     option_overview = _option_overview(syndrome, focus, susceptible_agents)
     recommendation = _recommendation_sentence(
         selected_note,

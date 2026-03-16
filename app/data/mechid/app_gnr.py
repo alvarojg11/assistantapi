@@ -1075,6 +1075,8 @@ def tx_ecoli(R, tx_ctx=None):
     carb_any_R = _any_R(R, CARBAPENEMS)
     piptazo = _get(R, "Piperacillin/Tazobactam")
     ctx = _get(R, "Ceftriaxone")
+    fep = _get(R, "Cefepime")
+    caz = _get(R, "Ceftazidime")
     cefox = _get(R, "Cefoxitin")
     flags = _gnr_tx_flags(tx_ctx)
 
@@ -1084,6 +1086,24 @@ def tx_ecoli(R, tx_ctx=None):
        _any_R(R, ["Ciprofloxacin", "Levofloxacin", "Moxifloxacin"]) and \
        not _any_S(R, ["Ciprofloxacin", "Levofloxacin", "Moxifloxacin"]):
         out.append("**Fluoroquinolone Resistant but beta-lactam Susceptible** → prefer a **β-lactam** that is susceptible.")
+
+    broad_core_agents = ["Ceftriaxone", "Cefepime", "Piperacillin/Tazobactam", "Meropenem", "Imipenem", "Ertapenem"]
+    tested_broad_core = [agent for agent in broad_core_agents if _get(R, agent) is not None]
+    if tested_broad_core and all(_get(R, agent) == "Susceptible" for agent in tested_broad_core):
+        if flags["high_risk"]:
+            out.append(
+                "**Broadly susceptible Enterobacterales pattern** → even for invasive infection, I would usually start with the narrowest dependable IV β-lactam that matches the source, "
+                "often **ceftriaxone** when appropriate, rather than escalating to a carbapenem."
+            )
+        elif flags["lower_risk_urinary"]:
+            out.append(
+                "**Broadly susceptible Enterobacterales pattern** → for urinary infection I would usually choose a narrower agent such as **ceftriaxone** or an appropriate oral option if available, not a carbapenem."
+            )
+        else:
+            out.append(
+                "**Broadly susceptible Enterobacterales pattern** → a **narrower cephalosporin** is usually preferred when clinically appropriate, "
+                "often **ceftriaxone**, rather than a carbapenem."
+            )
 
     # ESBL
     if _any_R(R, THIRD_GENS) and not _any_R(R, CARBAPENEMS):
@@ -1160,6 +1180,13 @@ def tx_ecoli(R, tx_ctx=None):
     # CRE signal
     if _get(R, "Meropenem") == "Resistant" and _get(R, "Ertapenem") == "Resistant":
         out.append("**CRE phenotype** → isolate should be tested for **carbapenemase**.\n")
+
+    if not carb_any_R and not _any_R(R, THIRD_GENS) and ctx == "Susceptible":
+        if fep == "Susceptible" and caz == "Susceptible":
+            out.append(
+                "**Ceftriaxone/Cefepime/Ceftazidime all susceptible without carbapenem resistance** → this is not a reason to jump to meropenem; "
+                "prefer the narrowest active cephalosporin that fits the infection source."
+            )
 
     _append_ast_consistency_cautions(out, R)
 

@@ -22,12 +22,33 @@ ORGANISM_ALIASES = {
     "klebsiella": "Klebsiella pneumoniae",
     "pseudomonas": "Pseudomonas aeruginosa",
     "acinetobacter": "Acinetobacter baumannii complex",
+    "cons": "Coagulase-negative Staphylococcus",
+    "coagulase negative staphylococcus": "Coagulase-negative Staphylococcus",
+    "coagulase-negative staphylococcus": "Coagulase-negative Staphylococcus",
     "mrsa": "Staphylococcus aureus",
     "staph aureus": "Staphylococcus aureus",
     "staphylococcus aureus": "Staphylococcus aureus",
     "s aureus": "Staphylococcus aureus",
+    "staph epidermidis": "Coagulase-negative Staphylococcus",
+    "staphylococcus epidermidis": "Coagulase-negative Staphylococcus",
+    "s epidermidis": "Coagulase-negative Staphylococcus",
+    "staph lugdunensis": "Staphylococcus lugdunensis",
+    "staphylococcus lugdunensis": "Staphylococcus lugdunensis",
+    "s lugdunensis": "Staphylococcus lugdunensis",
+    "enterococcus": "Enterococcus faecium",
+    "e faecium": "Enterococcus faecium",
+    "e. faecium": "Enterococcus faecium",
+    "enterococcus faecium": "Enterococcus faecium",
+    "e faecalis": "Enterococcus faecalis",
+    "e. faecalis": "Enterococcus faecalis",
+    "enterococcus faecalis": "Enterococcus faecalis",
     "vre": "Enterococcus faecium",
     "pneumococcus": "Streptococcus pneumoniae",
+    "strep pneumo": "Streptococcus pneumoniae",
+    "streptococcus pneumoniae": "Streptococcus pneumoniae",
+    "s pneumoniae": "Streptococcus pneumoniae",
+    "vgs": "Viridans group streptococci (VGS)",
+    "viridans strep": "Viridans group streptococci (VGS)",
     "group b strep": "β-hemolytic Streptococcus (GAS/GBS)",
     "group b streptococcus": "β-hemolytic Streptococcus (GAS/GBS)",
     "gbs": "β-hemolytic Streptococcus (GAS/GBS)",
@@ -38,30 +59,53 @@ ORGANISM_ALIASES = {
 }
 
 
-PHENOTYPE_HINTS = {
-    "mrsa": "MRSA",
-    "mssa": "MSSA",
-    "vre": "VRE",
-    "esbl": "ESBL",
-    "cre": "CRE",
-    "kpc": "KPC carbapenemase",
-    "blakpc": "KPC carbapenemase",
-    "bla kpc": "KPC carbapenemase",
-    "ndm": "NDM carbapenemase",
-    "blandm": "NDM carbapenemase",
-    "bla ndm": "NDM carbapenemase",
-    "vim": "VIM carbapenemase",
-    "blavim": "VIM carbapenemase",
-    "bla vim": "VIM carbapenemase",
-    "imp": "IMP carbapenemase",
-    "blaimp": "IMP carbapenemase",
-    "bla imp": "IMP carbapenemase",
-    "oxa-48": "OXA-48-like carbapenemase",
-    "oxa 48": "OXA-48-like carbapenemase",
-    "oxa48": "OXA-48-like carbapenemase",
-    "oxa48-like": "OXA-48-like carbapenemase",
-    "oxa 48 like": "OXA-48-like carbapenemase",
-    "mbl": "MBL carbapenemase",
+PHENOTYPE_PATTERNS = (
+    (r"\bmrsa\b|\bmethicillin[- ]resistant staphylococcus aureus\b|\boxacillin[- ]resistant staphylococcus aureus\b", "MRSA"),
+    (r"\bmssa\b|\bmethicillin[- ]susceptible staphylococcus aureus\b|\boxacillin[- ]susceptible staphylococcus aureus\b", "MSSA"),
+    (
+        r"\bmrse\b|\bmr[- ]?cons\b|\bmethicillin[- ]resistant coagulase[- ]negative staphylococc(?:us|i)\b|\bmethicillin[- ]resistant staphylococcus epidermidis\b",
+        "MR-CoNS",
+    ),
+    (
+        r"\bms[- ]?cons\b|\bmethicillin[- ]susceptible coagulase[- ]negative staphylococc(?:us|i)\b|\bmethicillin[- ]susceptible staphylococcus epidermidis\b",
+        "MS-CoNS",
+    ),
+    (r"\bvre\b|\bvancomycin[- ]resistant enterococc(?:us|i)\b", "VRE"),
+    (r"\bvrsa\b|\bvancomycin[- ]resistant staphylococcus aureus\b", "VRSA"),
+    (
+        r"\bprsp\b|\bpenicillin[- ](?:resistant|non[- ]susceptible) streptococcus pneumoniae\b|\bpenicillin[- ](?:resistant|non[- ]susceptible) pneumococc(?:us|i)\b",
+        "Penicillin-resistant pneumococcus",
+    ),
+    (r"\besbl\b", "ESBL"),
+    (r"\bcre\b", "CRE"),
+    (r"\b(?:bla[- ]?)?kpc\b", "KPC carbapenemase"),
+    (r"\b(?:bla[- ]?)?ndm\b", "NDM carbapenemase"),
+    (r"\b(?:bla[- ]?)?vim\b", "VIM carbapenemase"),
+    (r"\b(?:bla[- ]?)?imp(?:[- ]?type)?\b", "IMP carbapenemase"),
+    (r"\boxa(?:[- ]?48(?:[- ]?like)?)\b|\boxa48(?:[- ]?like)?\b", "OXA-48-like carbapenemase"),
+    (r"\bmbl\b|\bmetallo[- ]beta[- ]lactamase\b", "MBL carbapenemase"),
+)
+
+
+PHENOTYPE_ORGANISM_HINTS = {
+    "MRSA": "Staphylococcus aureus",
+    "MSSA": "Staphylococcus aureus",
+    "MR-CoNS": "Coagulase-negative Staphylococcus",
+    "MS-CoNS": "Coagulase-negative Staphylococcus",
+    "VRE": "Enterococcus faecium",
+    "VRSA": "Staphylococcus aureus",
+    "Penicillin-resistant pneumococcus": "Streptococcus pneumoniae",
+}
+
+
+PHENOTYPE_AST_DEFAULTS = {
+    "MRSA": (("Nafcillin/Oxacillin", "Resistant"), ("Cefoxitin", "Resistant")),
+    "MSSA": (("Nafcillin/Oxacillin", "Susceptible"), ("Cefoxitin", "Susceptible")),
+    "MR-CoNS": (("Nafcillin/Oxacillin", "Resistant"), ("Cefoxitin", "Resistant")),
+    "MS-CoNS": (("Nafcillin/Oxacillin", "Susceptible"), ("Cefoxitin", "Susceptible")),
+    "VRE": (("Vancomycin", "Resistant"),),
+    "VRSA": (("Vancomycin", "Resistant"),),
+    "Penicillin-resistant pneumococcus": (("Penicillin", "Resistant"),),
 }
 
 SYNDROME_HINTS = (
@@ -156,10 +200,55 @@ def _find_organism(text_norm: str) -> str | None:
 
 def _find_phenotype_hints(text_norm: str) -> List[str]:
     hints: List[str] = []
-    for token, label in PHENOTYPE_HINTS.items():
-        if re.search(rf"(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])", text_norm):
+    for pattern, label in PHENOTYPE_PATTERNS:
+        if re.search(pattern, text_norm):
             hints.append(label)
     return hints
+
+
+def infer_phenotype_defaults(
+    organism: str | None,
+    phenotype_hints: List[str],
+) -> tuple[str | None, Dict[str, str], List[str]]:
+    resolved_organism = organism
+    warnings: List[str] = []
+    phenotype_defaults: Dict[str, str] = {}
+    unique_hints = list(dict.fromkeys(phenotype_hints))
+
+    for hint in unique_hints:
+        hint_organism = PHENOTYPE_ORGANISM_HINTS.get(hint)
+        if hint_organism is None:
+            continue
+        if resolved_organism is None:
+            resolved_organism = hint_organism
+            warnings.append(f"Inferred organism from phenotype label: {hint}.")
+            continue
+        try:
+            current_normalized = normalize_organism(resolved_organism)
+            hint_normalized = normalize_organism(hint_organism)
+        except Exception:
+            current_normalized = resolved_organism
+            hint_normalized = hint_organism
+        if current_normalized != hint_normalized:
+            warnings.append(
+                f"Phenotype label {hint} suggests {hint_organism}, which does not match the extracted organism {resolved_organism}."
+            )
+
+    if resolved_organism is None:
+        return None, phenotype_defaults, warnings
+
+    for hint in unique_hints:
+        for antibiotic_name, state in PHENOTYPE_AST_DEFAULTS.get(hint, ()):
+            antibiotic = resolve_antibiotic_name(resolved_organism, antibiotic_name)
+            if antibiotic is None:
+                continue
+            phenotype_defaults.setdefault(antibiotic, state)
+
+    if phenotype_defaults:
+        derived_calls = ", ".join(f"{drug} {state}" for drug, state in phenotype_defaults.items())
+        warnings.append(f"Applied phenotype-derived susceptibility defaults: {derived_calls}.")
+
+    return resolved_organism, phenotype_defaults, warnings
 
 
 def _extract_state_segments(text_norm: str) -> Dict[str, str]:
@@ -306,10 +395,20 @@ def _infer_tx_context(text_norm: str) -> Dict[str, str]:
 def parse_mechid_text(text: str) -> Dict[str, object]:
     text_norm = _normalize_text(text)
     organisms = _find_organisms(text_norm)
-    organism = organisms[0] if len(organisms) == 1 else None
     phenotype_hints = _find_phenotype_hints(text_norm)
     warnings: List[str] = []
-    if not organisms:
+    organism = organisms[0] if len(organisms) == 1 else None
+    if len(organisms) > 1:
+        warnings.append("I detected more than one organism, so I cannot run single-isolate MechID inference yet.")
+
+    try:
+        normalized_org = normalize_organism(organism) if organism is not None else None
+    except Exception:
+        normalized_org = organism
+    normalized_org, phenotype_defaults, phenotype_warnings = infer_phenotype_defaults(normalized_org, phenotype_hints)
+    warnings.extend(phenotype_warnings)
+
+    if not organisms and normalized_org is None:
         warnings.append("Could not confidently identify an organism from the text.")
         return {
             "organism": None,
@@ -320,14 +419,10 @@ def parse_mechid_text(text: str) -> Dict[str, object]:
             "warnings": warnings,
             "requiresConfirmation": True,
         }
-    if len(organisms) > 1:
-        warnings.append("I detected more than one organism, so I cannot run single-isolate MechID inference yet.")
 
-    try:
-        normalized_org = normalize_organism(organism) if organism is not None else None
-    except Exception:
-        normalized_org = organism
     results = _extract_antibiotic_results(text_norm, normalized_org) if normalized_org else {}
+    for antibiotic, state in phenotype_defaults.items():
+        results.setdefault(antibiotic, state)
     if not results:
         warnings.append("No susceptibility results were confidently extracted from the text.")
     return {

@@ -113,6 +113,61 @@
         color: var(--muted);
         max-width: 60ch;
       }
+      .launchpad {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .start-card {
+        text-align: left;
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 250, 240, 0.9)),
+          rgba(255, 255, 255, 0.8);
+        border-radius: 18px;
+        padding: 15px;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+      }
+      .start-card:hover {
+        transform: translateY(-2px);
+        border-color: rgba(14, 107, 91, 0.35);
+        box-shadow: 0 18px 40px rgba(28, 24, 19, 0.12);
+      }
+      .start-card.active {
+        border-color: rgba(14, 107, 91, 0.48);
+        box-shadow: 0 16px 34px rgba(14, 107, 91, 0.12);
+      }
+      .start-card .kicker {
+        display: inline-flex;
+        margin-bottom: 10px;
+        padding: 5px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: rgba(102, 94, 82, 0.08);
+      }
+      .start-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 16px;
+        line-height: 1.2;
+      }
+      .start-card p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+      .start-card .example {
+        display: block;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #36506a;
+      }
 
       .status-card {
         padding: 14px;
@@ -153,8 +208,73 @@
       .chat-card {
         padding: 14px;
         display: grid;
-        grid-template-rows: auto minmax(280px, 1fr) auto auto;
+        grid-template-rows: auto auto minmax(280px, 1fr) auto auto;
         min-height: 68vh;
+      }
+      .progress-strip {
+        margin-bottom: 12px;
+        padding: 12px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 245, 236, 0.92));
+        border: 1px solid rgba(200, 190, 169, 0.85);
+      }
+      .progress-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 10px;
+      }
+      .progress-title {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+      .progress-meta {
+        max-width: 36ch;
+        text-align: right;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+      .progress-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .progress-step {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 11px;
+        border-radius: 999px;
+        border: 1px solid rgba(200, 190, 169, 0.9);
+        background: rgba(255, 255, 255, 0.62);
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .progress-step::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: rgba(102, 94, 82, 0.22);
+      }
+      .progress-step.completed {
+        color: #0c5d4f;
+        border-color: rgba(14, 107, 91, 0.25);
+        background: rgba(14, 107, 91, 0.08);
+      }
+      .progress-step.completed::before {
+        background: linear-gradient(135deg, #0f7664, #58b8a7);
+      }
+      .progress-step.current {
+        color: #25416f;
+        border-color: rgba(35, 74, 138, 0.28);
+        background: rgba(35, 74, 138, 0.08);
+      }
+      .progress-step.current::before {
+        background: linear-gradient(135deg, #2d5f9d, #5a8fd6);
       }
 
       .toolbar {
@@ -217,6 +337,7 @@
       .messages {
         overflow: auto;
         padding-right: 4px;
+        padding-bottom: 8px;
         display: grid;
         gap: 10px;
         align-content: start;
@@ -308,18 +429,36 @@
         margin-top: 12px;
         display: grid;
         gap: 10px;
+        position: sticky;
+        bottom: 0;
+        padding-top: 8px;
+        background: linear-gradient(180deg, rgba(243, 239, 229, 0), rgba(243, 239, 229, 0.88) 28%, rgba(243, 239, 229, 0.98));
       }
       .composer textarea {
         min-height: 92px;
-        resize: vertical;
+        max-height: 220px;
+        resize: none;
       }
       .composer-actions {
         display: grid;
         gap: 10px;
       }
+      .composer-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
       .composer-hint {
         color: var(--muted);
         font-size: 12px;
+      }
+      .composer-shortcut {
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
       .btn-row {
         display: flex;
@@ -478,11 +617,16 @@
 
       @media (max-width: 1024px) {
         .mast { grid-template-columns: 1fr; }
+        .launchpad { grid-template-columns: 1fr; }
         .workspace { grid-template-columns: 1fr; }
         .chat-card, .side-card { min-height: auto; }
+        .progress-head { flex-direction: column; }
+        .progress-meta { max-width: none; text-align: left; }
       }
       @media (max-width: 640px) {
-        .btn-row { grid-template-columns: 1fr; }
+        .btn-row { width: 100%; }
+        .btn { flex: 1 1 calc(50% - 8px); }
+        .composer-meta { align-items: flex-start; }
       }
       @media (prefers-reduced-motion: reduce) {
         * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -496,14 +640,45 @@
           <div class="eyebrow"><span class="dot" aria-hidden="true"></span> ID Consult Interface</div>
           <h1>ID Consultant Assistant</h1>
           <p>
-            A conversational layer for your ID consultant API. Pick a syndrome or resistance workflow, choose a pretest context when needed,
-            describe the case in plain language, and get an evidence-backed probability update, mechanism assessment, and recommendation.
+            A conversational infectious diseases workbench for syndrome diagnosis, resistance interpretation, and immunosuppression planning.
+            Paste the consult question in plain language, or start in one of the focused lanes below.
           </p>
+        </div>
+        <div class="launchpad" id="launchpad" aria-label="Quick start workflows">
+          <button type="button" class="start-card" data-workflow="probid">
+            <span class="kicker">Diagnostic lane</span>
+            <strong>Work up a syndrome</strong>
+            <p>Estimate post-test probability from symptoms, microbiology, imaging, and high-yield findings.</p>
+            <span class="example">Example: fever, hypoxemia, lobar infiltrate, positive sputum culture.</span>
+          </button>
+          <button type="button" class="start-card" data-workflow="mechid">
+            <span class="kicker">Resistance lane</span>
+            <strong>Interpret organism + AST</strong>
+            <p>Turn a susceptibility pattern into likely mechanisms, cautions, and therapy guidance.</p>
+            <span class="example">Example: E. coli resistant to ceftriaxone, susceptible to meropenem, bacteremia.</span>
+          </button>
+          <button type="button" class="start-card" data-workflow="immunoid">
+            <span class="kicker">Prevention lane</span>
+            <strong>Screen immunosuppression risk</strong>
+            <p>Build a screening and prophylaxis checklist before steroids, biologics, chemotherapy, or transplant therapy.</p>
+            <span class="example">Example: rituximab plus prednisone 20 mg daily, anti-HBc positive.</span>
+          </button>
         </div>
       </section>
 
       <section class="workspace" aria-label="Assistant workspace">
         <main class="chat-card">
+          <section class="progress-strip" aria-label="Consult progress">
+            <div class="progress-head">
+              <div>
+                <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Consult journey</div>
+                <div class="progress-title" id="progressTitle">Choose a workflow or paste a consult question</div>
+              </div>
+              <div class="progress-meta" id="progressMeta">The assistant can route syndrome, resistance, and immunosuppression questions from plain language.</div>
+            </div>
+            <div class="progress-steps" id="progressSteps"></div>
+          </section>
+
           <div class="system-note" id="helpBanner">
             I’m your ID Consultant Assistant. Describe a syndrome case in plain language, or use the resistance mechanism pathway for organism plus AST interpretation.
           </div>
@@ -516,14 +691,17 @@
             <label for="userInput" class="hidden">Your message</label>
             <textarea
               id="userInput"
-              placeholder="Type a syndrome (e.g., 'community-acquired pneumonia') or describe the case when prompted..."
+              placeholder="Paste the consult question in plain language, or choose a workflow above..."
             ></textarea>
             <div class="composer-actions">
-              <div class="composer-hint" id="composerHint">Tip: You can click options or type naturally.</div>
+              <div class="composer-meta">
+                <div class="composer-hint" id="composerHint">Tip: You can click options or type naturally.</div>
+                <div class="composer-shortcut">Enter sends. Shift+Enter adds a line.</div>
+              </div>
               <div class="btn-row">
                 <button type="button" class="btn" id="restartBtn">Restart</button>
                 <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
-                <button type="button" class="btn" id="imageBtn">Upload antibiogram</button>
+                <button type="button" class="btn" id="imageBtn">Upload isolate image</button>
                 <input type="file" id="imageInput" class="hidden" accept="image/*" />
                 <button type="button" class="btn consult hidden" id="consultBtn">Give consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
@@ -598,8 +776,12 @@
         imageBtn: document.getElementById("imageBtn"),
         imageInput: document.getElementById("imageInput"),
         consultBtn: document.getElementById("consultBtn"),
+        launchpad: document.getElementById("launchpad"),
         composerHint: document.getElementById("composerHint"),
         helpBanner: document.getElementById("helpBanner"),
+        progressTitle: document.getElementById("progressTitle"),
+        progressMeta: document.getElementById("progressMeta"),
+        progressSteps: document.getElementById("progressSteps"),
         summaryStage: document.getElementById("summaryStage"),
         summaryModule: document.getElementById("summaryModule"),
         summaryPreset: document.getElementById("summaryPreset"),
@@ -613,6 +795,226 @@
         rawResponse: document.getElementById("rawResponse"),
       };
 
+      const WORKFLOW_LABELS = {
+        probid: "Syndrome diagnosis",
+        mechid: "Resistance interpretation",
+        immunoid: "Immunosuppression checklist",
+      };
+
+      const STAGE_LABELS = {
+        select_module: "Choose workflow",
+        select_syndrome_module: "Pick syndrome",
+        select_preset: "Pick care setting",
+        select_endo_blood_culture_context: "Pick culture context",
+        select_pretest_factors: "Baseline modifiers",
+        describe_case: "Describe case",
+        confirm_case: "Review case",
+        mechid_describe: "Paste isolate + AST",
+        mechid_confirm: "Review extraction",
+        immunoid_select_agents: "Select exposure",
+        immunoid_collect_context: "Answer missing context",
+        select_consult_focus: "Choose focus",
+        done: "Consult ready",
+      };
+
+      const PROGRESS_STEPS = {
+        probid: [
+          { key: "workflow", label: "Workflow" },
+          { key: "syndrome", label: "Syndrome" },
+          { key: "context", label: "Context" },
+          { key: "case", label: "Case" },
+          { key: "review", label: "Review" },
+          { key: "result", label: "Result" },
+        ],
+        mechid: [
+          { key: "workflow", label: "Workflow" },
+          { key: "isolate", label: "Isolate" },
+          { key: "review", label: "Review" },
+          { key: "result", label: "Impression" },
+        ],
+        immunoid: [
+          { key: "workflow", label: "Workflow" },
+          { key: "exposure", label: "Exposure" },
+          { key: "context", label: "Context" },
+          { key: "result", label: "Checklist" },
+        ],
+      };
+
+      function workflowLabel(workflow) {
+        return WORKFLOW_LABELS[workflow] || "Consult workflow";
+      }
+
+      function stageLabel(stage) {
+        return STAGE_LABELS[stage] || "In progress";
+      }
+
+      function progressKeyForState(assistantState = {}) {
+        const workflow = assistantState.workflow || "probid";
+        const stage = assistantState.stage || "select_module";
+        if (workflow === "mechid") {
+          if (stage === "select_module") return "workflow";
+          if (stage === "mechid_describe") return "isolate";
+          if (stage === "mechid_confirm") return "review";
+          if (stage === "done") return "result";
+          return "isolate";
+        }
+        if (workflow === "immunoid") {
+          if (stage === "select_module") return "workflow";
+          if (stage === "immunoid_select_agents") return "exposure";
+          if (stage === "immunoid_collect_context") return "context";
+          if (stage === "done") return "result";
+          return "exposure";
+        }
+        if (stage === "select_module") return "workflow";
+        if (stage === "select_syndrome_module") return "syndrome";
+        if (["select_preset", "select_endo_blood_culture_context", "select_pretest_factors", "select_consult_focus"].includes(stage)) return "context";
+        if (stage === "describe_case") return "case";
+        if (stage === "confirm_case") return "review";
+        if (stage === "done") return "result";
+        return "workflow";
+      }
+
+      function progressMetaForState(assistantState = {}) {
+        const workflow = assistantState.workflow || null;
+        const stage = assistantState.stage || "select_module";
+        const section = assistantState.caseSection || null;
+        const sectionLabelMap = {
+          exam_vitals: "Capture symptoms, vitals, and exam findings.",
+          lab: "Add the most discriminating laboratory results.",
+          micro: "Add cultures, PCR, or susceptibility data.",
+          imaging: "Add the imaging result that changes probability.",
+        };
+        if (stage === "select_module") {
+          return "Choose a focused lane, or paste the full question and let the assistant route it.";
+        }
+        if (stage === "select_syndrome_module") {
+          return "Pick the infectious syndrome you want to work up.";
+        }
+        if (stage === "select_preset" || stage === "select_endo_blood_culture_context") {
+          return "Confirm the clinical setting so the baseline context is correct.";
+        }
+        if (stage === "select_pretest_factors") {
+          return "Add only the baseline risk factors that truly change the starting probability.";
+        }
+        if (stage === "describe_case") {
+          return sectionLabelMap[section] || "Describe the case in natural language and click Send when ready.";
+        }
+        if (stage === "confirm_case") {
+          return "Review what the assistant extracted, then add any missing high-yield findings.";
+        }
+        if (workflow === "mechid" && stage === "mechid_describe") {
+          return "Paste the organism, isolate report, syndrome, and any severity clues in one message.";
+        }
+        if (workflow === "mechid" && stage === "mechid_confirm") {
+          return "Confirm the extraction before asking for the consultant impression.";
+        }
+        if (workflow === "immunoid" && stage === "immunoid_select_agents") {
+          return "List the planned immunosuppressive drugs or regimen.";
+        }
+        if (workflow === "immunoid" && stage === "immunoid_collect_context") {
+          return "Answer the remaining screening or prophylaxis questions to finish the checklist.";
+        }
+        if (stage === "done") {
+          return "Review the assessment, then restart or ask a follow-up question.";
+        }
+        return "Continue the consult using the suggested options or free text.";
+      }
+
+      function placeholderForState(assistantState = {}) {
+        const workflow = assistantState.workflow || null;
+        const stage = assistantState.stage || "select_module";
+        const section = assistantState.caseSection || null;
+        if (stage === "select_module") return "Paste the consult question in plain language, or choose a workflow above...";
+        if (stage === "select_syndrome_module") return "Type the syndrome, for example 'community-acquired pneumonia' or 'bacterial meningitis'...";
+        if (stage === "select_preset" || stage === "select_endo_blood_culture_context") return "Type the care setting or blood culture context if you prefer not to click an option...";
+        if (stage === "select_pretest_factors") return "Add baseline risk modifiers only if they meaningfully change pretest probability...";
+        if (stage === "describe_case" && section === "exam_vitals") return "Describe symptoms, onset, vitals, and exam findings...";
+        if (stage === "describe_case" && section === "lab") return "Add key labs such as inflammatory markers, blood counts, or relevant serologies...";
+        if (stage === "describe_case" && section === "micro") return "Add cultures, PCR results, stains, or organism data...";
+        if (stage === "describe_case" && section === "imaging") return "Add chest imaging, CT, MRI, echo, or other key imaging results...";
+        if (stage === "describe_case") return "Describe the case in plain language...";
+        if (stage === "confirm_case") return "Add one or two missing high-yield findings, or click the consultant impression button...";
+        if (workflow === "mechid" && stage === "mechid_describe") return "Paste the organism, susceptibility pattern, syndrome, and severity context...";
+        if (workflow === "mechid" && stage === "mechid_confirm") return "Correct anything that was extracted incorrectly, then ask for the consultant impression...";
+        if (workflow === "immunoid" && stage === "immunoid_select_agents") return "Type the immunosuppressive drugs or regimen being planned...";
+        if (workflow === "immunoid" && stage === "immunoid_collect_context") return "Answer the missing screening or prophylaxis question here...";
+        if (stage === "done") return "Ask a follow-up or restart a new consult...";
+        return "Type naturally and the assistant will guide the next step...";
+      }
+
+      function sendButtonLabelForState(assistantState = {}) {
+        const stage = assistantState.stage || "select_module";
+        if (stage === "select_module") return "Start";
+        if (["select_syndrome_module", "select_preset", "select_endo_blood_culture_context", "select_pretest_factors", "select_consult_focus"].includes(stage)) return "Continue";
+        if (stage === "done") return "Ask";
+        return "Send";
+      }
+
+      function resizeComposer() {
+        els.userInput.style.height = "auto";
+        const nextHeight = Math.min(Math.max(els.userInput.scrollHeight, 92), 220);
+        els.userInput.style.height = `${nextHeight}px`;
+      }
+
+      function syncLaunchpad(activeWorkflow = null) {
+        const buttons = Array.from(els.launchpad?.querySelectorAll(".start-card") || []);
+        buttons.forEach((button) => {
+          button.classList.toggle("active", button.dataset.workflow === activeWorkflow);
+        });
+      }
+
+      function renderProgress(assistantState = {}) {
+        const workflow = assistantState.workflow || "probid";
+        const stage = assistantState.stage || "select_module";
+        const steps = PROGRESS_STEPS[workflow] || PROGRESS_STEPS.probid;
+        const activeKey = progressKeyForState(assistantState);
+        const activeIndex = Math.max(steps.findIndex((step) => step.key === activeKey), 0);
+        els.progressTitle.textContent = `${workflowLabel(workflow)}: ${stageLabel(stage)}`;
+        els.progressMeta.textContent = progressMetaForState(assistantState);
+        els.progressSteps.innerHTML = "";
+        steps.forEach((step, index) => {
+          const chip = document.createElement("div");
+          chip.className = "progress-step";
+          if (index < activeIndex) chip.classList.add("completed");
+          if (index === activeIndex) chip.classList.add("current");
+          chip.textContent = step.label;
+          els.progressSteps.appendChild(chip);
+        });
+      }
+
+      function syncComposerContext(assistantState = {}) {
+        els.userInput.placeholder = placeholderForState(assistantState);
+        const label = sendButtonLabelForState(assistantState);
+        if (!state.busy) {
+          els.sendBtn.textContent = label;
+        }
+        state.sendButtonLabel = label;
+        resizeComposer();
+      }
+
+      function resetConversationUi() {
+        clearConversationMessages();
+        els.optionTray.innerHTML = "";
+        syncConsultButton([]);
+        state.assistantState = null;
+        state.lastResponse = null;
+        state.hiddenCaseOptions.clear();
+        state.showUsedCaseOptions = false;
+        state.caseInsertMode = "present";
+        state.sendButtonLabel = "Start";
+        els.userInput.value = "";
+        resizeComposer();
+        els.rawResponse.textContent = "No response yet.";
+        els.analysisSummary.innerHTML = `<h3>Analysis</h3><div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>`;
+        els.parsedPanel.innerHTML = `<h3>What I Picked Up</h3><div class="muted">Waiting for parsed output.</div>`;
+        els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+        const emptyState = { workflow: "probid", stage: "select_module" };
+        renderProgress(emptyState);
+        syncComposerContext(emptyState);
+        syncLaunchpad(null);
+        setTopStatus({ state: emptyState });
+      }
+
       function setBusy(next) {
         state.busy = next;
         els.sendBtn.disabled = next;
@@ -622,7 +1024,7 @@
         els.consultBtn.disabled = next;
         els.userInput.disabled = next;
         if (next) els.sendBtn.textContent = "Sending...";
-        else els.sendBtn.textContent = "Send";
+        else els.sendBtn.textContent = state.sendButtonLabel || "Send";
       }
 
       function syncConsultButton(options = []) {
@@ -843,6 +1245,7 @@
         }
         els.userInput.focus();
         els.userInput.setSelectionRange(els.userInput.value.length, els.userInput.value.length);
+        resizeComposer();
         els.composerHint.textContent = state.assistantState?.stage === "confirm_case"
           ? "Suggested detail added. Click Send to refresh the review, or add more."
           : "Suggested detail added to the draft. Add more or click Next.";
@@ -864,6 +1267,7 @@
           .replace(/\s+([,.;:])/g, "$1")
           .trim();
         els.userInput.value = next;
+        resizeComposer();
         return true;
       }
 
@@ -887,11 +1291,11 @@
         };
         const currentSection = s.caseSection || null;
         const currentSectionLabel = sectionLabelMap[currentSection] || "—";
-        els.summaryStage.textContent = s.stage || "—";
+        els.summaryStage.textContent = stageLabel(s.stage || "");
         els.summaryModule.textContent = workflow === "mechid"
-          ? "Resistance mechanism + therapy"
+          ? workflowLabel("mechid")
           : workflow === "immunoid"
-            ? "Immunosuppression screening + prophylaxis"
+            ? workflowLabel("immunoid")
             : (s.moduleId || "—");
         els.summaryPreset.textContent = s.presetId || "—";
         els.summaryCaseSection.textContent = currentSectionLabel;
@@ -901,6 +1305,9 @@
               : ((resp?.immunoidAnalysis?.selectedAgents || []).map((item) => item.name)))
           : (s.pretestFactorLabels || []);
         els.summaryFactors.textContent = factorLabels.length ? factorLabels.join(", ") : "—";
+        renderProgress(s);
+        syncComposerContext(s);
+        syncLaunchpad(workflow === "probid" && s.stage === "select_module" ? null : workflow);
         if (workflow === "mechid" && s.stage === "mechid_describe") {
           els.helpBanner.textContent = "Current step: paste the organism, AST pattern, and any treatment context you have.";
         } else if (workflow === "mechid" && s.stage === "mechid_confirm") {
@@ -1244,7 +1651,7 @@
         if (!file || state.busy) return;
         setBusy(true);
         try {
-          appendMessage("user", `Uploaded antibiogram image: ${file.name}`);
+          appendMessage("user", `Uploaded isolate report image: ${file.name}`);
           const imageDataUrl = await fileToDataUrl(file);
           const resp = await callAssistantMechidImage({
             imageDataUrl,
@@ -1259,7 +1666,7 @@
           setTopStatus(resp);
           els.rawResponse.textContent = JSON.stringify(resp, null, 2);
           const tips = resp.tips || [];
-          els.composerHint.textContent = tips[0] || "Review the extracted antibiogram and correct anything that looks off.";
+          els.composerHint.textContent = tips[0] || "Review the extracted isolate report and correct anything that looks off.";
         } catch (err) {
           appendMessage("assistant", `I hit an error: ${err.message}`);
           els.composerHint.textContent = "Image extraction failed. Check the server setup and try again.";
@@ -1351,24 +1758,19 @@
         } finally {
           setBusy(false);
           els.userInput.focus();
+          resizeComposer();
         }
       }
 
       function startConversation() {
-        clearConversationMessages();
-        els.optionTray.innerHTML = "";
-        syncConsultButton([]);
-        state.assistantState = null;
-        state.lastResponse = null;
-        state.hiddenCaseOptions.clear();
-        state.showUsedCaseOptions = false;
-        state.caseInsertMode = "present";
-        els.rawResponse.textContent = "No response yet.";
-        els.analysisSummary.innerHTML = `<h3>Analysis</h3><div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>`;
-        els.parsedPanel.innerHTML = `<h3>What I Picked Up</h3><div class="muted">Waiting for parsed output.</div>`;
-        els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
-        setTopStatus({ state: { stage: "select_module" } });
+        resetConversationUi();
         sendTurn({});
+      }
+
+      async function jumpToWorkflow(selection, label) {
+        if (state.busy) return;
+        resetConversationUi();
+        await sendTurn({ selection, userVisibleText: label });
       }
 
       async function checkHealth() {
@@ -1389,7 +1791,19 @@
         const text = els.userInput.value;
         if (!text.trim()) return;
         els.userInput.value = "";
+        resizeComposer();
         sendTurn({ message: text });
+      });
+
+      els.userInput.addEventListener("input", () => {
+        resizeComposer();
+      });
+
+      els.userInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          els.composerForm.requestSubmit();
+        }
       });
 
       els.restartBtn.addEventListener("click", () => {
@@ -1515,9 +1929,24 @@
       els.exampleBtn.addEventListener("click", () => {
         els.userInput.value = exampleTextForCurrentState();
         els.userInput.focus();
+        resizeComposer();
+      });
+
+      Array.from(els.launchpad?.querySelectorAll(".start-card") || []).forEach((button) => {
+        const workflow = button.dataset.workflow;
+        const labels = {
+          probid: "Work up a syndrome",
+          mechid: "Interpret organism + AST",
+          immunoid: "Screen immunosuppression risk",
+        };
+        button.addEventListener("click", () => {
+          if (!workflow) return;
+          jumpToWorkflow(workflow, labels[workflow] || "Start consult");
+        });
       });
 
       window.addEventListener("load", async () => {
+        resetConversationUi();
         const online = await checkHealth();
         if (online) {
           startConversation();

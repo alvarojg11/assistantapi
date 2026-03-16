@@ -52,6 +52,95 @@ SUPPLEMENTAL_AGENT_ALIASES: Dict[str, List[str]] = {
     ],
 }
 
+SUPPLEMENTAL_ORGANISM_PANELS: Dict[str, List[str]] = {
+    "Enterococcus faecalis": [
+        "Penicillin",
+        "Ampicillin",
+        "Vancomycin",
+        "Linezolid",
+        "Daptomycin",
+        "High-level Gentamicin",
+        "High-level Streptomycin",
+        "Ciprofloxacin",
+        "Nitrofurantoin",
+        "Ceftriaxone",
+        "Cefepime",
+    ],
+    "Enterococcus faecium": [
+        "Penicillin",
+        "Ampicillin",
+        "Vancomycin",
+        "Linezolid",
+        "Daptomycin",
+        "High-level Gentamicin",
+        "High-level Streptomycin",
+        "Ciprofloxacin",
+        "Nitrofurantoin",
+        "Ceftriaxone",
+        "Cefepime",
+    ],
+    "Staphylococcus aureus": [
+        "Penicillin",
+        "Nafcillin/Oxacillin",
+        "Vancomycin",
+        "Erythromycin",
+        "Clindamycin",
+        "Gentamicin",
+        "Trimethoprim/Sulfamethoxazole",
+        "Moxifloxacin",
+        "Tetracycline/Doxycycline",
+        "Linezolid",
+    ],
+    "Coagulase-negative Staphylococcus": [
+        "Penicillin",
+        "Nafcillin/Oxacillin",
+        "Vancomycin",
+        "Erythromycin",
+        "Clindamycin",
+        "Gentamicin",
+        "Trimethoprim/Sulfamethoxazole",
+        "Moxifloxacin",
+        "Tetracycline/Doxycycline",
+        "Linezolid",
+    ],
+    "Staphylococcus lugdunensis": [
+        "Penicillin",
+        "Nafcillin/Oxacillin",
+        "Vancomycin",
+        "Erythromycin",
+        "Clindamycin",
+        "Gentamicin",
+        "Trimethoprim/Sulfamethoxazole",
+        "Moxifloxacin",
+        "Tetracycline/Doxycycline",
+        "Linezolid",
+    ],
+    "Streptococcus pneumoniae": [
+        "Penicillin",
+        "Ceftriaxone",
+        "Cefotaxime",
+        "Erythromycin",
+        "Clindamycin",
+        "Levofloxacin",
+        "Vancomycin",
+    ],
+    "β-hemolytic Streptococcus (GAS/GBS)": [
+        "Penicillin",
+        "Erythromycin",
+        "Clindamycin",
+        "Levofloxacin",
+        "Vancomycin",
+    ],
+    "Viridans group streptococci (VGS)": [
+        "Penicillin",
+        "Ceftriaxone",
+        "Erythromycin",
+        "Clindamycin",
+        "Levofloxacin",
+        "Vancomycin",
+    ],
+}
+
 
 class MechIDEngineError(RuntimeError):
     pass
@@ -252,7 +341,32 @@ def list_mechid_organisms() -> List[str]:
 def organism_panel(organism: str) -> List[str]:
     module = load_mechid_module()
     normalized = normalize_organism(organism)
-    return list(module.PANEL.get(normalized, ()))
+    panel = list(module.PANEL.get(normalized, ()))
+    if panel:
+        return panel
+    if normalized in SUPPLEMENTAL_ORGANISM_PANELS:
+        return list(SUPPLEMENTAL_ORGANISM_PANELS[normalized])
+    if normalized in {
+        "Bacteroides fragilis",
+        "Bacteroides non-fragilis group",
+        "Gram-negative anaerobic rods (Fusobacterium / Prevotella / Porphyromonas)",
+        "Clostridium perfringens",
+        "Clostridium sordellii",
+        "Clostridium septicum",
+        "Other Clostridium spp. (non-perfringens)",
+        "Gram-positive anaerobic non-sporeforming rods (including Actinomyces)",
+        "Gram-positive anaerobic cocci",
+        "Bifidobacterium spp.",
+        "Lactobacillus spp.",
+        "Cutibacterium spp.",
+    }:
+        return list(getattr(module, "ANAEROBE_PANEL", ()))
+    if normalized == "Mycobacterium tuberculosis complex":
+        return list(getattr(module, "MYCO_MTBC_PANEL", ()))
+    ntm_panel = getattr(module, "MYCO_NTM_PANEL", {})
+    if isinstance(ntm_panel, dict) and normalized in ntm_panel:
+        return list(ntm_panel.get(normalized, ()))
+    return []
 
 
 def normalize_result(value: str | None) -> ASTResult | None:
@@ -329,6 +443,22 @@ def canonical_antibiotic_aliases(organism: str) -> Dict[str, str]:
         "linezolid": "Linezolid",
         "pen g": "Penicillin",
         "oxa": "Nafcillin/Oxacillin",
+        "oxacillin": "Nafcillin/Oxacillin",
+        "nafcillin": "Nafcillin/Oxacillin",
+        "high level gentamicin": "High-level Gentamicin",
+        "high-level gentamicin": "High-level Gentamicin",
+        "hlg": "High-level Gentamicin",
+        "high level streptomycin": "High-level Streptomycin",
+        "high-level streptomycin": "High-level Streptomycin",
+        "hls": "High-level Streptomycin",
+        "tmp smx": "Trimethoprim/Sulfamethoxazole",
+        "co trimoxazole": "Trimethoprim/Sulfamethoxazole",
+        "cotrimoxazole": "Trimethoprim/Sulfamethoxazole",
+        "moxi": "Moxifloxacin",
+        "moxifloxacin": "Moxifloxacin",
+        "doxy": "Tetracycline/Doxycycline",
+        "doxycycline": "Tetracycline/Doxycycline",
+        "tetracycline": "Tetracycline/Doxycycline",
     }
     for ab in panel:
         key = ab.lower()
