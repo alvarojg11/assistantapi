@@ -589,6 +589,24 @@
         font-size: 13px;
       }
 
+      .explain-card {
+        margin-top: 8px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(200, 190, 169, 0.8);
+        background: rgba(245, 241, 232, 0.7);
+        display: grid;
+        gap: 6px;
+        font-size: 12px;
+      }
+
+      .formula {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+        font-size: 11px;
+        color: #5d5344;
+        word-break: break-word;
+      }
+
       .warn-list { color: #7b3a22; }
 
       pre {
@@ -878,12 +896,16 @@
         const workflow = assistantState.workflow || null;
         const stage = assistantState.stage || "select_module";
         const section = assistantState.caseSection || null;
+        const moduleId = assistantState.moduleId || null;
         const sectionLabelMap = {
           exam_vitals: "Capture symptoms, vitals, and exam findings.",
           lab: "Add the most discriminating laboratory results.",
           micro: "Add cultures, PCR, or susceptibility data.",
           imaging: "Add the imaging result that changes probability.",
         };
+        if (moduleId === "inv_mold" && section === "exam_vitals") {
+          sectionLabelMap.exam_vitals = "Capture symptoms and bedside clinical clues.";
+        }
         if (stage === "select_module") {
           return "Choose a focused lane, or paste the full question and let the assistant route it.";
         }
@@ -924,10 +946,12 @@
         const workflow = assistantState.workflow || null;
         const stage = assistantState.stage || "select_module";
         const section = assistantState.caseSection || null;
+        const moduleId = assistantState.moduleId || null;
         if (stage === "select_module") return "Paste the consult question in plain language, or choose a workflow above...";
         if (stage === "select_syndrome_module") return "Type the syndrome, for example 'community-acquired pneumonia' or 'bacterial meningitis'...";
         if (stage === "select_preset" || stage === "select_endo_blood_culture_context") return "Type the care setting or blood culture context if you prefer not to click an option...";
         if (stage === "select_pretest_factors") return "Add baseline risk modifiers only if they meaningfully change pretest probability...";
+        if (stage === "describe_case" && section === "exam_vitals" && moduleId === "inv_mold") return "Describe symptoms, timing, host context, and any bedside clues...";
         if (stage === "describe_case" && section === "exam_vitals") return "Describe symptoms, onset, vitals, and exam findings...";
         if (stage === "describe_case" && section === "lab") return "Add key labs such as inflammatory markers, blood counts, or relevant serologies...";
         if (stage === "describe_case" && section === "micro") return "Add cultures, PCR results, stains, or organism data...";
@@ -1283,12 +1307,16 @@
       function setTopStatus(resp) {
         const s = resp?.state || {};
         const workflow = s.workflow || "probid";
+        const moduleId = s.moduleId || null;
         const sectionLabelMap = {
           exam_vitals: "Vitals + Physical Exam",
           lab: "Laboratory",
           micro: "Microbiology",
           imaging: "Radiology",
         };
+        if (moduleId === "inv_mold") {
+          sectionLabelMap.exam_vitals = "Symptoms";
+        }
         const currentSection = s.caseSection || null;
         const currentSectionLabel = sectionLabelMap[currentSection] || "—";
         els.summaryStage.textContent = stageLabel(s.stage || "");
@@ -1327,6 +1355,27 @@
         if (decision === "treat") return "treat";
         if (decision === "observe") return "observe";
         return "test";
+      }
+
+      function harmExplanationHtml(analysis) {
+        const treat = Number(analysis?.thresholds?.treatProbability || 0);
+        const observe = Number(analysis?.thresholds?.observeProbability || 0);
+        const reasons = analysis?.reasons || [];
+        const harmReason = reasons.find((reason) => typeof reason === "string" && reason.startsWith("Harm model: "));
+        const harmDetail = harmReason
+          ? escapeHtml(harmReason.replace(/^Harm model:\s*/, ""))
+          : "Default syndrome-specific harm tradeoff used for missed diagnosis versus unnecessary treatment.";
+        return `
+          <div class="explain-card">
+            <div class="muted" style="font-size:12px;">Why these thresholds?</div>
+            <div>Thresholds are derived from the balance between the harm of unnecessary treatment and the harm of missing the diagnosis.</div>
+            <div class="formula">Treatment threshold = H(unnecessary treatment) / (H(unnecessary treatment) + H(missed diagnosis))</div>
+            <div class="formula">Observation threshold = 0.5 × treatment threshold</div>
+            <div>For this case, a higher missed-diagnosis harm lowers the action threshold, while a higher treatment harm raises it.</div>
+            <div><strong>Current context:</strong> ${harmDetail}</div>
+            <div class="muted">Current thresholds: observe ≤ ${Math.round(observe * 100)}%, treat ≥ ${Math.round(treat * 100)}%.</div>
+          </div>
+        `;
       }
 
       function renderAnalysis(resp) {
@@ -1513,6 +1562,7 @@
           const reasons = (analysis.reasons || [])
             .map((reason) => `<li>${escapeHtml(reason)}</li>`)
             .join("");
+          const harmExplain = harmExplanationHtml(analysis);
           const pretestNote = basePretestPct === adjustedPretestPct
             ? `${basePretestPct}%`
             : `${basePretestPct}% to ${adjustedPretestPct}% after baseline risk modifiers`;
@@ -1535,6 +1585,7 @@
                 <div class="k">Pretest</div><div class="v">${escapeHtml(pretestNote)}</div>
                 <div class="k">Posttest</div><div class="v">${postPct}%</div>
               </div>
+              ${harmExplain}
               ${nextSteps ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Suggested next steps</div><ul class="list">${nextSteps}</ul></div>` : ""}
               ${appliedFindings ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Applied findings</div><ul class="list">${appliedFindings}</ul></div>` : `<div class="muted" style="margin-top:8px; font-size:12px;">No findings changed the calculation.</div>`}
               ${stepwise ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Stepwise probability path</div><ul class="list">${stepwise}</ul></div>` : ""}

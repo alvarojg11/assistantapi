@@ -1756,30 +1756,30 @@
       },
       {
         "id": "imi_serum_gm_odi10",
-        "label": "Serum galactomannan (ODI threshold around 1.0)",
+        "label": "Serum galactomannan (ODI >0.5)",
         "category": "lab",
         "group": "imi_gm",
-        "lrPos": 5.2,
-        "lrNeg": 0.31,
-        "notes": "Set Present=positive, Absent=negative. Conservative LR estimate using ODI around 1.0 to limit false positives.",
+        "lrPos": 5.75,
+        "lrNeg": 0.1,
+        "notes": "Set Present=positive, Absent=negative. LR values are calculated from pooled sensitivity 0.92 and specificity 0.84 for the commonly used serum ODI >0.5 cutoff in hematologic populations.",
         "source": {
-          "short": "Leeflang et al. Cochrane",
-          "year": 2015,
-          "url": "https://doi.org/10.1002/14651858.CD007394.pub2"
+          "short": "Al-Rawahi et al. J Fungi",
+          "year": 2023,
+          "url": "https://doi.org/10.3390/jof9020266"
         }
       },
       {
         "id": "imi_bal_gm_odi10",
-        "label": "BAL galactomannan (ODI threshold around 1.5)",
+        "label": "BAL galactomannan (ODI >1.0)",
         "category": "lab",
         "group": "imi_gm",
-        "lrPos": 53.7,
-        "lrNeg": 0.08,
-        "notes": "Set Present=positive, Absent=negative. Very strong rule-in utility in high-risk hematology cohorts.",
+        "lrPos": 18.75,
+        "lrNeg": 0.26,
+        "notes": "Set Present=positive, Absent=negative. LR values are calculated from pooled sensitivity 0.75 and specificity 0.96 for the commonly used BAL ODI >1.0 cutoff in hematologic populations.",
         "source": {
-          "short": "Heng et al. Crit Rev Microbiol",
-          "year": 2015,
-          "url": "https://doi.org/10.3109/1040841X.2013.804033"
+          "short": "Al-Rawahi et al. J Fungi",
+          "year": 2023,
+          "url": "https://doi.org/10.3390/jof9020266"
         }
       },
       {
@@ -1843,6 +1843,40 @@
           "short": "Avni et al. J Clin Microbiol",
           "year": 2012,
           "url": "https://doi.org/10.1128/JCM.00942-12"
+        }
+      },
+      {
+        "id": "imi_aspergillus_culture_resp",
+        "label": "Respiratory culture grows Aspergillus (BAL preferred; sputum less specific)",
+        "category": "micro",
+        "group": "imi_aspergillus_culture",
+        "lrPos": 4.12,
+        "notes": "Supportive rule-in microbiology, especially when recovered from BAL in a compatible host and imaging context. This LR is conservatively modeled from BAL culture sensitivity 0.40 and specificity 0.903; sputum or other lower-respiratory cultures are more colonization-prone and a negative culture should not be used to exclude invasive mold disease.",
+        "source": {
+          "short": "Levy et al. Respir Med",
+          "year": 1992,
+          "url": "https://doi.org/10.1016/S0954-6111(06)80062-4"
+        }
+      },
+      {
+        "id": "imi_aspergillus_culture_na",
+        "label": "Respiratory fungal culture not done/unknown",
+        "category": "micro",
+        "group": "imi_aspergillus_culture",
+        "notes": "Neutral selection."
+      },
+      {
+        "id": "imi_aspergillus_pcr_plasma",
+        "label": "Aspergillus PCR from plasma",
+        "category": "micro",
+        "group": "imi_aspergillus_pcr",
+        "lrPos": 5.67,
+        "lrNeg": 0.06,
+        "notes": "Set Present=positive, Absent=negative. LR values are calculated from sensitivity 94.7% and specificity 83.3% in a standardized plasma PCR study; evidence is less mature than BAL-based Aspergillus PCR.",
+        "source": {
+          "short": "White et al. J Clin Microbiol",
+          "year": 2015,
+          "url": "https://doi.org/10.1128/JCM.00904-15"
         }
       },
       {

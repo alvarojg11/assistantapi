@@ -320,6 +320,25 @@
     ]
   },
   {
+    "text": "Neutropenic AML patient with refractory fever, chest CT halo sign, and BAL fungal culture growing Aspergillus fumigatus.",
+    "moduleId": "inv_mold",
+    "presetId": "imi_heme_high",
+    "findings": {
+      "imi_host_neutropenia_hsct": "present",
+      "imi_host_hematologic_malignancy": "present",
+      "imi_fever_refractory": "present",
+      "imi_ct_halo_sign": "present",
+      "imi_aspergillus_culture_resp": "present"
+    },
+    "orderedFindingIds": [
+      "imi_host_neutropenia_hsct",
+      "imi_host_hematologic_malignancy",
+      "imi_fever_refractory",
+      "imi_ct_halo_sign",
+      "imi_aspergillus_culture_resp"
+    ]
+  },
+  {
     "text": "ED patient with painful swollen prosthetic knee, drainage, CRP elevated, and synovial fluid culture positive.",
     "moduleId": "pji",
     "presetId": "pji_intermediate",

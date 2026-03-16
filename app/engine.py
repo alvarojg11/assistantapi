@@ -719,11 +719,11 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 "High-risk mold host profile selected.",
                 _evidence("Donnelly et al. Clin Infect Dis", "https://doi.org/10.1093/cid/ciz1008"),
             )
-        if has("imi_mucorales_pcr_bal") or has("imi_aspergillus_pcr_bal"):
+        if has("imi_mucorales_pcr_bal") or has("imi_aspergillus_pcr_bal") or has("imi_aspergillus_pcr_plasma") or has("imi_aspergillus_culture_resp"):
             add_missed_dx_driver(
                 2,
-                "Specific mold molecular evidence selected.",
-                _evidence("Brown et al. Int J Infect Dis", "https://doi.org/10.1016/j.ijid.2025.107941"),
+                "Specific mold microbiology selected.",
+                _evidence("Aspergillus/Mucorales PCR studies"),
             )
 
     if module_id == "inv_candida":

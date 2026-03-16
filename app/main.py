@@ -515,6 +515,39 @@ ENDO_CASE_SECTION_LABELS = {
     "imaging": "radiology and advanced imaging",
 }
 
+
+def _assistant_case_section_categories(module: SyndromeModule, section: str | None) -> set[str]:
+    section_map = {
+        "exam_vitals": {"symptom", "vital", "exam"},
+        "lab": {"lab"},
+        "micro": {"micro"},
+        "imaging": {"imaging"},
+    }
+    categories = section_map.get(section or "", set())
+    return {item.category for item in module.items if item.category in categories}
+
+
+def _assistant_case_section_label(module: SyndromeModule, section: str | None) -> str:
+    if section != "exam_vitals":
+        return ENDO_CASE_SECTION_LABELS.get(section or "", (section or "review").replace("_", " "))
+    categories = _assistant_case_section_categories(module, section)
+    has_symptom = "symptom" in categories
+    has_vital = "vital" in categories
+    has_exam = "exam" in categories
+    if has_symptom and not has_vital and not has_exam:
+        return "clinical symptoms"
+    if has_symptom and has_vital and not has_exam:
+        return "symptoms and vital signs"
+    if has_symptom and has_exam and not has_vital:
+        return "symptoms and physical exam"
+    if has_symptom and has_vital and has_exam:
+        return "vital signs and physical exam"
+    if has_vital and has_exam:
+        return "vital signs and physical exam"
+    if has_symptom:
+        return "clinical symptoms"
+    return "bedside clinical findings"
+
 ACTIVE_TB_WHO_SYMPTOM_HELPERS = (
     ("tb_sym_any_cough", "Cough (WHO symptom)", "WHO TB symptom: cough", "No WHO TB symptoms"),
     ("tb_sym_any_fever", "Fever (WHO symptom)", "WHO TB symptom: fever", "No WHO TB symptoms"),
@@ -973,12 +1006,12 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
             "Chest CT completed",
         ),
         "imi_serum_gm_odi10": (
-            "Serum galactomannan positive",
-            "Serum galactomannan negative",
+            "Serum galactomannan >0.5 positive",
+            "Serum galactomannan >0.5 negative",
         ),
         "imi_bal_gm_odi10": (
-            "BAL galactomannan positive",
-            "BAL galactomannan negative",
+            "BAL galactomannan >1.0 positive",
+            "BAL galactomannan >1.0 negative",
         ),
         "imi_gm_na": (
             "Galactomannan testing not done",
@@ -1003,6 +1036,18 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
         "imi_aspergillus_pcr_bal": (
             "Aspergillus PCR positive from BAL",
             "Aspergillus PCR negative from BAL",
+        ),
+        "imi_aspergillus_culture_resp": (
+            "Respiratory culture positive for Aspergillus",
+            "Respiratory culture negative for Aspergillus",
+        ),
+        "imi_aspergillus_culture_na": (
+            "Respiratory fungal culture not done",
+            "Respiratory fungal culture completed",
+        ),
+        "imi_aspergillus_pcr_plasma": (
+            "Aspergillus PCR positive from plasma",
+            "Aspergillus PCR negative from plasma",
         ),
         "imi_aspergillus_pcr_na": (
             "Aspergillus PCR not done",
@@ -2206,7 +2251,15 @@ def _build_reasons(
     )
     if prep_notes:
         reasons.extend(prep_notes)
-    reasons.append(f"Recommended action: {recommendation} for {module.name}.")
+    if module.id == "inv_mold":
+        action_text = {
+            "observe": "Current action zone favors broadening the differential over anchoring on mold.",
+            "test": "Current action zone favors targeted mycologic or tissue confirmation while keeping mold on the differential.",
+            "treat": "Current action zone supports mold-active therapy while diagnostic confirmation continues.",
+        }.get(recommendation, f"Current action zone: {recommendation}.")
+        reasons.append(action_text)
+    else:
+        reasons.append(f"Recommended action: {recommendation} for {module.name}.")
     return reasons
 
 
@@ -2236,6 +2289,60 @@ def _build_recommendation_summary(
     prep_findings: dict[str, str],
     preset_id: str | None = None,
 ) -> tuple[str | None, List[str]]:
+    if module.id == "inv_mold":
+        next_steps: List[str] = []
+        bal_based_micro_done = any(
+            item_id in prep_findings
+            for item_id in {
+                "imi_bal_gm_odi10",
+                "imi_aspergillus_pcr_bal",
+                "imi_aspergillus_culture_resp",
+                "imi_mucorales_pcr_bal",
+            }
+        )
+        if recommendation == "observe":
+            summary = (
+                "Invasive mold infection is not strongly supported by the current data, so I would broaden the differential rather than anchor on mold right now."
+            )
+            next_steps.append(
+                "Reassess alternative diagnoses such as bacterial pneumonia, other fungal infection, nocardiosis, malignancy, drug toxicity, or other noninfectious inflammatory lung disease."
+            )
+            return summary, next_steps
+
+        if recommendation == "test":
+            summary = (
+                "Invasive mold infection remains on the differential, but I would still want better microbiologic or tissue confirmation before calling this established disease."
+            )
+            if not bal_based_micro_done:
+                next_steps.append(
+                    "If feasible, obtain BAL and send fungal culture/cytology plus galactomannan and Aspergillus PCR."
+                )
+            next_steps.append(
+                "If the lesion is accessible and the procedure is safe, pursue tissue biopsy for histopathology and fungal culture."
+            )
+            next_steps.append(
+                "Keep competing diagnoses in play rather than assuming all compatible imaging is mold."
+            )
+            return summary, next_steps
+
+        if recommendation == "treat":
+            summary = (
+                "Invasive mold infection is concerning enough that empiric mold-active therapy is reasonable while the diagnosis is being confirmed and competing explanations are still being reassessed."
+            )
+            if not bal_based_micro_done:
+                next_steps.append(
+                    "If feasible, obtain BAL and send fungal culture/cytology plus galactomannan and Aspergillus PCR."
+                )
+            next_steps.append(
+                "If the lesion is accessible and the procedure is safe, pursue tissue biopsy for histopathology and fungal culture even if treatment has already started."
+            )
+            next_steps.append(
+                "Continue to reassess alternative diagnoses and the possibility of a non-Aspergillus mold process."
+            )
+            return summary, next_steps
+
+        return None, []
+
     if module.id == "cdi":
         cdi_result_ids = {
             "cdi_naat_neg",
@@ -2907,6 +3014,18 @@ def _join_readable(items: List[str]) -> str:
 def _friendly_probid_bottom_line(module: SyndromeModule, analysis: AnalyzeResponse) -> str:
     probability = round(analysis.posttest_probability * 100)
     syndrome_name = module.name.lower()
+    if module.id == "inv_mold":
+        if analysis.recommendation == "treat":
+            return (
+                f"The estimated probability of {module.name} is about {probability}%, which makes invasive mold disease plausible enough that I would start mold-active therapy while still trying to secure microbiologic or tissue confirmation."
+            )
+        if analysis.recommendation == "test":
+            return (
+                f"The estimated probability of {module.name} is about {probability}%, which keeps invasive mold disease meaningfully on the differential and worth pursuing further mycologic or tissue confirmation."
+            )
+        return (
+            f"The estimated probability of {module.name} is about {probability}%, which makes invasive mold disease less compelling right now than competing explanations unless new host, imaging, or microbiology data emerge."
+        )
     if analysis.recommendation == "treat":
         return (
             f"The estimated probability of {module.name} is about {probability}%, which is high enough that I would treat this as likely {syndrome_name} while confirming the diagnosis."
@@ -2979,6 +3098,12 @@ def _friendly_probid_probability_and_harm(module: SyndromeModule, analysis: Anal
 def _friendly_probid_next_steps(analysis: AnalyzeResponse) -> str:
     if analysis.recommended_next_steps:
         return _join_readable(analysis.recommended_next_steps[:3]) + "."
+    if analysis.module_id == "inv_mold":
+        if analysis.recommendation == "treat":
+            return "Start mold-active therapy, obtain BAL-based mycology if it has not been done, and pursue tissue biopsy when feasible and safe."
+        if analysis.recommendation == "test":
+            return "Get the next highest-yield mycologic data, ideally BAL-based testing or tissue diagnosis if feasible, while keeping the differential broad."
+        return "Revisit the differential and only re-escalate the mold workup if new host-risk, imaging, or mycologic signals appear."
     if analysis.recommendation == "treat":
         return "Start syndrome-directed treatment and close the highest-yield diagnostic gaps in parallel."
     if analysis.recommendation == "test":
@@ -2990,6 +3115,16 @@ def _friendly_probid_change_mind(
     analysis: AnalyzeResponse,
     missing_suggestions: List[str] | None = None,
 ) -> str:
+    if analysis.module_id == "inv_mold" and missing_suggestions:
+        return (
+            f"The results most likely to move this estimate are {_join_readable(missing_suggestions[:3])}, and tissue diagnosis would be especially helpful when feasible."
+        )
+    if analysis.module_id == "inv_mold":
+        if analysis.recommendation == "treat":
+            return "Convincing alternative pathology, nondiagnostic tissue or BAL workup, or high-quality negative mold biomarkers would lower my confidence."
+        if analysis.recommendation == "test":
+            return "A positive tissue diagnosis or more specific mold microbiology could push this toward treatment, while a stronger competing diagnosis could move it away from mold."
+        return "New compatible CT findings, supportive mold microbiology, or tissue evidence could raise concern quickly."
     if missing_suggestions:
         return f"The results most likely to move this estimate are {_join_readable(missing_suggestions[:3])}."
     if analysis.recommendation == "treat":
@@ -4479,7 +4614,9 @@ ASSISTANT_MISSING_PRIORITY_BY_MODULE: Dict[str, List[str]] = {
         "imi_ct_halo_sign",
         "imi_serum_gm_odi10",
         "imi_bal_gm_odi10",
+        "imi_aspergillus_culture_resp",
         "imi_aspergillus_pcr_bal",
+        "imi_aspergillus_pcr_plasma",
         "imi_serum_bdg",
         "imi_mucorales_pcr_bal",
         "imi_mucorales_pcr_blood",
@@ -4790,10 +4927,11 @@ def _assistant_next_case_section(module: SyndromeModule, current: str | None, st
 
 def _assistant_case_section_prompt(module: SyndromeModule, section: str | None) -> tuple[str, List[str]]:
     if section == "exam_vitals":
+        section_label = _assistant_case_section_label(module, section)
         return (
-            "Start with vital signs and physical examination findings. Add what is present or absent, then click Next to move to laboratory findings.",
+            f"Start with {section_label}. Add what is present or absent, then click Next to move to laboratory findings.",
             [
-                "This section is for symptoms, exam findings, and bedside clinical features.",
+                f"This section is for {section_label}.",
                 "When you are done with this section, click Next to move forward.",
             ],
         )
@@ -7107,7 +7245,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
             return AssistantTurnResponse(
                 assistantMessage=(
-                    "Describe the case in plain language. Start with vital signs, then physical examination findings, then laboratory, microbiology, and radiographic tests below. Use the Present/Absent toggle if a finding is negative."
+                    f"Describe the case in plain language. Start with {_assistant_case_section_label(module, 'exam_vitals')}, then laboratory, microbiology, and radiographic tests below. Use the Present/Absent toggle if a finding is negative."
                 ),
                 state=state,
                 options=_assistant_case_prompt_options(module, state),
@@ -7149,8 +7287,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 state.case_text = _append_case_text(state.case_text, message_text)
                 already_appended = True
                 next_section = _assistant_next_case_section(module, current_section, state)
-                next_label = ENDO_CASE_SECTION_LABELS.get(next_section or "", "review")
-                current_label = ENDO_CASE_SECTION_LABELS.get(current_section, current_section.replace("_", " "))
+                next_label = _assistant_case_section_label(module, next_section)
+                current_label = _assistant_case_section_label(module, current_section)
                 return AssistantTurnResponse(
                     assistantMessage=(
                         f"Added that to {current_label}. Add more for this section, or click Next to continue to {next_label}."

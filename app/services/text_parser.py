@@ -763,12 +763,30 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
         "absent": ["chest ct completed", "chest ct performed"],
     },
     "imi_serum_gm_odi10": {
-        "present": ["serum galactomannan positive", "galactomannan positive"],
-        "absent": ["serum galactomannan negative", "galactomannan negative"],
+        "present": [
+            "serum galactomannan positive",
+            "serum galactomannan odi above 0.5",
+            "serum galactomannan odi greater than 0.5",
+            "serum gm above 0.5",
+        ],
+        "absent": [
+            "serum galactomannan negative",
+            "serum galactomannan odi 0.5 or below",
+            "serum gm 0.5 or below",
+        ],
     },
     "imi_bal_gm_odi10": {
-        "present": ["bal galactomannan positive"],
-        "absent": ["bal galactomannan negative"],
+        "present": [
+            "bal galactomannan positive",
+            "bal galactomannan odi above 1.0",
+            "bal galactomannan odi greater than 1.0",
+            "bal gm above 1.0",
+        ],
+        "absent": [
+            "bal galactomannan negative",
+            "bal galactomannan odi 1.0 or below",
+            "bal gm 1.0 or below",
+        ],
     },
     "imi_gm_na": {
         "present": ["galactomannan testing not done", "galactomannan not done"],
@@ -793,6 +811,47 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "imi_aspergillus_pcr_bal": {
         "present": ["bal aspergillus pcr positive", "aspergillus pcr positive from bal"],
         "absent": ["aspergillus pcr negative from bal", "bal aspergillus pcr negative"],
+    },
+    "imi_aspergillus_culture_resp": {
+        "present": [
+            "bal culture grows aspergillus",
+            "bal culture growing aspergillus",
+            "bal fungal culture grows aspergillus",
+            "bal fungal culture growing aspergillus",
+            "respiratory culture grows aspergillus",
+            "respiratory culture growing aspergillus",
+            "sputum culture grows aspergillus",
+            "sputum culture growing aspergillus",
+            "sputum culture positive for aspergillus",
+            "endotracheal aspirate culture grows aspergillus",
+            "endotracheal aspirate culture growing aspergillus",
+            "lower respiratory culture grows aspergillus",
+            "lower respiratory culture growing aspergillus",
+        ],
+    },
+    "imi_aspergillus_culture_na": {
+        "present": [
+            "respiratory fungal culture not done",
+            "aspergillus respiratory culture not done",
+            "bal fungal culture not done",
+        ],
+        "absent": [
+            "respiratory fungal culture completed",
+            "aspergillus respiratory culture completed",
+            "bal fungal culture completed",
+        ],
+    },
+    "imi_aspergillus_pcr_plasma": {
+        "present": [
+            "plasma aspergillus pcr positive",
+            "aspergillus pcr positive from plasma",
+            "blood aspergillus pcr positive",
+        ],
+        "absent": [
+            "aspergillus pcr negative from plasma",
+            "plasma aspergillus pcr negative",
+            "blood aspergillus pcr negative",
+        ],
     },
     "imi_aspergillus_pcr_na": {
         "present": ["aspergillus pcr not done", "aspergillus pcr not performed"],
