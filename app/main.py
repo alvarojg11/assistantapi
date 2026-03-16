@@ -26,12 +26,20 @@ from .engine import (
 from .pretest_factors import get_pretest_factor_tuning, resolve_pretest_factor_specs
 from .schemas import (
     AssistantOption,
+    DoseIDAssistantAnalysis,
+    DoseIDAssistantPatientContext,
     AssistantState,
     AssistantTurnRequest,
     AssistantTurnResponse,
     AnalyzeRequest,
     AnalyzeResponse,
     DecisionThresholds,
+    DoseIDCalculateRequest,
+    DoseIDCalculateResponse,
+    DoseIDCatalogResponse,
+    DoseIDDoseRecommendation,
+    DoseIDMedicationCatalogEntry,
+    DoseIDIndicationOption,
     ImmunoAgentListResponse,
     ImmunoAnalyzeRequest,
     ImmunoAnalyzeResponse,
@@ -72,6 +80,15 @@ from .services.consult_narrator import (
     narrate_mechid_review_message,
     narrate_probid_assistant_message,
     narrate_probid_review_message,
+)
+from .services.doseid_service import (
+    DoseIDError,
+    calculate_medication,
+    default_indication_id,
+    list_medications,
+    normalize_patient,
+    normalize_patient_from_available_inputs,
+    suggest_mechid_doses,
 )
 from .services.local_text_parser import LocalParserError, parse_text_with_local_model
 from .services.immunoid_engine import analyze_immunoid, list_immunoid_agents, list_immunoid_regimens
@@ -134,10 +151,30 @@ MECHID_ASSISTANT_LABEL = "Resistance mechanism + therapy"
 MECHID_ASSISTANT_DESCRIPTION = (
     "Interpret an organism plus susceptibility pattern to estimate likely resistance mechanisms and therapy options."
 )
+DOSEID_ASSISTANT_ID = "doseid"
+DOSEID_ASSISTANT_LABEL = "Antimicrobial dosing"
+DOSEID_ASSISTANT_DESCRIPTION = (
+    "Estimate antimicrobial dosing from the drug, weight, renal function, and dialysis context."
+)
 IMMUNOID_ASSISTANT_ID = "immunoid"
 IMMUNOID_ASSISTANT_LABEL = "Immunosuppression screening + prophylaxis"
 IMMUNOID_ASSISTANT_DESCRIPTION = (
     "Review chemotherapy, steroids, biologics, or transplant immunosuppression for infection screening, prophylaxis, and geography-sensitive follow-up."
+)
+DOSEID_INTENT_TOKENS = (
+    "dose",
+    "dosing",
+    "dosage",
+    "hemodialysis",
+    "dialysis",
+    "hd",
+    "crrt",
+    "creatinine clearance",
+    "crcl",
+    "renal dose",
+    "renal dosing",
+    "ripe",
+    "rhze",
 )
 IMMUNOID_INTENT_TOKENS = (
     "chemotherapy prophylaxis",
@@ -1835,6 +1872,12 @@ def _build_mechid_response_from_parsed(
                     susceptibility_results=parsed["susceptibilityResults"],
                     tx_context=parsed["txContext"],
                 )
+                treatment_duration_guidance, monitoring_recommendations = _build_mechid_duration_monitoring_guidance(
+                    organism=analyzed["organism"],
+                    final_results=analyzed["final_results"],
+                    tx_context=parsed.get("txContext"),
+                    therapy_notes=analyzed["therapy_notes"],
+                )
                 analysis = MechIDAnalyzeResponse(
                     organism=analyzed["organism"],
                     panel=analyzed["panel"],
@@ -1846,6 +1889,8 @@ def _build_mechid_response_from_parsed(
                     cautions=analyzed["cautions"],
                     favorableSignals=analyzed["favorable_signals"],
                     therapyNotes=analyzed["therapy_notes"],
+                    treatmentDurationGuidance=treatment_duration_guidance,
+                    monitoringRecommendations=monitoring_recommendations,
                     references=analyzed["references"],
                     warnings=list(parsed.get("warnings", [])),
                 )
@@ -1863,6 +1908,35 @@ def _build_mechid_response_from_parsed(
         parserFallbackUsed=parser_fallback_used,
         analysis=analysis,
         provisionalAdvice=provisional_advice,
+    )
+
+
+def _doseid_catalog_response() -> DoseIDCatalogResponse:
+    medications = [
+        DoseIDMedicationCatalogEntry(
+            id=med.id,
+            name=med.name,
+            category=med.category,
+            indications=[DoseIDIndicationOption(id=item.id, label=item.label) for item in med.indications],
+            sourcePages=med.source_pages,
+        )
+        for med in list_medications()
+    ]
+    return DoseIDCatalogResponse(medications=medications)
+
+
+def _doseid_recommendation_model(payload: Dict[str, Any]) -> DoseIDDoseRecommendation:
+    return DoseIDDoseRecommendation(
+        medicationId=payload["medication_id"],
+        medicationName=payload["medication_name"],
+        category=payload["category"],
+        indicationId=payload["indication_id"],
+        indicationLabel=payload["indication_label"],
+        regimen=payload["regimen"],
+        renalBucket=payload["renal_bucket"],
+        notes=payload.get("notes", []),
+        sourcePages=payload["source_pages"],
+        doseWeight=payload.get("dose_weight"),
     )
 
 
@@ -1973,6 +2047,38 @@ def list_mechid_supported_organisms() -> dict:
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+@app.get("/v1/doseid/medications", response_model=DoseIDCatalogResponse)
+def list_doseid_medications() -> DoseIDCatalogResponse:
+    return _doseid_catalog_response()
+
+
+@app.post("/v1/doseid/calculate", response_model=DoseIDCalculateResponse)
+def calculate_doseid_endpoint(req: DoseIDCalculateRequest) -> DoseIDCalculateResponse:
+    try:
+        patient = normalize_patient(
+            age_years=req.patient.age_years,
+            sex=req.patient.sex,
+            total_body_weight_kg=req.patient.total_body_weight_kg,
+            height_cm=req.patient.height_cm,
+            serum_creatinine_mg_dl=req.patient.serum_creatinine_mg_dl,
+        )
+        recommendations = [
+            _doseid_recommendation_model(
+                calculate_medication(
+                    medication_id=selection.medication_id,
+                    patient=patient,
+                    renal_mode=req.renal_mode,
+                    indication_id=selection.indication_id,
+                )
+            )
+            for selection in req.selections
+        ]
+    except DoseIDError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return DoseIDCalculateResponse(recommendations=recommendations)
+
+
 @app.get("/v1/immunoid/agents", response_model=ImmunoAgentListResponse)
 def list_immunoid_supported_agents() -> ImmunoAgentListResponse:
     return ImmunoAgentListResponse(agents=list_immunoid_agents())
@@ -1990,6 +2096,7 @@ def analyze_immunoid_endpoint(req: ImmunoAnalyzeRequest) -> ImmunoAnalyzeRespons
 
 @app.post("/v1/mechid/analyze", response_model=MechIDAnalyzeResponse)
 def analyze_mechid_endpoint(req: MechIDAnalyzeRequest) -> MechIDAnalyzeResponse:
+    warnings: List[str] = []
     try:
         payload = analyze_mechid(
             organism=req.organism,
@@ -1998,6 +2105,37 @@ def analyze_mechid_endpoint(req: MechIDAnalyzeRequest) -> MechIDAnalyzeResponse:
         )
     except MechIDEngineError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+    dosing_recommendations: List[DoseIDDoseRecommendation] = []
+    treatment_duration_guidance, monitoring_recommendations = _build_mechid_duration_monitoring_guidance(
+        organism=payload["organism"],
+        final_results=payload["final_results"],
+        tx_context=req.tx_context.model_dump(by_alias=True) if req.tx_context is not None else None,
+        therapy_notes=payload["therapy_notes"],
+    )
+    if req.dose_context is not None:
+        try:
+            patient = normalize_patient(
+                age_years=req.dose_context.patient.age_years,
+                sex=req.dose_context.patient.sex,
+                total_body_weight_kg=req.dose_context.patient.total_body_weight_kg,
+                height_cm=req.dose_context.patient.height_cm,
+                serum_creatinine_mg_dl=req.dose_context.patient.serum_creatinine_mg_dl,
+            )
+            dosing_recommendations = [
+                _doseid_recommendation_model(item)
+                for item in suggest_mechid_doses(
+                    organism=payload["organism"],
+                    final_results=payload["final_results"],
+                    therapy_notes=payload["therapy_notes"],
+                    tx_context=req.tx_context.model_dump(by_alias=True) if req.tx_context is not None else None,
+                    patient=patient,
+                    renal_mode=req.dose_context.renal_mode,
+                    max_suggestions=req.dose_context.max_suggestions,
+                )
+            ]
+        except DoseIDError as exc:
+            warnings.append(str(exc))
 
     return MechIDAnalyzeResponse(
         organism=payload["organism"],
@@ -2010,8 +2148,11 @@ def analyze_mechid_endpoint(req: MechIDAnalyzeRequest) -> MechIDAnalyzeResponse:
         cautions=payload["cautions"],
         favorableSignals=payload["favorable_signals"],
         therapyNotes=payload["therapy_notes"],
+        treatmentDurationGuidance=treatment_duration_guidance,
+        monitoringRecommendations=monitoring_recommendations,
+        dosingRecommendations=dosing_recommendations,
         references=payload["references"],
-        warnings=[],
+        warnings=warnings,
     )
 
 
@@ -2536,6 +2677,147 @@ def _build_recommendation_summary(
     return None, []
 
 
+def _build_duration_monitoring_guidance(
+    *,
+    module: SyndromeModule,
+    recommendation: str,
+    prep_findings: dict[str, str],
+) -> tuple[List[str], List[str]]:
+    if recommendation == "observe":
+        return [], []
+
+    duration: List[str] = []
+    monitoring: List[str] = []
+
+    if module.id == "endo":
+        duration = [
+            "Most infective endocarditis courses are measured in weeks, not days. Native-valve disease is often treated for about 4 to 6 weeks, while Staphylococcus aureus, Enterococcus, prosthetic-valve infection, or other complicated disease often needs 6 weeks or longer.",
+            "If bacteremia clears slowly, source control is incomplete, or there are metastatic foci, the effective treatment clock usually follows the first truly negative blood culture and adequate source control rather than the admission date.",
+        ]
+        monitoring = [
+            "Repeat blood cultures every 24 to 48 hours until bloodstream clearance is documented.",
+            "Reassess for heart failure, conduction changes, embolic complications, persistent bacteremia, and whether repeat TEE or surgical input is needed.",
+            "Monitor drug-specific toxicity during the prolonged course, especially renal function and vancomycin exposure if vancomycin is used, or CBC/CMP for other long-course regimens.",
+        ]
+        return duration, monitoring
+
+    if module.id == "inv_candida":
+        duration = [
+            "Uncomplicated candidemia is typically treated for at least 14 days after the first negative blood culture and clinical improvement.",
+            "If there is endocarditis, endophthalmitis, deep organ involvement, an infected device, or another uncontrolled focus, duration is usually longer and tied to source control plus site-specific follow-up.",
+        ]
+        monitoring = [
+            "Repeat blood cultures daily or every other day until candidemia has clearly cleared.",
+            "Confirm source control, including line removal when appropriate and reassessment for deep foci.",
+            "Follow CBC/CMP and liver tests during therapy, and reassess ocular symptoms or ophthalmologic evaluation when clinically indicated.",
+        ]
+        return duration, monitoring
+
+    if module.id == "inv_mold":
+        duration = [
+            "Invasive aspergillosis is usually treated for at least 6 to 12 weeks, and often longer when immunosuppression persists or radiographic lesions have not clearly improved.",
+            "If the syndrome is more consistent with mucormycosis or another non-Aspergillus mold, therapy commonly extends for weeks to months and depends heavily on immune recovery and serial imaging response.",
+        ]
+        monitoring = [
+            "Reassess with follow-up chest CT, often after about 2 weeks or sooner if the patient worsens clinically.",
+            "Follow drug-specific toxicity closely: CBC/CMP and liver tests for azoles, azole drug levels when relevant, and creatinine plus potassium/magnesium for amphotericin formulations.",
+            "Keep reassessing whether tissue diagnosis, BAL-based microbiology, or revision of the differential is needed if the trajectory is not improving.",
+        ]
+        return duration, monitoring
+
+    if module.id == "active_tb":
+        duration = [
+            "For drug-susceptible pulmonary TB, the usual starting framework is 2 months of RIPE followed by 4 additional months of isoniazid plus rifampin if the clinical and microbiologic response is appropriate.",
+            "Duration often needs to be extended when there is slow culture conversion, cavitary disease with persistent positive cultures, CNS involvement, major drug resistance, or another complicated extrapulmonary focus.",
+        ]
+        monitoring = [
+            "Follow sputum smear or culture and clinical response through treatment, with repeat respiratory sampling until microbiologic improvement is documented.",
+            "Monitor liver tests and symptoms of hepatitis during RIPE therapy, especially in patients with baseline liver risk or symptoms.",
+            "Track vision and color discrimination if ethambutol is being continued, and review rifamycin drug interactions throughout the course.",
+        ]
+        return duration, monitoring
+
+    return duration, monitoring
+
+
+def _build_mechid_duration_monitoring_guidance(
+    *,
+    organism: str,
+    final_results: Dict[str, str],
+    tx_context: Dict[str, str] | None,
+    therapy_notes: List[str],
+) -> tuple[List[str], List[str]]:
+    syndrome = (tx_context or {}).get("syndrome", "Not specified")
+    focus_detail = (tx_context or {}).get("focusDetail", "Not specified")
+    notes_text = " ".join(therapy_notes).lower()
+    duration: List[str] = []
+    monitoring: List[str] = []
+
+    if organism == "Staphylococcus aureus":
+        if syndrome == "Bloodstream infection" or focus_detail == "Endocarditis":
+            duration = [
+                "If this is uncomplicated S. aureus bacteremia with rapid clearance and no metastatic focus, treatment is usually at least 14 days after the first negative blood culture; true endovascular infection or endocarditis usually needs 4 to 6 weeks or longer.",
+                "The final duration should follow the first documented culture clearance plus whether endocarditis, osteomyelitis, epidural infection, hardware infection, or another metastatic focus is present.",
+            ]
+            monitoring = [
+                "Repeat blood cultures every 24 to 48 hours until clearance is documented.",
+                "If vancomycin is used for MRSA, follow renal function and AUC or vancomycin levels; if daptomycin is used, follow CK at least weekly and watch for eosinophilic pneumonia or myopathy.",
+                "Keep reassessing for endocarditis, metastatic foci, removable lines, drainable collections, and source control.",
+            ]
+            return duration, monitoring
+        if syndrome == "Bone/joint infection":
+            duration = [
+                "For staphylococcal osteomyelitis or other deep bone and joint infection, treatment commonly extends for about 6 weeks, and sometimes longer when hardware remains or debridement is incomplete."
+            ]
+            monitoring = [
+                "Follow source control, wound or joint drainage status, inflammatory markers when useful, and weekly CBC/CMP plus drug-specific toxicity labs during prolonged therapy."
+            ]
+            return duration, monitoring
+
+    if organism.startswith("Enterococcus"):
+        if syndrome == "Bloodstream infection" or focus_detail == "Endocarditis":
+            duration = [
+                "Uncomplicated enterococcal bacteremia is often treated for at least 14 days after clearance, while enterococcal endocarditis usually requires a prolonged course such as 4 to 6 weeks and sometimes synergy-based treatment depending on the regimen."
+            ]
+            monitoring = [
+                "Repeat blood cultures until clearance and reassess whether endocarditis or another deep focus is present.",
+                "If daptomycin is used for VRE, follow CK at least weekly; if linezolid is used, follow CBC and watch for neuropathy or serotonin-toxicity issues during longer courses.",
+            ]
+            return duration, monitoring
+        if syndrome == "Bone/joint infection":
+            duration = [
+                "Enterococcal bone or joint infection often needs a prolonged course, commonly around 6 weeks, adjusted to source control and hardware status."
+            ]
+            monitoring = [
+                "Follow CBC/CMP and drug-specific toxicity, plus clinical response and any required orthopedic or source-control reassessment."
+            ]
+            return duration, monitoring
+
+    if organism == "Mycobacterium tuberculosis complex":
+        duration = [
+            "Drug-susceptible pulmonary TB usually follows a 2-month RIPE intensive phase followed by 4 months of isoniazid plus rifampin if the response is appropriate.",
+            "Longer courses are common when there is slow culture conversion, cavitary disease with persistent positive cultures, CNS disease, or other complicated extrapulmonary infection."
+        ]
+        monitoring = [
+            "Track sputum culture conversion and clinical response through treatment.",
+            "Follow liver tests and hepatitis symptoms during RIPE therapy, and monitor vision if ethambutol continues.",
+            "Review rifamycin drug interactions throughout the course."
+        ]
+        return duration, monitoring
+
+    if syndrome == "Bloodstream infection":
+        duration = [
+            "For many uncomplicated Gram-negative bloodstream infections with good source control and clinical response, total therapy is often measured in about 7 to 14 days, but longer courses are used when there is uncontrolled source or another deep focus."
+        ]
+        monitoring = [
+            "Make sure source control is adequate and that the patient is truly improving before shortening treatment.",
+            "Follow renal function and other drug-specific toxicity labs for the chosen regimen."
+        ]
+        return duration, monitoring
+
+    return duration, monitoring
+
+
 @app.post("/v1/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     return _analyze_internal(req)
@@ -2598,6 +2880,11 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         prep_findings=prep.analysis_findings,
         preset_id=preset_id,
     )
+    treatment_duration_guidance, monitoring_recommendations = _build_duration_monitoring_guidance(
+        module=module,
+        recommendation=recommendation,
+        prep_findings=prep.analysis_findings,
+    )
 
     response = AnalyzeResponse(
         moduleId=module.id,
@@ -2609,6 +2896,8 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         recommendation=recommendation,  # type: ignore[arg-type]
         recommendationSummary=recommendation_summary,
         recommendedNextSteps=recommended_next_steps,
+        treatmentDurationGuidance=treatment_duration_guidance,
+        monitoringRecommendations=monitoring_recommendations,
         confidence=confidence,
         appliedFindings=applied_findings,
         stepwise=stepwise,
@@ -2763,6 +3052,11 @@ def _assistant_module_options() -> List[AssistantOption]:
             value=MECHID_ASSISTANT_ID,
             label=MECHID_ASSISTANT_LABEL,
             description=MECHID_ASSISTANT_DESCRIPTION,
+        ),
+        AssistantOption(
+            value=DOSEID_ASSISTANT_ID,
+            label=DOSEID_ASSISTANT_LABEL,
+            description=DOSEID_ASSISTANT_DESCRIPTION,
         ),
         AssistantOption(
             value=PROBID_ASSISTANT_ID,
@@ -3152,6 +3446,10 @@ def _build_probid_consult_message(
         f"What I would do next: {_friendly_probid_next_steps(analysis)}",
         f"What would change my mind: {_friendly_probid_change_mind(analysis, missing_suggestions)}",
     ]
+    if analysis.treatment_duration_guidance:
+        lines.append(f"How long I would usually treat: {_join_readable(analysis.treatment_duration_guidance[:2])}.")
+    if analysis.monitoring_recommendations:
+        lines.append(f"What I would monitor: {_join_readable(analysis.monitoring_recommendations[:3])}.")
     if include_panel_note:
         lines.append("I left the LR breakdown and structured findings in the analysis panel below.")
     return "\n".join(lines)
@@ -4013,6 +4311,10 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         summary += f"\nBottom line: {_friendly_mechid_bottom_line(result.analysis, parsed)}"
         summary += f"\nPattern: {_friendly_mechid_mechanism(result.analysis)}"
         summary += f"\nTreatment approach: {_friendly_mechid_therapy(result.analysis, parsed)}"
+        if result.analysis.treatment_duration_guidance:
+            summary += f"\nTypical duration frame: {_join_readable(result.analysis.treatment_duration_guidance[:2])}."
+        if result.analysis.monitoring_recommendations:
+            summary += f"\nMonitoring during therapy: {_join_readable(result.analysis.monitoring_recommendations[:3])}."
         oral_options = _friendly_mechid_oral_options(result.analysis, parsed)
         if oral_options:
             summary += f"\nPossible oral options: {oral_options}"
@@ -6335,11 +6637,451 @@ def _assistant_start_immunoid_from_text(
     return _assistant_immunoid_response(state)
 
 
+def _assistant_doseid_normalize(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def _assistant_doseid_medications_by_id() -> Dict[str, Any]:
+    return {med.id: med for med in list_medications()}
+
+
+def _assistant_doseid_alias_map() -> Dict[str, List[str]]:
+    alias_map: Dict[str, List[str]] = {}
+    for med in list_medications():
+        aliases = {
+            med.id.replace("_", " "),
+            med.name.lower(),
+            med.name.lower().replace("/", " "),
+            med.name.lower().replace("/", ""),
+        }
+        if med.id == "piperacillin_tazobactam":
+            aliases.update({"zosyn", "pip tazo", "piptazo"})
+        elif med.id == "ampicillin_sulbactam":
+            aliases.update({"unasyn"})
+        elif med.id == "tmp_smx":
+            aliases.update({"tmp smx", "tmp-smx", "bactrim", "trimethoprim sulfamethoxazole"})
+        elif med.id == "vancomycin_iv":
+            aliases.update({"vanc", "iv vancomycin"})
+        elif med.id == "liposomal_amphotericin_b":
+            aliases.update({"ambisome", "l ampho", "liposomal amphotericin"})
+        elif med.id == "moxifloxacin_tb":
+            aliases.update({"moxifloxacin", "moxi"})
+        elif med.id == "acyclovir_iv":
+            aliases.update({"iv acyclovir"})
+        elif med.id == "acyclovir_po":
+            aliases.update({"oral acyclovir", "po acyclovir"})
+        alias_map[med.id] = sorted(_assistant_doseid_normalize(alias) for alias in aliases if alias)
+    return alias_map
+
+
+def _assistant_detect_doseid_medication_ids(message_text: str) -> List[str]:
+    normalized = f" {_assistant_doseid_normalize(message_text)} "
+    medication_ids: List[str] = []
+    if any(token in normalized for token in (" ripe ", " rhze ")):
+        medication_ids.extend(["rifampin", "isoniazid", "pyrazinamide", "ethambutol"])
+    for med_id, aliases in _assistant_doseid_alias_map().items():
+        if med_id in medication_ids:
+            continue
+        for alias in aliases:
+            alias_norm = f" {alias} "
+            if alias and alias_norm in normalized:
+                medication_ids.append(med_id)
+                break
+    return medication_ids
+
+
+def _assistant_is_doseid_intent(message_text: str) -> bool:
+    normalized = f" {_assistant_doseid_normalize(message_text)} "
+    if not normalized.strip():
+        return False
+    if _assistant_detect_doseid_medication_ids(message_text):
+        return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS) or " q" in normalized
+    return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS)
+
+
+def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistantPatientContext:
+    normalized = _assistant_doseid_normalize(message_text)
+    renal_mode = "standard"
+    if any(token in normalized for token in ("crrt", "cvvh", "cvvhd", "cvvhdf")):
+        renal_mode = "crrt"
+    elif any(token in normalized for token in ("hemodialysis", "haemodialysis", "dialysis", "esrd", " i hd ", " hd ")):
+        renal_mode = "ihd"
+
+    age_years = None
+    age_match = re.search(r"\b(\d{1,3})\s*(?:yo|y/o|year old|years old)\b", normalized)
+    if age_match:
+        age_years = int(age_match.group(1))
+
+    sex = None
+    if re.search(r"\bmale\b|\bman\b", normalized):
+        sex = "male"
+    elif re.search(r"\bfemale\b|\bwoman\b", normalized):
+        sex = "female"
+
+    weight_kg = None
+    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?)\b", normalized)
+    if weight_match:
+        weight_kg = float(weight_match.group(1))
+    else:
+        pounds_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(lb|lbs|pounds?)\b", normalized)
+        if pounds_match:
+            weight_kg = round(float(pounds_match.group(1)) / 2.20462, 1)
+
+    height_cm = None
+    height_match = re.search(r"\b(\d+(?:\.\d+)?)\s*cm\b", normalized)
+    if height_match:
+        height_cm = float(height_match.group(1))
+    else:
+        feet_inches_match = re.search(r"\b(\d)\s*ft\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
+        if feet_inches_match:
+            feet = int(feet_inches_match.group(1))
+            inches = int(feet_inches_match.group(2) or 0)
+            height_cm = round(((feet * 12) + inches) * 2.54, 1)
+
+    scr = None
+    scr_match = re.search(r"\b(?:scr|serum creatinine|creatinine)\s*(?:is|=|:)?\s*(\d+(?:\.\d+)?)\b", normalized)
+    if scr_match:
+        scr = float(scr_match.group(1))
+
+    crcl = None
+    crcl_match = re.search(r"\b(?:crcl|creatinine clearance)\s*(?:is|=|:|of)?\s*(\d+(?:\.\d+)?)\b", normalized)
+    if crcl_match:
+        crcl = float(crcl_match.group(1))
+
+    return DoseIDAssistantPatientContext(
+        ageYears=age_years,
+        sex=sex,
+        totalBodyWeightKg=weight_kg,
+        heightCm=height_cm,
+        serumCreatinineMgDl=scr,
+        crclMlMin=crcl,
+        renalMode=renal_mode,
+    )
+
+
+def _assistant_doseid_indication_for_query(medication_id: str, message_text: str) -> str:
+    normalized = _assistant_doseid_normalize(message_text)
+    if medication_id in {"isoniazid", "rifampin"} and "three times weekly" in normalized:
+        return "tb_intermittent" if medication_id == "isoniazid" else "tb_daily"
+    if medication_id in {"ethambutol", "pyrazinamide"} and "three times weekly" in normalized:
+        return "tb_high_dose_intermittent"
+    if medication_id == "oseltamivir":
+        return "influenza_prophylaxis" if "prophyl" in normalized else "influenza_treatment"
+    if medication_id in {"valganciclovir", "ganciclovir_iv"}:
+        return "cmv_prophylaxis" if "prophyl" in normalized else "cmv_treatment"
+    if medication_id == "foscarnet":
+        return "cmv_maintenance_or_hsv" if any(token in normalized for token in ("maintenance", "salvage hsv", "hsv")) else "cmv_induction"
+    if medication_id == "valacyclovir":
+        return "hsv_suppression" if "suppress" in normalized else "zoster_or_treatment"
+    if medication_id == "acyclovir_po":
+        return "zoster_or_severe_hsv" if any(token in normalized for token in ("zoster", "shingles", "severe hsv")) else "standard_hsv"
+    if medication_id == "acyclovir_iv":
+        return "hsv_encephalitis_or_disseminated" if any(token in normalized for token in ("encephalitis", "disseminated")) else "standard_hsv_systemic"
+    if medication_id == "famciclovir":
+        if "suppress" in normalized:
+            return "suppression"
+        if any(token in normalized for token in ("recurrent genital", "episodic hsv", "genital hsv")):
+            return "recurrent_genital_hsv"
+        return "herpes_zoster"
+    if medication_id == "rifampin" and any(token in normalized for token in ("hardware", "prosthetic", "biofilm")):
+        return "hardware_adjuvant"
+    if medication_id == "isavuconazole":
+        return "stepdown_oral" if "stepdown" in normalized or "step-down" in normalized else "invasive_mold_treatment"
+    if medication_id == "posaconazole":
+        return "mold_prophylaxis" if "prophyl" in normalized else "invasive_fungal_treatment"
+    if medication_id == "voriconazole":
+        return "mold_prophylaxis" if "prophyl" in normalized else "invasive_mold_treatment"
+    return default_indication_id(medication_id)
+
+
+def _assistant_build_doseid_analysis(message_text: str) -> DoseIDAssistantAnalysis:
+    medication_ids = _assistant_detect_doseid_medication_ids(message_text)
+    patient_context = _assistant_parse_doseid_patient_context(message_text)
+    assumptions: List[str] = []
+    warnings: List[str] = []
+    missing_inputs: List[str] = []
+
+    if not medication_ids:
+        missing_inputs.append("medication or regimen")
+
+    weight_sensitive_medications = {
+        "daptomycin",
+        "tmp_smx",
+        "isoniazid",
+        "ethambutol",
+        "pyrazinamide",
+        "voriconazole",
+        "liposomal_amphotericin_b",
+        "foscarnet",
+        "acyclovir_iv",
+        "ganciclovir_iv",
+    }
+    if any(med_id in weight_sensitive_medications for med_id in medication_ids) and patient_context.total_body_weight_kg is None:
+        missing_inputs.append("weight")
+
+    needs_renal_info = any(patient_context.renal_mode == "standard" for _ in medication_ids)
+    if needs_renal_info and patient_context.crcl_ml_min is None and patient_context.serum_creatinine_mg_dl is None:
+        missing_inputs.append("renal function (serum creatinine or CrCl)")
+
+    recommendations: List[DoseIDDoseRecommendation] = []
+    if medication_ids and not missing_inputs:
+        patient, patient_assumptions = normalize_patient_from_available_inputs(
+            total_body_weight_kg=patient_context.total_body_weight_kg,
+            age_years=patient_context.age_years,
+            sex=patient_context.sex,
+            height_cm=patient_context.height_cm,
+            serum_creatinine_mg_dl=patient_context.serum_creatinine_mg_dl,
+            crcl_ml_min=patient_context.crcl_ml_min,
+            renal_mode=patient_context.renal_mode,
+        )
+        assumptions.extend(patient_assumptions)
+        if patient_context.crcl_ml_min is not None and patient_context.serum_creatinine_mg_dl is None:
+            warnings.append("Direct CrCl was used for renal bucketing. If the underlying estimate is uncertain, confirm the final regimen manually.")
+        if any(med_id in {"ethambutol", "pyrazinamide", "voriconazole", "liposomal_amphotericin_b", "foscarnet", "ganciclovir_iv"} for med_id in medication_ids):
+            if patient_context.height_cm is None or patient_context.sex is None:
+                warnings.append("Height and/or sex were not provided, so obesity-sensitive body-size estimates may shift with the actual values.")
+        for medication_id in medication_ids[:6]:
+            payload = calculate_medication(
+                medication_id=medication_id,
+                patient=patient,
+                renal_mode=patient_context.renal_mode,
+                indication_id=_assistant_doseid_indication_for_query(medication_id, message_text),
+            )
+            recommendations.append(_doseid_recommendation_model(payload))
+
+    medication_names = [
+        _assistant_doseid_medications_by_id().get(med_id).name
+        for med_id in medication_ids
+        if _assistant_doseid_medications_by_id().get(med_id) is not None
+    ]
+    return DoseIDAssistantAnalysis(
+        medications=medication_names,
+        patientContext=patient_context,
+        recommendations=recommendations,
+        assumptions=assumptions,
+        warnings=warnings,
+        missingInputs=missing_inputs,
+    )
+
+
+def _assistant_doseid_message(result: DoseIDAssistantAnalysis) -> str:
+    if not result.medications:
+        return (
+            "I can help with antimicrobial dosing here. Tell me the medication or regimen plus the renal context, "
+            "for example 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35'."
+        )
+    if result.missing_inputs:
+        missing = ", ".join(result.missing_inputs)
+        meds = ", ".join(result.medications)
+        return f"I picked up {meds}, but I still need {missing} to give a dosing recommendation."
+    if not result.recommendations:
+        return "I picked up the dosing question, but I still need a little more clinical detail before I can calculate a regimen."
+    recommendation_summary = "; ".join(
+        f"{item.medication_name}: {item.regimen}" for item in result.recommendations[:4]
+    )
+    lead = "I calculated dosing from the details you gave me."
+    if result.assumptions:
+        lead += " A few missing values were scaffolded, so please review the assumptions panel."
+    return f"{lead} {recommendation_summary}"
+
+
+def _assistant_doseid_response(
+    state: AssistantState,
+    *,
+    message_text: str,
+    prefix: str = "",
+) -> AssistantTurnResponse:
+    state.workflow = "doseid"
+    state.stage = "doseid_describe"
+    state.module_id = None
+    state.preset_id = None
+    state.case_section = None
+    state.case_text = None
+    state.mechid_text = None
+    state.doseid_text = message_text
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+    _assistant_reset_immunoid_state(state)
+    result = _assistant_build_doseid_analysis(message_text)
+    message = ((prefix or "") + _assistant_doseid_message(result)).strip()
+    return AssistantTurnResponse(
+        assistantMessage=message,
+        state=state,
+        doseidAnalysis=result,
+        options=[
+            AssistantOption(value="add_more_details", label="Update dosing inputs"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "A useful reply would be: 'cefepime on HD' or 'RIPE for 62 kg, CrCl 35, female, 165 cm'.",
+            "You can add age, sex, height, weight, serum creatinine, or direct CrCl to refine the regimen.",
+        ],
+    )
+
+
+def _assistant_start_doseid_from_text(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    if not message_text or not _assistant_is_doseid_intent(message_text):
+        return None
+    return _assistant_doseid_response(state, message_text=message_text)
+
+
+def _assistant_unique_medication_ids(medication_ids: List[str]) -> List[str]:
+    seen: set[str] = set()
+    unique: List[str] = []
+    for medication_id in medication_ids:
+        if medication_id in seen:
+            continue
+        seen.add(medication_id)
+        unique.append(medication_id)
+    return unique
+
+
+def _assistant_build_doseid_followup_prompt(
+    medication_ids: List[str],
+    *,
+    case_text: str | None,
+) -> str | None:
+    medication_ids = _assistant_unique_medication_ids(medication_ids)
+    if not medication_ids:
+        return None
+    meds_by_id = _assistant_doseid_medications_by_id()
+    medication_names = [meds_by_id[item].name for item in medication_ids if item in meds_by_id]
+    if not medication_names:
+        return None
+    if medication_ids[:4] == ["rifampin", "isoniazid", "pyrazinamide", "ethambutol"]:
+        prompt = "Please calculate RIPE dosing."
+    else:
+        prompt = f"Please calculate dosing for {_join_readable(medication_names)}."
+    if case_text and case_text.strip():
+        prompt += f" Case context: {case_text.strip()}"
+    return prompt
+
+
+def _assistant_probid_doseid_candidate_ids(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> List[str]:
+    analysis = text_result.analysis
+    parsed_request = text_result.parsed_request
+    case_text = state.case_text or ""
+    case_norm = _assistant_doseid_normalize(case_text)
+    findings = parsed_request.findings if parsed_request is not None else {}
+
+    if analysis is None or analysis.recommendation != "treat":
+        return []
+
+    def _present(item_id: str) -> bool:
+        return findings.get(item_id) == "present"
+
+    if module.id == "active_tb":
+        return ["rifampin", "isoniazid", "pyrazinamide", "ethambutol"]
+
+    if module.id == "inv_mold":
+        mucor_signal = any(
+            _present(item_id)
+            for item_id in {"imi_mucorales_pcr_bal", "imi_mucorales_pcr_plasma"}
+        ) or "mucor" in case_norm
+        aspergillus_signal = any(
+            _present(item_id)
+            for item_id in {
+                "imi_serum_gm_odi10",
+                "imi_bal_gm_odi10",
+                "imi_aspergillus_pcr_bal",
+                "imi_aspergillus_pcr_plasma",
+                "imi_aspergillus_culture_resp",
+            }
+        ) or "aspergillus" in case_norm
+        if mucor_signal:
+            return ["liposomal_amphotericin_b", "isavuconazole", "posaconazole"]
+        if aspergillus_signal:
+            return ["voriconazole", "isavuconazole", "posaconazole"]
+        return ["voriconazole", "liposomal_amphotericin_b", "posaconazole"]
+
+    if module.id == "endo":
+        if "mrsa" in case_norm or "methicillin resistant" in case_norm:
+            return ["vancomycin_iv", "daptomycin"]
+        if "mssa" in case_norm or "methicillin susceptible" in case_norm:
+            return ["nafcillin", "cefazolin"]
+        if state.endo_blood_culture_context == "staph":
+            return ["vancomycin_iv", "cefazolin"]
+        if state.endo_blood_culture_context == "enterococcus":
+            if "vre" in case_norm or "vancomycin resistant enterococcus" in case_norm:
+                return ["daptomycin", "linezolid"]
+            return ["ampicillin", "vancomycin_iv"]
+        if state.endo_blood_culture_context == "strep":
+            return ["penicillin_g", "ceftriaxone"]
+
+    if module.id == "bacterial_meningitis":
+        return ["ceftriaxone", "vancomycin_iv"]
+
+    return []
+
+
+def _assistant_mechid_doseid_candidate_ids(result: MechIDTextAnalyzeResponse) -> List[str]:
+    if result.analysis is None:
+        return []
+    text_blocks: List[str] = []
+    text_blocks.extend(result.analysis.therapy_notes or [])
+    text_blocks.extend(result.analysis.mechanisms or [])
+    text_blocks.extend(result.analysis.cautions or [])
+    return _assistant_detect_doseid_medication_ids("\n".join(text_blocks))
+
+
+def _assistant_start_doseid_from_probid_state(state: AssistantState) -> AssistantTurnResponse | None:
+    if not state.module_id or not (state.case_text or "").strip():
+        return None
+    module = store.get(state.module_id)
+    if module is None:
+        return None
+    text_result = _assistant_parse_case_text(module, state)
+    if text_result.parsed_request is None:
+        return None
+    try:
+        text_result.analysis = _analyze_internal(text_result.parsed_request)
+    except HTTPException:
+        return None
+    medication_ids = _assistant_probid_doseid_candidate_ids(module, text_result, state)
+    prompt = _assistant_build_doseid_followup_prompt(medication_ids, case_text=state.case_text)
+    if not prompt:
+        return None
+    response = _assistant_start_doseid_from_text(prompt, state)
+    if response is not None:
+        response.assistant_message = "I carried the consult forward into dosing. " + response.assistant_message
+    return response
+
+
+def _assistant_start_doseid_from_mechid_state(state: AssistantState) -> AssistantTurnResponse | None:
+    if not (state.mechid_text or "").strip():
+        return None
+    result = _build_mechid_text_response(
+        state.mechid_text,
+        parser_strategy=state.parser_strategy,
+        parser_model=state.parser_model,
+        allow_fallback=state.allow_fallback,
+    )
+    medication_ids = _assistant_mechid_doseid_candidate_ids(result)
+    prompt = _assistant_build_doseid_followup_prompt(medication_ids, case_text=state.mechid_text)
+    if not prompt:
+        return None
+    response = _assistant_start_doseid_from_text(prompt, state)
+    if response is not None:
+        response.assistant_message = "I carried the isolate consult forward into dosing. " + response.assistant_message
+    return response
+
+
 def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     sel = (req.selection or "").strip()
     if sel == PROBID_ASSISTANT_ID:
         return sel
     if sel == MECHID_ASSISTANT_ID:
+        return sel
+    if sel == DOSEID_ASSISTANT_ID:
         return sel
     if sel == IMMUNOID_ASSISTANT_ID:
         return sel
@@ -6351,6 +7093,8 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
         return None
     if _assistant_is_mechid_intent(msg):
         return MECHID_ASSISTANT_ID
+    if _assistant_is_doseid_intent(msg):
+        return DOSEID_ASSISTANT_ID
     if _assistant_is_immunoid_intent(msg):
         return IMMUNOID_ASSISTANT_ID
     if msg in {"syndrome", "probability", "clinical syndrome probability", "probid", "syndrome probability"}:
@@ -6397,6 +7141,13 @@ def _assistant_start_pending_followup(state: AssistantState) -> AssistantTurnRes
         if response is not None:
             response.assistant_message = (
                 "I carried the same case into the resistance lane. " + response.assistant_message
+            )
+        return response
+    if pending_workflow == "doseid":
+        response = _assistant_start_doseid_from_text(pending_text, state)
+        if response is not None:
+            response.assistant_message = (
+                "I carried the same case into the dosing lane. " + response.assistant_message
             )
         return response
     if pending_workflow == "immunoid":
@@ -6471,6 +7222,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             workflow="probid",
             caseText=None,
             mechidText=None,
+            doseidText=None,
             pendingIntakeText=None,
             pendingFollowupWorkflow=None,
             pendingFollowupText=None,
@@ -6486,6 +7238,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     if state.stage == "select_module":
         message_text = (req.message or "").strip()
         if message_text:
+            direct_doseid_response = _assistant_start_doseid_from_text(message_text, state)
+            if direct_doseid_response is not None:
+                return direct_doseid_response
             direct_immunoid_response = _assistant_start_immunoid_from_text(message_text, state)
             if direct_immunoid_response is not None:
                 return direct_immunoid_response
@@ -6567,6 +7322,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 state.case_section = None
                 state.case_text = None
                 state.mechid_text = None
+                state.doseid_text = None
                 state.pretest_factor_ids = []
                 state.pretest_factor_labels = []
                 state.endo_blood_culture_context = None
@@ -6584,6 +7340,33 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
 
+            if chosen_module_id == DOSEID_ASSISTANT_ID:
+                _assistant_reset_immunoid_state(state)
+                state.workflow = "doseid"
+                state.stage = "doseid_describe"
+                state.module_id = None
+                state.preset_id = None
+                state.case_section = None
+                state.case_text = None
+                state.mechid_text = None
+                state.doseid_text = None
+                state.pretest_factor_ids = []
+                state.pretest_factor_labels = []
+                state.endo_blood_culture_context = None
+                state.endo_score_factor_ids = []
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Tell me the antimicrobial or regimen plus the renal context. "
+                        "For example: 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35, female, 165 cm'."
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                    tips=[
+                        "I can handle common antibacterial, TB, antifungal, and antiviral regimens.",
+                        "The most useful details are weight, serum creatinine or CrCl, dialysis status, age, sex, and height.",
+                    ],
+                )
+
             if chosen_module_id == PROBID_ASSISTANT_ID:
                 state.workflow = "probid"
                 state.stage = "select_syndrome_module"
@@ -6592,6 +7375,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 state.case_section = None
                 state.case_text = None
                 state.mechid_text = None
+                state.doseid_text = None
                 state.pretest_factor_ids = []
                 state.pretest_factor_labels = []
                 state.endo_blood_culture_context = None
@@ -6616,6 +7400,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 state.case_section = None
                 state.case_text = None
                 state.mechid_text = None
+                state.doseid_text = None
                 state.pretest_factor_ids = []
                 state.pretest_factor_labels = []
                 state.endo_blood_culture_context = None
@@ -6639,6 +7424,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             _assistant_reset_immunoid_state(state)
             state.module_id = chosen_module_id
             state.mechid_text = None
+            state.doseid_text = None
             state.endo_blood_culture_context = None
             state.endo_score_factor_ids = []
             state.case_section = None
@@ -6666,17 +7452,18 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             state=state,
             options=_assistant_module_options(),
             tips=[
-                "Choose resistance mechanism and therapy, clinical syndrome probability, or immunosuppression screening and prophylaxis.",
+                "Choose resistance mechanism and therapy, antimicrobial dosing, clinical syndrome probability, or immunosuppression screening and prophylaxis.",
             ],
         )
 
     if state.stage == "select_syndrome_module":
         chosen_module_id = _select_module_from_turn(req)
-        if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID}:
+        if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, DOSEID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID}:
             state.workflow = "probid"
             _assistant_reset_immunoid_state(state)
             state.module_id = chosen_module_id
             state.mechid_text = None
+            state.doseid_text = None
             state.endo_blood_culture_context = None
             state.endo_score_factor_ids = []
             state.case_section = None
@@ -6704,6 +7491,26 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             tips=[
                 "Choose the syndrome first, then I’ll ask for the setting and case details.",
                 "You can also type the syndrome name in plain language.",
+            ],
+        )
+
+    if state.stage == "doseid_describe":
+        if req.message and req.message.strip():
+            state.doseid_text = _append_case_text(state.doseid_text, req.message)
+            return _assistant_doseid_response(
+                state,
+                message_text=state.doseid_text,
+                prefix="I updated the dosing consult. ",
+            )
+        return AssistantTurnResponse(
+            assistantMessage=(
+                "Tell me the antimicrobial or regimen plus the renal context, and I’ll calculate the dose. "
+                "For example: 'cefepime on hemodialysis' or 'RIPE for 62 kg, CrCl 35'."
+            ),
+            state=state,
+            options=[AssistantOption(value="restart", label="Start new consult")],
+            tips=[
+                "The most useful details are weight, renal function, dialysis status, age, sex, and height.",
             ],
         )
 
@@ -6900,6 +7707,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
                 done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
+            if _assistant_mechid_doseid_candidate_ids(mechid_result):
+                done_options.insert(
+                    1 if done_options and done_options[0].value == "continue_to_syndrome" else 0,
+                    AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
+                )
+                done_tips.insert(
+                    1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
+                    "If you want, I can keep going into dosing for the therapy options suggested by this isolate consult.",
+                )
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -7480,6 +8296,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                 done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
+            if _assistant_probid_doseid_candidate_ids(module, text_result, state):
+                done_options.insert(
+                    1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
+                    AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
+                )
+                done_tips.insert(
+                    1 if done_tips and "resistance" in done_tips[0].lower() else 0,
+                    "If you want, I can keep going into antimicrobial dosing for the treatment options suggested by this consult.",
+                )
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -7536,6 +8361,26 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             followup_response = _assistant_start_pending_followup(state)
             if followup_response is not None:
                 return followup_response
+        if selection == "continue_to_dosing":
+            if state.workflow == "probid":
+                followup_response = _assistant_start_doseid_from_probid_state(state)
+                if followup_response is not None:
+                    return followup_response
+            if state.workflow == "mechid":
+                followup_response = _assistant_start_doseid_from_mechid_state(state)
+                if followup_response is not None:
+                    return followup_response
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    "I could not confidently carry this consult into dosing yet. Add the likely treatment agent or regimen, "
+                    "and I’ll calculate the dose from there."
+                ),
+                state=state,
+                options=[AssistantOption(value="restart", label="Start new consult")],
+                tips=[
+                    "For example: 'dose vancomycin for MRSA endocarditis' or 'RIPE dosing for 62 kg, CrCl 35'.",
+                ],
+            )
         if selection == "add_more_details" and not (req.message and req.message.strip()):
             if state.workflow == "mechid":
                 return AssistantTurnResponse(
@@ -7598,6 +8443,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
                     done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
                     done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
+                if _assistant_mechid_doseid_candidate_ids(updated_result):
+                    done_options.insert(
+                        1 if done_options and done_options[0].value == "continue_to_syndrome" else 0,
+                        AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
+                    )
+                    done_tips.insert(
+                        1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
+                        "If you want, I can keep going into dosing for the therapy options suggested by this isolate consult.",
+                    )
                 return AssistantTurnResponse(
                     assistantMessage=f"{prefix} {updated_message}",
                     assistantNarrationRefined=narration_refined,
@@ -7663,6 +8517,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                         done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                         done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
+                    if _assistant_probid_doseid_candidate_ids(module, updated_result, state):
+                        done_options.insert(
+                            1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
+                            AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
+                        )
+                        done_tips.insert(
+                            1 if done_tips and "resistance" in done_tips[0].lower() else 0,
+                            "If you want, I can keep going into antimicrobial dosing for the treatment options suggested by this consult.",
+                        )
                     return AssistantTurnResponse(
                         assistantMessage=f"{lead} {narrated_message}",
                         assistantNarrationRefined=narration_refined,
@@ -7706,13 +8569,14 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         state.case_section = None
         state.case_text = None
         state.mechid_text = None
+        state.doseid_text = None
         _assistant_reset_immunoid_state(state)
         state.pretest_factor_ids = []
         state.pretest_factor_labels = []
 
     return AssistantTurnResponse(
         assistantMessage=(
-            "Ready for another case. You can start a syndrome workup or a resistance mechanism interpretation."
+            "Ready for another case. You can start a syndrome workup, resistance interpretation, dosing consult, or immunosuppression review."
         ),
         state=state,
         options=_assistant_module_options(),

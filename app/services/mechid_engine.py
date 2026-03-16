@@ -79,6 +79,19 @@ SUPPLEMENTAL_ORGANISM_PANELS: Dict[str, List[str]] = {
         "Ceftriaxone",
         "Cefepime",
     ],
+    "Enterococcus gallinarum": [
+        "Penicillin",
+        "Ampicillin",
+        "Vancomycin",
+        "Linezolid",
+        "Daptomycin",
+        "High-level Gentamicin",
+        "High-level Streptomycin",
+        "Ciprofloxacin",
+        "Nitrofurantoin",
+        "Ceftriaxone",
+        "Cefepime",
+    ],
     "Staphylococcus aureus": [
         "Penicillin",
         "Nafcillin/Oxacillin",
@@ -406,6 +419,10 @@ def normalize_organism(organism: str) -> str:
         "s aureus": "Staphylococcus aureus",
         "vre faecium": "Enterococcus faecium",
         "vre faecalis": "Enterococcus faecalis",
+        "e gallinarum": "Enterococcus gallinarum",
+        "e. gallinarum": "Enterococcus gallinarum",
+        "enterococcus gallinarum": "Enterococcus gallinarum",
+        "vre gallinarum": "Enterococcus gallinarum",
         "pneumococcus": "Streptococcus pneumoniae",
     }
     if lowered in aliases and aliases[lowered] in module.ORGANISM_REGISTRY:

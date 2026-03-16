@@ -163,6 +163,7 @@ REF_CITATIONS = {
     "antonelli_poxta_2018": "Antonelli A, D'Andrea MM, Brenciani A, et al. Characterization of poxtA, a novel phenicol-oxazolidinone-tetracycline resistance gene from an MRSA of clinical origin. J Antimicrob Chemother. 2018;73(7):1763-1769. doi:10.1093/jac/dky088.",
     "faury_asefm_2023": "Faury H, Sanguinetti M, Guérin F, et al. Ampicillin-susceptible Enterococcus faecium infections: clinical features, causal clades, and contribution of MALDI-TOF to early detection. Microbiol Spectr. 2023;11(5):e04545-22. doi:10.1128/spectrum.04545-22.",
     "lorenzo_asefm_2019": "Lorenzo MP, Kidd JM, Jenkins SG, Nicolau DP, Housman ST. In vitro activity of ampicillin and ceftriaxone against ampicillin-susceptible Enterococcus faecium. J Antimicrob Chemother. 2019;74(8):2269-2273. doi:10.1093/jac/dkz173.",
+    "leclercq_vanc_1992": "Leclercq R, Dutka-Malen S, Duval J, Courvalin P. Vancomycin resistance gene vanC is specific to Enterococcus gallinarum. Antimicrob Agents Chemother. 1992;36(9):2005-2008. doi:10.1128/AAC.36.9.2005.",
     "peleg_acinetobacter_2008": "Peleg AY, Seifert H, Paterson DL. Acinetobacter baumannii: emergence of a successful pathogen. Clin Microbiol Rev. 2008;21(3):538-582. doi:10.1128/CMR.00058-07.",
     "kaye_suldur_attack_2023": "Kaye KS, Bassetti M, Shorr AF, et al. Efficacy and safety of sulbactam-durlobactam versus colistin for the treatment of patients with serious infections caused by Acinetobacter baumannii-calcoaceticus complex: a multicentre, randomised, active-controlled, phase 3, non-inferiority clinical trial (ATTACK). Lancet Infect Dis. 2023;23(9):1072-1084. doi:10.1016/S1473-3099(23)00184-6.",
     "ajhp_crab_cefiderocol_2025": "Evaluating cefiderocol in carbapenem-resistant Acinetobacter baumannii with and without combination therapy: conflicting real-world outcome signals. Am J Health Syst Pharm. 2025;82(Suppl 6):S2995. Available from: https://academic.oup.com/ajhp/article-abstract/82/Supplement_6/S2995/8209506.",
@@ -208,6 +209,7 @@ MECH_REF_MAP = {
     "staph_dtest": ["leclercq_mls_2002"],
     "staph_visa": ["howden_visa_2010"],
     "enterococcus_vre": ["arias_enterococcus_2012"],
+    "enterococcus_vanc_intrinsic": ["arias_enterococcus_2012", "leclercq_vanc_1992"],
     "enterococcus_amp_sus": ["clsi_m100_2026", "faury_asefm_2023", "lorenzo_asefm_2019"],
     "enterococcus_advanced": ["munita_liafsr_2012", "satlin_dap_bp_2020", "nguyen_dap_2024", "hwang_vre_2025", "pincus_dlvre_2022", "sakoulas_ceftaroline_2014", "smith_dap_bl_2015", "chuang_dap_bl_2018", "wang_optra_2015", "antonelli_poxta_2018"],
     "acinetobacter": ["peleg_acinetobacter_2008"],
@@ -296,6 +298,8 @@ def _collect_mech_ref_keys(org: str, mechs: list, banners: list) -> list:
         add_key("staph_visa")
     if org.startswith("Enterococcus") or "vre" in texts or "vana" in texts or "vanb" in texts:
         add_key("enterococcus_vre")
+    if org == "Enterococcus gallinarum":
+        add_key("enterococcus_vanc_intrinsic")
     if (
         "ampicillin-susceptible *e. faecium*" in texts
         or "ampicillin-susceptible e. faecium" in texts
@@ -2386,6 +2390,39 @@ def mech_efaecium(R):
         greens.append("Cystitis: **Nitrofurantoin** is appropriate when susceptible.")
     return _dedup_list(mechs), _dedup_list(banners), _dedup_list(greens)
 
+def mech_egallinarum(R):
+    mechs, banners, greens = [], [], []
+    amp = _get(R, "Ampicillin")
+    dap = _get(R, "Daptomycin")
+    lzd = _get(R, "Linezolid")
+    vanc = _get(R, "Vancomycin")
+
+    mechs.append(
+        "Vancomycin resistance in *E. gallinarum* is typically intrinsic (**VanC**; low-level glycopeptide resistance with **D-Ala-D-Ser** target modification)."
+    )
+    if vanc == "Susceptible":
+        banners.append(
+            "*E. gallinarum* can be miscalled vancomycin susceptible by routine testing; do **not** rely on vancomycin for definitive therapy without expert microbiology review."
+        )
+    if lzd == "Resistant":
+        mechs.append("Linezolid resistance in *E. gallinarum*: usually **23S rRNA** mutations and/or transferable **optrA/poxtA/cfr-like** mechanisms.")
+    if dap == "Resistant":
+        mechs.append(
+            "Daptomycin resistance in *E. gallinarum*: adaptive cell-envelope remodeling with regulatory and membrane-lipid pathway changes "
+            "(enterococcal **liaFSR**-associated phenotypes with additional membrane/homeostasis loci)."
+        )
+    elif dap == "Intermediate":
+        banners.append("Daptomycin intermediate/non-susceptible result in *E. gallinarum*: confirm MIC/breakpoint interpretation and seek expert dosing guidance.")
+    if dap == "Resistant" and lzd == "Resistant":
+        banners.append("Both daptomycin and linezolid are non-susceptible in *E. gallinarum*: options are limited and require urgent specialist review.")
+    if _get(R, "High-level Gentamicin") == "Resistant" or _get(R, "High-level Streptomycin") == "Resistant":
+        banners.append("**HLAR**: synergy with cell-wall agents is lost.")
+    if amp == "Susceptible":
+        greens.append("Preferred when susceptible: **Ampicillin** for *E. gallinarum*; do not substitute vancomycin just because it is an enterococcus.")
+    if _get(R,"Nitrofurantoin") == "Susceptible":
+        greens.append("Cystitis: **Nitrofurantoin** is appropriate when susceptible.")
+    return _dedup_list(mechs), _dedup_list(banners), _dedup_list(greens)
+
 def tx_efaecium(R):
     out = []
     pen = _get(R, "Penicillin")
@@ -2421,6 +2458,37 @@ def tx_efaecium(R):
     if lzd == "Resistant" and dap == "Resistant":
         out.append("Concurrent linezolid and daptomycin resistance indicates limited options; coordinate immediate ID/microbiology consultation.")
         out.append("For bloodstream infection, avoid relying on low-serum-exposure agents as monotherapy; treatment should be individualized with PK/PD-informed dosing and close microbiologic follow-up.")
+    return _dedup_list(out)
+
+def tx_egallinarum(R):
+    out = []
+    amp = _get(R, "Ampicillin")
+    dap = _get(R, "Daptomycin")
+    lzd = _get(R, "Linezolid")
+
+    out.append("**Enterococcus gallinarum** is a **VanC enterococcus**; avoid relying on **Vancomycin** because resistance is typically intrinsic.")
+    if amp == "Susceptible":
+        out.append("When susceptible, **Ampicillin** is preferred (site/severity dependent). For invasive infection, use an ampicillin-based strategy and involve ID/microbiology for site-specific planning.")
+    elif dap == "Resistant" and lzd == "Susceptible":
+        out.append("If ampicillin cannot be used and daptomycin is resistant, use **Linezolid** when susceptible.")
+    elif lzd == "Resistant" and dap in {"Susceptible", "Intermediate"}:
+        out.append("If ampicillin cannot be used and linezolid is resistant, consider **high-dose Daptomycin** only when active by MIC/breakpoint context and with specialist input.")
+    elif dap == "Resistant" and lzd == "Resistant":
+        out.append("If ampicillin is not usable and both daptomycin and linezolid are non-susceptible, urgent expert-guided salvage therapy is required.")
+    else:
+        out.append("If ampicillin cannot be used, select another confirmed-active non-vancomycin agent such as **Linezolid** or **Daptomycin** based on AST, infection site, and severity.")
+
+    if dap == "Resistant":
+        out.append("Daptomycin resistant: do not rely on daptomycin for definitive therapy.")
+    elif dap == "Intermediate":
+        out.append("Daptomycin intermediate/non-susceptible: verify MIC and consider exposure-optimized use only with expert support.")
+
+    if _get(R, "High-level Gentamicin") == "Resistant" or _get(R, "High-level Streptomycin") == "Resistant":
+        out.append("**HLAR present** → aminoglycoside synergy is lost; avoid relying on gent/strept synergy regimens.")
+
+    if _get(R,"Nitrofurantoin") == "Susceptible":
+        out.append("For cystitis: **Nitrofurantoin** is appropriate.")
+
     return _dedup_list(out)
 
 def mech_spneumo(R):
@@ -3781,6 +3849,9 @@ ORGANISM_REGISTRY = {
     "Enterococcus faecium": {
         "mechanisms": mech_efaecium, "therapy": tx_efaecium
     },
+    "Enterococcus gallinarum": {
+        "mechanisms": mech_egallinarum, "therapy": tx_egallinarum
+    },
 
     # Streptococcus
     "Streptococcus pneumoniae": {
@@ -4090,7 +4161,7 @@ if group == "Gram-negatives":
 # ======================
 if group == "Enterococcus":
     section_header("Enterococcus")
-    ENTERO_ORGS = ["Enterococcus faecalis", "Enterococcus faecium"]
+    ENTERO_ORGS = ["Enterococcus faecalis", "Enterococcus faecium", "Enterococcus gallinarum"]
     organism_e = st.selectbox("Organism (Enterococcus)", ENTERO_ORGS, key="enterococcus_org")
 
     PANEL_E = [
@@ -4107,6 +4178,8 @@ if group == "Enterococcus":
     intrinsic_e = {ab: False for ab in PANEL_E}
     for ab in ["Ceftriaxone", "Cefepime"]:
         intrinsic_e[ab] = True
+    if organism_e == "Enterococcus gallinarum":
+        intrinsic_e["Vancomycin"] = True
 
     section_header("Susceptibility Inputs")
     st.caption("Leave blank for untested/unknown.")

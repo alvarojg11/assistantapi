@@ -42,6 +42,9 @@ ORGANISM_ALIASES = {
     "e faecalis": "Enterococcus faecalis",
     "e. faecalis": "Enterococcus faecalis",
     "enterococcus faecalis": "Enterococcus faecalis",
+    "e gallinarum": "Enterococcus gallinarum",
+    "e. gallinarum": "Enterococcus gallinarum",
+    "enterococcus gallinarum": "Enterococcus gallinarum",
     "vre": "Enterococcus faecium",
     "pneumococcus": "Streptococcus pneumoniae",
     "strep pneumo": "Streptococcus pneumoniae",
@@ -93,6 +96,7 @@ PHENOTYPE_ORGANISM_HINTS = {
     "MR-CoNS": "Coagulase-negative Staphylococcus",
     "MS-CoNS": "Coagulase-negative Staphylococcus",
     "VRE": "Enterococcus faecium",
+    "VRE gallinarum": "Enterococcus gallinarum",
     "VRSA": "Staphylococcus aureus",
     "Penicillin-resistant pneumococcus": "Streptococcus pneumoniae",
 }

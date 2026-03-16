@@ -658,7 +658,7 @@
           <div class="eyebrow"><span class="dot" aria-hidden="true"></span> ID Consult Interface</div>
           <h1>ID Consultant Assistant</h1>
           <p>
-            A conversational infectious diseases workbench for syndrome diagnosis, resistance interpretation, and immunosuppression planning.
+            A conversational infectious diseases workbench for syndrome diagnosis, resistance interpretation, antimicrobial dosing, and immunosuppression planning.
             Paste the consult question in plain language, or start in one of the focused lanes below.
           </p>
         </div>
@@ -674,6 +674,12 @@
             <strong>Interpret organism + AST</strong>
             <p>Turn a susceptibility pattern into likely mechanisms, cautions, and therapy guidance.</p>
             <span class="example">Example: E. coli resistant to ceftriaxone, susceptible to meropenem, bacteremia.</span>
+          </button>
+          <button type="button" class="start-card" data-workflow="doseid">
+            <span class="kicker">Dosing lane</span>
+            <strong>Calculate antimicrobial dosing</strong>
+            <p>Estimate dosing from the drug, weight, creatinine clearance, and dialysis context.</p>
+            <span class="example">Example: cefepime on hemodialysis, or RIPE dosing for 62 kg and CrCl 35.</span>
           </button>
           <button type="button" class="start-card" data-workflow="immunoid">
             <span class="kicker">Prevention lane</span>
@@ -692,13 +698,13 @@
                 <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Consult journey</div>
                 <div class="progress-title" id="progressTitle">Choose a workflow or paste a consult question</div>
               </div>
-              <div class="progress-meta" id="progressMeta">The assistant can route syndrome, resistance, and immunosuppression questions from plain language.</div>
+              <div class="progress-meta" id="progressMeta">The assistant can route syndrome, resistance, dosing, and immunosuppression questions from plain language.</div>
             </div>
             <div class="progress-steps" id="progressSteps"></div>
           </section>
 
           <div class="system-note" id="helpBanner">
-            I’m your ID Consultant Assistant. Describe a syndrome case in plain language, or use the resistance mechanism pathway for organism plus AST interpretation.
+            I’m your ID Consultant Assistant. Describe a syndrome case, a dosing question, or an isolate plus AST pattern in plain language.
           </div>
 
           <div class="messages" id="messages" aria-live="polite"></div>
@@ -816,6 +822,7 @@
       const WORKFLOW_LABELS = {
         probid: "Syndrome diagnosis",
         mechid: "Resistance interpretation",
+        doseid: "Antimicrobial dosing",
         immunoid: "Immunosuppression checklist",
       };
 
@@ -829,6 +836,7 @@
         confirm_case: "Review case",
         mechid_describe: "Paste isolate + AST",
         mechid_confirm: "Review extraction",
+        doseid_describe: "Dose the regimen",
         immunoid_select_agents: "Select exposure",
         immunoid_collect_context: "Answer missing context",
         select_consult_focus: "Choose focus",
@@ -849,6 +857,12 @@
           { key: "isolate", label: "Isolate" },
           { key: "review", label: "Review" },
           { key: "result", label: "Impression" },
+        ],
+        doseid: [
+          { key: "workflow", label: "Workflow" },
+          { key: "drug", label: "Drug" },
+          { key: "context", label: "Renal context" },
+          { key: "result", label: "Regimen" },
         ],
         immunoid: [
           { key: "workflow", label: "Workflow" },
@@ -882,6 +896,12 @@
           if (stage === "immunoid_collect_context") return "context";
           if (stage === "done") return "result";
           return "exposure";
+        }
+        if (workflow === "doseid") {
+          if (stage === "select_module") return "workflow";
+          if (stage === "doseid_describe") return "drug";
+          if (stage === "done") return "result";
+          return "context";
         }
         if (stage === "select_module") return "workflow";
         if (stage === "select_syndrome_module") return "syndrome";
@@ -930,6 +950,9 @@
         if (workflow === "mechid" && stage === "mechid_confirm") {
           return "Confirm the extraction before asking for the consultant impression.";
         }
+        if (workflow === "doseid" && stage === "doseid_describe") {
+          return "List the antimicrobial or regimen plus weight and renal context, including dialysis or CrCl when you have it.";
+        }
         if (workflow === "immunoid" && stage === "immunoid_select_agents") {
           return "List the planned immunosuppressive drugs or regimen.";
         }
@@ -960,6 +983,7 @@
         if (stage === "confirm_case") return "Add one or two missing high-yield findings, or click the consultant impression button...";
         if (workflow === "mechid" && stage === "mechid_describe") return "Paste the organism, susceptibility pattern, syndrome, and severity context...";
         if (workflow === "mechid" && stage === "mechid_confirm") return "Correct anything that was extracted incorrectly, then ask for the consultant impression...";
+        if (workflow === "doseid" && stage === "doseid_describe") return "Type the drug or regimen, weight, serum creatinine or CrCl, and dialysis status...";
         if (workflow === "immunoid" && stage === "immunoid_select_agents") return "Type the immunosuppressive drugs or regimen being planned...";
         if (workflow === "immunoid" && stage === "immunoid_collect_context") return "Answer the missing screening or prophylaxis question here...";
         if (stage === "done") return "Ask a follow-up or restart a new consult...";
@@ -1344,10 +1368,12 @@
           els.helpBanner.textContent = "Current step: add the planned immunosuppressive agents.";
         } else if (workflow === "immunoid" && s.stage === "immunoid_collect_context") {
           els.helpBanner.textContent = "Current step: answer the missing context question that changes the screening or prophylaxis checklist.";
+        } else if (workflow === "doseid" && s.stage === "doseid_describe") {
+          els.helpBanner.textContent = "Current step: add the antimicrobial, weight, renal function, and dialysis context.";
         } else {
           els.helpBanner.textContent = currentSection
             ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
-            : "I’m your ID Consultant Assistant. Describe a syndrome case, an isolate plus AST pattern, or an immunosuppression exposure profile.";
+            : "I’m your ID Consultant Assistant. Describe a syndrome case, dosing question, isolate plus AST pattern, or immunosuppression exposure profile.";
         }
       }
 
@@ -1456,6 +1482,70 @@
           return;
         }
 
+        const doseidResult = resp?.doseidAnalysis;
+        if (doseidResult) {
+          const recommendations = doseidResult.recommendations || [];
+          const assumptions = doseidResult.assumptions || [];
+          const warnings = [...(doseidResult.warnings || []), ...(doseidResult.missingInputs || []).map((item) => `Still needed: ${item}`)];
+          const context = doseidResult.patientContext || {};
+          const medicationItems = (doseidResult.medications || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+          const recommendationItems = recommendations.map((item) => {
+            const notes = (item.notes || []).map((note) => `<li>${escapeHtml(note)}</li>`).join("");
+            const doseWeight = item.doseWeight ? `<div class="muted" style="font-size:12px;">Dose weight: ${escapeHtml(formatDoseWeight(item.doseWeight))}</div>` : "";
+            return `
+              <li>
+                <strong>${escapeHtml(item.medicationName || item.medication_name || "Medication")}</strong>: ${escapeHtml(item.regimen || "—")}
+                <div class="muted" style="font-size:12px;">Indication: ${escapeHtml(item.indicationLabel || item.indication_label || "Not specified")}</div>
+                <div class="muted" style="font-size:12px;">Renal pathway: ${escapeHtml(item.renalBucket || item.renal_bucket || "Not specified")}</div>
+                ${doseWeight}
+                ${notes ? `<ul class="list" style="margin-top:6px;">${notes}</ul>` : ""}
+              </li>
+            `;
+          }).join("");
+          const contextRows = [
+            ["Renal mode", formatRenalMode(context.renalMode || context.renal_mode || "standard")],
+            ["Age", context.ageYears ?? context.age_years ?? "—"],
+            ["Sex", context.sex || "—"],
+            ["Weight", formatPatientMetric(context.totalBodyWeightKg || context.total_body_weight_kg, "kg")],
+            ["Height", formatPatientMetric(context.heightCm || context.height_cm, "cm")],
+            ["SCr", formatPatientMetric(context.serumCreatinineMgDl || context.serum_creatinine_mg_dl, "mg/dL")],
+            ["CrCl", formatPatientMetric(context.crclMlMin || context.crcl_ml_min, "mL/min")],
+          ].map(([label, value]) => `<div class="k">${escapeHtml(label)}</div><div class="v">${escapeHtml(String(value))}</div>`).join("");
+          els.parserBadge.textContent = "dose: deterministic";
+          els.parserBadge.className = `badge ${(warnings.length || assumptions.length) ? "warn" : "good"}`;
+
+          els.analysisSummary.innerHTML = `
+            <h3>Analysis</h3>
+            <div class="decision ${recommendations.length ? "treat" : "test"}">
+              ${recommendations.length ? "Dose recommendations ready" : "Need a bit more dosing context"}
+            </div>
+            <div class="kv">
+              <div class="k">Medications</div><div class="v">${(doseidResult.medications || []).length}</div>
+              <div class="k">Regimens</div><div class="v">${recommendations.length}</div>
+            </div>
+            ${recommendationItems ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Recommended regimens</div><ul class="list">${recommendationItems}</ul></div>` : `<div class="muted" style="margin-top:8px;">Add the drug plus renal context and patient details to calculate a regimen.</div>`}
+            ${assumptions.length ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Assumptions used</div><ul class="list warn-list">${assumptions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>` : ""}
+          `;
+
+          els.parsedPanel.innerHTML = `
+            <h3>What I Picked Up</h3>
+            <div class="kv" style="margin-bottom:8px;">
+              ${contextRows}
+            </div>
+            ${medicationItems ? `<div><div class="muted" style="font-size:12px;">Requested medications</div><ul class="list">${medicationItems}</ul></div>` : `<div class="muted">I’m still waiting for the drug or regimen name.</div>`}
+          `;
+
+          if (warnings.length) {
+            els.warningsPanel.innerHTML = `
+              <h3>Warnings</h3>
+              <ul class="list warn-list">${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            `;
+          } else {
+            els.warningsPanel.innerHTML = `<h3>Warnings</h3><div class="muted">No warnings.</div>`;
+          }
+          return;
+        }
+
         const mechidResult = resp?.mechidAnalysis;
         if (mechidResult) {
           const parsed = mechidResult.parsedRequest;
@@ -1471,6 +1561,24 @@
             const cautions = (analysis.cautions || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
             const signals = (analysis.favorableSignals || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
             const therapyNotes = (analysis.therapyNotes || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
+            const durationGuidance = (analysis.treatmentDurationGuidance || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const monitoringRecommendations = (analysis.monitoringRecommendations || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+            const dosingRecommendations = (analysis.dosingRecommendations || []).map((item) => {
+              const notes = (item.notes || []).map((note) => `<li>${escapeHtml(note)}</li>`).join("");
+              const doseWeight = item.doseWeight ? `<div class="muted" style="font-size:12px;">Dose weight: ${escapeHtml(formatDoseWeight(item.doseWeight))}</div>` : "";
+              const indicationLabel = item.indicationLabel || item.indication_label || "Not specified";
+              const renalBucket = item.renalBucket || item.renal_bucket || "Not specified";
+              const medicationName = item.medicationName || item.medication_name || "Medication";
+              return `
+                <li>
+                  <strong>${escapeHtml(medicationName)}</strong>: ${escapeHtml(item.regimen || "—")}
+                  <div class="muted" style="font-size:12px;">Indication: ${escapeHtml(indicationLabel)}</div>
+                  <div class="muted" style="font-size:12px;">Renal pathway: ${escapeHtml(renalBucket)}</div>
+                  ${doseWeight}
+                  ${notes ? `<ul class="list" style="margin-top:6px;">${notes}</ul>` : ""}
+                </li>
+              `;
+            }).join("");
             const references = (analysis.references || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
             const finalResults = Object.entries(analysis.finalResults || {})
               .map(([drug, call]) => `<li>${escapeHtml(drug)}: ${escapeHtml(call)}</li>`)
@@ -1484,7 +1592,10 @@
                 <div class="k">Mechanisms</div><div class="v">${(analysis.mechanisms || []).length || 0}</div>
                 <div class="k">Panel size</div><div class="v">${(analysis.panel || []).length || 0}</div>
               </div>
+              ${dosingRecommendations ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Dosing recommendations</div><ul class="list">${dosingRecommendations}</ul></div>` : ""}
               ${therapyNotes ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Therapy notes</div><ul class="list">${therapyNotes}</ul></div>` : ""}
+              ${durationGuidance ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Typical treatment duration</div><ul class="list">${durationGuidance}</ul></div>` : ""}
+              ${monitoringRecommendations ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Monitoring during therapy</div><ul class="list">${monitoringRecommendations}</ul></div>` : ""}
               ${mechanisms ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Likely mechanisms</div><ul class="list">${mechanisms}</ul></div>` : ""}
               ${cautions ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Cautions</div><ul class="list warn-list">${cautions}</ul></div>` : ""}
               ${signals ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Favorable signals</div><ul class="list">${signals}</ul></div>` : ""}
@@ -1547,6 +1658,12 @@
           const nextSteps = (analysis.recommendedNextSteps || [])
             .map((step) => `<li>${escapeHtml(step)}</li>`)
             .join("");
+          const durationGuidance = (analysis.treatmentDurationGuidance || [])
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join("");
+          const monitoringRecommendations = (analysis.monitoringRecommendations || [])
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join("");
           const appliedFindings = (analysis.appliedFindings || [])
             .map((item) => {
               const stateLabel = item.state === "absent" ? "absent" : item.state === "present" ? "present" : item.state;
@@ -1579,6 +1696,9 @@
               <div class="k">Treat ≥</div><div class="v">${treatPct}%</div>
               <div class="k">Confidence</div><div class="v">${Math.round((analysis.confidence || 0) * 100)}%</div>
             </div>
+            ${nextSteps ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Suggested next steps</div><ul class="list">${nextSteps}</ul></div>` : ""}
+            ${durationGuidance ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Typical treatment duration</div><ul class="list">${durationGuidance}</ul></div>` : ""}
+            ${monitoringRecommendations ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Monitoring during therapy</div><ul class="list">${monitoringRecommendations}</ul></div>` : ""}
             <details style="margin-top:10px;">
               <summary>How It Was Calculated</summary>
               <div class="kv" style="margin-top:8px;">
@@ -1586,7 +1706,6 @@
                 <div class="k">Posttest</div><div class="v">${postPct}%</div>
               </div>
               ${harmExplain}
-              ${nextSteps ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Suggested next steps</div><ul class="list">${nextSteps}</ul></div>` : ""}
               ${appliedFindings ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Applied findings</div><ul class="list">${appliedFindings}</ul></div>` : `<div class="muted" style="margin-top:8px; font-size:12px;">No findings changed the calculation.</div>`}
               ${stepwise ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Stepwise probability path</div><ul class="list">${stepwise}</ul></div>` : ""}
               ${reasons ? `<div style="margin-top:8px;"><div class="muted" style="font-size:12px;">Decision notes</div><ul class="list">${reasons}</ul></div>` : ""}
@@ -1651,6 +1770,35 @@
           .replace(/→/g, ": ")
           .replace(/\s+/g, " ")
           .trim();
+      }
+
+      function formatDoseWeight(doseWeight) {
+        if (!doseWeight || typeof doseWeight !== "object") return "";
+        const basisMap = {
+          tbw: "TBW",
+          ibw: "IBW",
+          adjbw: "AdjBW",
+          lbw: "LBW",
+        };
+        const basisKey = String(doseWeight.basis || "").toLowerCase();
+        const basis = basisMap[basisKey] || String(doseWeight.basis || "");
+        const kg = Number(doseWeight.kg);
+        const kgLabel = Number.isFinite(kg) ? kg.toFixed(1) : String(doseWeight.kg || "");
+        return `${basis} ${kgLabel} kg`;
+      }
+
+      function formatPatientMetric(value, unit) {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric) && numeric > 0) {
+          return `${numeric.toFixed(1)} ${unit}`;
+        }
+        return "—";
+      }
+
+      function formatRenalMode(value) {
+        if (value === "ihd") return "Intermittent hemodialysis";
+        if (value === "crrt") return "CRRT";
+        return "Standard renal pathway";
       }
 
       async function callAssistantTurn(payload) {
@@ -1883,6 +2031,10 @@
           return "Rituximab and prednisone 20 mg daily are planned. HBsAg negative, anti-HBc positive, and prednisone will continue for 6 weeks.";
         }
 
+        if (stage === "doseid_describe") {
+          return "RIPE dosing for 62 kg, CrCl 35, female, 165 cm.";
+        }
+
         if (stage === "select_endo_blood_culture_context") {
           return "Staphylococcus aureus";
         }
@@ -1988,6 +2140,7 @@
         const labels = {
           probid: "Work up a syndrome",
           mechid: "Interpret organism + AST",
+          doseid: "Calculate antimicrobial dosing",
           immunoid: "Screen immunosuppression risk",
         };
         button.addEventListener("click", () => {

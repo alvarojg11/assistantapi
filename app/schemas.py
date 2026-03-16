@@ -192,6 +192,8 @@ class AnalyzeResponse(BaseModel):
     recommendation: Recommendation
     recommendation_summary: Optional[str] = Field(default=None, alias="recommendationSummary")
     recommended_next_steps: List[str] = Field(default_factory=list, alias="recommendedNextSteps")
+    treatment_duration_guidance: List[str] = Field(default_factory=list, alias="treatmentDurationGuidance")
+    monitoring_recommendations: List[str] = Field(default_factory=list, alias="monitoringRecommendations")
     confidence: float = Field(ge=0.0, le=1.0)
     applied_findings: List[AppliedFinding] = Field(alias="appliedFindings")
     stepwise: List[StepwiseUpdate]
@@ -392,6 +394,7 @@ AssistantStage = Literal[
     "confirm_case",
     "mechid_describe",
     "mechid_confirm",
+    "doseid_describe",
     "immunoid_select_agents",
     "immunoid_collect_context",
     "done",
@@ -410,11 +413,11 @@ class AssistantOption(BaseModel):
 
 class AssistantState(BaseModel):
     stage: AssistantStage = "select_module"
-    workflow: Literal["probid", "mechid", "immunoid"] = "probid"
+    workflow: Literal["probid", "mechid", "immunoid", "doseid"] = "probid"
     module_id: Optional[str] = Field(default=None, alias="moduleId")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
     pending_intake_text: Optional[str] = Field(default=None, alias="pendingIntakeText")
-    pending_followup_workflow: Optional[Literal["probid", "mechid", "immunoid"]] = Field(default=None, alias="pendingFollowupWorkflow")
+    pending_followup_workflow: Optional[Literal["probid", "mechid", "immunoid", "doseid"]] = Field(default=None, alias="pendingFollowupWorkflow")
     pending_followup_text: Optional[str] = Field(default=None, alias="pendingFollowupText")
     endo_blood_culture_context: Optional[
         Literal["staph", "strep", "enterococcus", "other_unknown_pending"]
@@ -425,6 +428,7 @@ class AssistantState(BaseModel):
     ] = Field(default=None, alias="caseSection")
     case_text: Optional[str] = Field(default=None, alias="caseText")
     mechid_text: Optional[str] = Field(default=None, alias="mechidText")
+    doseid_text: Optional[str] = Field(default=None, alias="doseidText")
     immunoid_selected_regimen_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedRegimenIds")
     immunoid_selected_agent_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedAgentIds")
     immunoid_planned_steroid_duration_days: Optional[int] = Field(default=None, alias="immunoidPlannedSteroidDurationDays")
@@ -462,6 +466,29 @@ class AssistantTurnRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class DoseIDAssistantPatientContext(BaseModel):
+    age_years: Optional[int] = Field(default=None, alias="ageYears")
+    sex: Optional[Literal["male", "female"]] = None
+    total_body_weight_kg: Optional[float] = Field(default=None, alias="totalBodyWeightKg")
+    height_cm: Optional[float] = Field(default=None, alias="heightCm")
+    serum_creatinine_mg_dl: Optional[float] = Field(default=None, alias="serumCreatinineMgDl")
+    crcl_ml_min: Optional[float] = Field(default=None, alias="crclMlMin")
+    renal_mode: Literal["standard", "ihd", "crrt"] = Field(default="standard", alias="renalMode")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDAssistantAnalysis(BaseModel):
+    medications: List[str] = Field(default_factory=list)
+    patient_context: DoseIDAssistantPatientContext = Field(alias="patientContext")
+    recommendations: List[DoseIDDoseRecommendation] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
+
+    model_config = {"populate_by_name": True}
+
+
 class AssistantTurnResponse(BaseModel):
     assistant_name: str = Field(default="ID Consultant Assistant", alias="assistantName")
     assistant_message: str = Field(alias="assistantMessage")
@@ -471,7 +498,84 @@ class AssistantTurnResponse(BaseModel):
     analysis: Optional[TextAnalyzeResponse] = None
     mechid_analysis: Optional["MechIDTextAnalyzeResponse"] = Field(default=None, alias="mechidAnalysis")
     immunoid_analysis: Optional[ImmunoAnalyzeResponse] = Field(default=None, alias="immunoidAnalysis")
+    doseid_analysis: Optional[DoseIDAssistantAnalysis] = Field(default=None, alias="doseidAnalysis")
     tips: List[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDPatientInput(BaseModel):
+    age_years: int = Field(alias="ageYears", ge=18, le=120)
+    sex: Literal["male", "female"]
+    total_body_weight_kg: float = Field(alias="totalBodyWeightKg", gt=0)
+    height_cm: float = Field(alias="heightCm", gt=0)
+    serum_creatinine_mg_dl: float = Field(alias="serumCreatinineMgDl", gt=0)
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDIndicationOption(BaseModel):
+    id: str
+    label: str
+
+
+class DoseIDDoseWeight(BaseModel):
+    basis: Literal["tbw", "ibw", "adjbw", "lbw"]
+    kg: float
+
+
+class DoseIDMedicationSelection(BaseModel):
+    medication_id: str = Field(alias="medicationId", min_length=1)
+    indication_id: Optional[str] = Field(default=None, alias="indicationId")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDMedicationCatalogEntry(BaseModel):
+    id: str
+    name: str
+    category: str
+    indications: List[DoseIDIndicationOption] = Field(default_factory=list)
+    source_pages: str = Field(alias="sourcePages")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDDoseRecommendation(BaseModel):
+    medication_id: str = Field(alias="medicationId")
+    medication_name: str = Field(alias="medicationName")
+    category: str
+    indication_id: str = Field(alias="indicationId")
+    indication_label: str = Field(alias="indicationLabel")
+    regimen: str
+    renal_bucket: str = Field(alias="renalBucket")
+    notes: List[str] = Field(default_factory=list)
+    source_pages: str = Field(alias="sourcePages")
+    dose_weight: Optional[DoseIDDoseWeight] = Field(default=None, alias="doseWeight")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDCalculateRequest(BaseModel):
+    patient: DoseIDPatientInput
+    renal_mode: Literal["standard", "ihd", "crrt"] = Field(default="standard", alias="renalMode")
+    selections: List[DoseIDMedicationSelection] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDCalculateResponse(BaseModel):
+    recommendations: List[DoseIDDoseRecommendation] = Field(default_factory=list)
+
+
+class DoseIDCatalogResponse(BaseModel):
+    medications: List[DoseIDMedicationCatalogEntry] = Field(default_factory=list)
+
+
+class MechIDDoseContext(BaseModel):
+    patient: DoseIDPatientInput
+    renal_mode: Literal["standard", "ihd", "crrt"] = Field(default="standard", alias="renalMode")
+    max_suggestions: int = Field(default=3, alias="maxSuggestions", ge=1, le=6)
 
     model_config = {"populate_by_name": True}
 
@@ -491,6 +595,7 @@ class MechIDAnalyzeRequest(BaseModel):
     organism: str = Field(min_length=1)
     susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
     tx_context: Optional[MechIDTxContext] = Field(default=None, alias="txContext")
+    dose_context: Optional[MechIDDoseContext] = Field(default=None, alias="doseContext")
 
     model_config = {"populate_by_name": True}
 
@@ -512,6 +617,9 @@ class MechIDAnalyzeResponse(BaseModel):
     cautions: List[str] = Field(default_factory=list)
     favorable_signals: List[str] = Field(default_factory=list, alias="favorableSignals")
     therapy_notes: List[str] = Field(default_factory=list, alias="therapyNotes")
+    treatment_duration_guidance: List[str] = Field(default_factory=list, alias="treatmentDurationGuidance")
+    monitoring_recommendations: List[str] = Field(default_factory=list, alias="monitoringRecommendations")
+    dosing_recommendations: List[DoseIDDoseRecommendation] = Field(default_factory=list, alias="dosingRecommendations")
     references: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
