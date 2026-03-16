@@ -719,7 +719,7 @@
               <div class="btn-row">
                 <button type="button" class="btn" id="restartBtn">Restart</button>
                 <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
-                <button type="button" class="btn" id="imageBtn">Upload isolate image</button>
+                <button type="button" class="btn" id="imageBtn">Upload antimicrobial susceptibility test</button>
                 <input type="file" id="imageInput" class="hidden" accept="image/*" />
                 <button type="button" class="btn consult hidden" id="consultBtn">Give consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
@@ -1702,7 +1702,7 @@
         if (!file || state.busy) return;
         setBusy(true);
         try {
-          appendMessage("user", `Uploaded isolate report image: ${file.name}`);
+          appendMessage("user", `Uploaded antimicrobial susceptibility test image: ${file.name}`);
           const imageDataUrl = await fileToDataUrl(file);
           const resp = await callAssistantMechidImage({
             imageDataUrl,

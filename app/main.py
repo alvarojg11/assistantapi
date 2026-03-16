@@ -2052,7 +2052,7 @@ def analyze_mechid_image_endpoint(req: MechIDImageAnalyzeRequest) -> MechIDImage
     return MechIDImageAnalyzeResponse(
         parser=str(parsed.get("parser") or "openai-mechid-image"),
         imageFilename=req.filename,
-        sourceSummary="Uploaded isolate susceptibility report image.",
+        sourceSummary="Uploaded antimicrobial susceptibility test image.",
         mechidResult=mechid_result,
     )
 
@@ -2075,7 +2075,7 @@ def assistant_mechid_image(req: MechIDImageAnalyzeRequest) -> AssistantTurnRespo
         susceptibilityResults=parsed.get("susceptibilityResults", {}),
         txContext=parsed.get("txContext", {}),
     )
-    canonical_text = _mechid_canonical_text(parsed_request) or "Uploaded isolate report image."
+    canonical_text = _mechid_canonical_text(parsed_request) or "Uploaded antimicrobial susceptibility test image."
     mechid_result = _build_mechid_response_from_parsed(
         text=canonical_text,
         parsed=parsed,
@@ -2334,7 +2334,10 @@ def _build_recommendation_summary(
                     "If feasible, obtain BAL and send fungal culture/cytology plus galactomannan and Aspergillus PCR."
                 )
             next_steps.append(
-                "If the lesion is accessible and the procedure is safe, pursue tissue biopsy for histopathology and fungal culture even if treatment has already started."
+                "Start mold-active therapy and reassess with follow-up chest CT to make sure the radiographic trajectory is improving rather than worsening."
+            )
+            next_steps.append(
+                "If the patient is not responding clinically or the CT chest is worsening despite treatment, pursue tissue biopsy for histopathology and fungal culture if the lesion is accessible and the procedure is safe."
             )
             next_steps.append(
                 "Continue to reassess alternative diagnoses and the possibility of a non-Aspergillus mold process."
@@ -3100,7 +3103,7 @@ def _friendly_probid_next_steps(analysis: AnalyzeResponse) -> str:
         return _join_readable(analysis.recommended_next_steps[:3]) + "."
     if analysis.module_id == "inv_mold":
         if analysis.recommendation == "treat":
-            return "Start mold-active therapy, obtain BAL-based mycology if it has not been done, and pursue tissue biopsy when feasible and safe."
+            return "Start mold-active therapy, obtain BAL-based mycology if it has not been done, repeat chest CT to assess trajectory, and consider tissue biopsy if the patient is not responding or imaging worsens."
         if analysis.recommendation == "test":
             return "Get the next highest-yield mycologic data, ideally BAL-based testing or tissue diagnosis if feasible, while keeping the differential broad."
         return "Revisit the differential and only re-escalate the mold workup if new host-risk, imaging, or mycologic signals appear."
