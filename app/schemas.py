@@ -594,6 +594,34 @@ class DoseIDCalculateResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class DoseIDTextAnalyzeRequest(BaseModel):
+    text: str = Field(min_length=1)
+    parser_strategy: Literal["auto", "rule", "openai"] = Field(default="auto", alias="parserStrategy")
+    parser_model: Optional[str] = Field(default=None, alias="parserModel")
+    allow_fallback: bool = Field(default=True, alias="allowFallback")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDTextParsedRequest(BaseModel):
+    medications: List[DoseIDMedicationSelection] = Field(default_factory=list)
+    patient_context: DoseIDAssistantPatientContext = Field(alias="patientContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class DoseIDTextAnalyzeResponse(BaseModel):
+    parser: str = "rule-based-v1"
+    text: str
+    parsed_request: Optional[DoseIDTextParsedRequest] = Field(default=None, alias="parsedRequest")
+    warnings: List[str] = Field(default_factory=list)
+    requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
+    parser_fallback_used: bool = Field(default=False, alias="parserFallbackUsed")
+    analysis: Optional[DoseIDAssistantAnalysis] = None
+
+    model_config = {"populate_by_name": True}
+
+
 class DoseIDCatalogResponse(BaseModel):
     medications: List[DoseIDMedicationCatalogEntry] = Field(default_factory=list)
 

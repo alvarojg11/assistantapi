@@ -4,7 +4,7 @@ import json
 import os
 from typing import Any, Dict, List, Tuple
 
-from ..schemas import ImmunoAnalyzeResponse, MechIDTextAnalyzeResponse, TextAnalyzeResponse
+from ..schemas import DoseIDAssistantAnalysis, ImmunoAnalyzeResponse, MechIDTextAnalyzeResponse, TextAnalyzeResponse
 from .mechid_consult_examples import select_mechid_consult_examples
 from .llm_text_parser import LLMParserError, _try_import_openai
 
@@ -244,6 +244,34 @@ def narrate_immunoid_assistant_message(
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
+    )
+    try:
+        return _call_consult_model(prompt=prompt, payload=payload), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_doseid_assistant_message(
+    *,
+    doseid_result: DoseIDAssistantAnalysis,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    payload = {
+        "fallbackMessage": fallback_message,
+        "doseidAnalysis": doseid_result.model_dump(by_alias=True),
+    }
+    prompt = (
+        "You are an infectious diseases consultant rewriting a deterministic DoseID assistant message into a concise clinician-facing answer.\n"
+        "The JSON input is the full source of truth. Do not change medications, indications, renal buckets, dose amounts, intervals, or monitoring notes.\n"
+        "Do not invent any regimen or missing input.\n"
+        "If followUpQuestions are present, ask only the next missing question already present in the JSON and keep the phrasing simple.\n"
+        "If recommendations are present, summarize them clearly without changing the numbers.\n"
+        "If warnings are present, preserve their meaning without adding new cautions.\n"
+        "Do not use markdown bullets, asterisks, or arrow symbols.\n"
+        "Prefer 1 to 2 short paragraphs. Plain text only."
     )
     try:
         return _call_consult_model(prompt=prompt, payload=payload), True

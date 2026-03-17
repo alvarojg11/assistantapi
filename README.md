@@ -165,6 +165,11 @@ Then use `parserStrategy` in the request:
 You can also override the parser model per request with:
 - `parserModel` (for example: `"gpt-4.1-mini"` or `"gpt-4.1"`)
 
+If `OPENAI_API_KEY` is set, the DoseID assistant can also use an OpenAI-backed extraction pass plus an optional narrated result pass.
+Optional env vars:
+- `OPENAI_DOSEID_MODEL` for DoseID extraction (defaults to `OPENAI_MODEL`, then `gpt-4.1-mini`)
+- `OPENAI_CONSULT_MODEL` for narrated assistant wording
+
 ## Endpoints
 
 - `GET /health`
@@ -173,6 +178,7 @@ You can also override the parser model per request with:
 - `POST /v1/modules/register`
 - `POST /v1/analyze`
 - `POST /v1/analyze-text` (free-text parser + optional analysis)
+- `POST /v1/doseid/parse-text` (free-text DoseID extraction + optional analysis)
 - `POST /v1/assistant/turn` (guided "ID Consultant Assistant" conversation)
 
 ## Example analyze request

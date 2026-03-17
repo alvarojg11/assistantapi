@@ -41,6 +41,9 @@ from .schemas import (
     DoseIDFollowUpQuestion,
     DoseIDMedicationCatalogEntry,
     DoseIDIndicationOption,
+    DoseIDTextAnalyzeRequest,
+    DoseIDTextAnalyzeResponse,
+    DoseIDTextParsedRequest,
     ImmunoAgentListResponse,
     ImmunoAnalyzeRequest,
     ImmunoAnalyzeResponse,
@@ -76,12 +79,14 @@ from .schemas import (
 )
 from .services.module_store import InMemoryModuleStore
 from .services.consult_narrator import (
+    narrate_doseid_assistant_message,
     narrate_immunoid_assistant_message,
     narrate_mechid_assistant_message,
     narrate_mechid_review_message,
     narrate_probid_assistant_message,
     narrate_probid_review_message,
 )
+from .services.doseid_llm_parser import parse_doseid_text_with_openai
 from .services.doseid_service import (
     DoseIDError,
     calculate_medication,
@@ -2056,6 +2061,16 @@ def list_mechid_supported_organisms() -> dict:
 @app.get("/v1/doseid/medications", response_model=DoseIDCatalogResponse)
 def list_doseid_medications() -> DoseIDCatalogResponse:
     return _doseid_catalog_response()
+
+
+@app.post("/v1/doseid/parse-text", response_model=DoseIDTextAnalyzeResponse)
+def parse_doseid_text_endpoint(req: DoseIDTextAnalyzeRequest) -> DoseIDTextAnalyzeResponse:
+    return _build_doseid_text_response(
+        req.text,
+        parser_strategy=req.parser_strategy,
+        parser_model=req.parser_model,
+        allow_fallback=req.allow_fallback,
+    )
 
 
 @app.post("/v1/doseid/calculate", response_model=DoseIDCalculateResponse)
@@ -6679,19 +6694,75 @@ def _assistant_doseid_alias_map() -> Dict[str, List[str]]:
         if med.id == "piperacillin_tazobactam":
             aliases.update({"zosyn", "pip tazo", "piptazo"})
         elif med.id == "ampicillin_sulbactam":
-            aliases.update({"unasyn"})
+            aliases.update({"unasyn", "unsyn"})
         elif med.id == "tmp_smx":
-            aliases.update({"tmp smx", "tmp-smx", "bactrim", "trimethoprim sulfamethoxazole"})
+            aliases.update({"tmp smx", "tmp-smx", "bactrim", "septra", "trimethoprim sulfamethoxazole"})
+        elif med.id == "cefepime":
+            aliases.update({"maxipime"})
+        elif med.id == "ceftriaxone":
+            aliases.update({"rocephin"})
+        elif med.id == "meropenem":
+            aliases.update({"merrem"})
+        elif med.id == "ertapenem":
+            aliases.update({"invanz"})
+        elif med.id == "aztreonam":
+            aliases.update({"azactam"})
+        elif med.id == "cefiderocol":
+            aliases.update({"fetroja"})
+        elif med.id == "ceftaroline":
+            aliases.update({"teflaro"})
+        elif med.id == "ceftazidime_avibactam":
+            aliases.update({"avycaz", "ceftaz avi", "ceftaz-avi"})
+        elif med.id == "ciprofloxacin":
+            aliases.update({"cipro"})
+        elif med.id == "levofloxacin":
+            aliases.update({"levaquin"})
+        elif med.id == "linezolid":
+            aliases.update({"zyvox"})
+        elif med.id == "daptomycin":
+            aliases.update({"cubicin"})
         elif med.id == "vancomycin_iv":
-            aliases.update({"vanc", "iv vancomycin", "vancomycin"})
+            aliases.update({"vanc", "iv vancomycin", "vancomycin", "vancocin"})
+        elif med.id == "metronidazole":
+            aliases.update({"flagyl"})
+        elif med.id == "clindamycin":
+            aliases.update({"cleocin"})
+        elif med.id == "amoxicillin_clavulanate":
+            aliases.update({"augmentin"})
+        elif med.id == "amoxicillin":
+            aliases.update({"amoxil"})
         elif med.id == "liposomal_amphotericin_b":
             aliases.update({"ambisome", "l ampho", "liposomal amphotericin"})
+        elif med.id == "isavuconazole":
+            aliases.update({"cresemba"})
+        elif med.id == "posaconazole":
+            aliases.update({"noxafil"})
+        elif med.id == "fluconazole":
+            aliases.update({"diflucan"})
+        elif med.id == "micafungin":
+            aliases.update({"mycamine"})
+        elif med.id == "voriconazole":
+            aliases.update({"vfend"})
+        elif med.id == "caspofungin":
+            aliases.update({"cancidas"})
+        elif med.id == "foscarnet":
+            aliases.update({"foscavir"})
+        elif med.id == "famciclovir":
+            aliases.update({"famvir"})
         elif med.id == "moxifloxacin_tb":
             aliases.update({"moxifloxacin", "moxi"})
         elif med.id == "acyclovir_iv":
-            aliases.update({"iv acyclovir"})
+            aliases.update({"iv acyclovir", "zovirax iv"})
         elif med.id == "acyclovir_po":
-            aliases.update({"oral acyclovir", "po acyclovir"})
+            aliases.update({"oral acyclovir", "po acyclovir", "zovirax"})
+        elif med.id == "valacyclovir":
+            aliases.update({"valtrex"})
+        elif med.id == "ganciclovir_iv":
+            aliases.update({"cytovene"})
+        elif med.id == "valganciclovir":
+            aliases.update({"valcyte"})
+        elif med.id == "oseltamivir":
+            aliases.update({"tamiflu"})
         alias_map[med.id] = sorted(_assistant_doseid_normalize(alias) for alias in aliases if alias)
     return alias_map
 
@@ -6723,10 +6794,11 @@ def _assistant_is_doseid_intent(message_text: str) -> bool:
 
 def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistantPatientContext:
     normalized = _assistant_doseid_normalize(message_text)
+    normalized_padded = f" {normalized} "
     renal_mode = "standard"
-    if any(token in normalized for token in ("crrt", "cvvh", "cvvhd", "cvvhdf")):
+    if any(token in normalized_padded for token in (" crrt ", " cvvh ", " cvvhd ", " cvvhdf ")):
         renal_mode = "crrt"
-    elif any(token in normalized for token in ("hemodialysis", "haemodialysis", "dialysis", "esrd", " i hd ", " hd ")):
+    elif any(token in normalized_padded for token in (" hemodialysis ", " haemodialysis ", " dialysis ", " esrd ", " i hd ", " hd ")):
         renal_mode = "ihd"
 
     age_years = None
@@ -6781,8 +6853,115 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
     )
 
 
+def _assistant_doseid_has_any(normalized: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in normalized for token in tokens)
+
+
+DOSEID_CNS_TOKENS = ("meningitis", "cns", "ventriculitis", "brain abscess", "central nervous system")
+DOSEID_PSEUDOMONAL_TOKENS = ("pseudomonas", "pseudomonal")
+DOSEID_SEVERE_TOKENS = ("septic shock", "shock", "critical illness", "critically ill", "severe", "deep seated", "high inoculum")
+DOSEID_BACTEREMIA_TOKENS = ("bacteremia", "bloodstream", "endocarditis", "endovascular")
+DOSEID_BONE_JOINT_TOKENS = ("bone and joint", "bone", "joint", "osteomyelitis", "septic arthritis", "prosthetic joint", "pji")
+DOSEID_MUCOSAL_CANDIDA_TOKENS = ("mucosal", "thrush", "oropharyngeal", "vaginal candidiasis")
+DOSEID_PJP_TOKENS = ("pjp", "pneumocystis")
+DOSEID_STENO_TOKENS = ("steno", "stenotrophomonas")
+DOSEID_SSTI_TOKENS = ("skin", "soft tissue", "ssti", "cellulitis")
+DOSEID_INTRAABDOMINAL_TOKENS = ("intraabdominal", "intra abdominal", "abdominal", "polymicrobial")
+DOSEID_TOXIN_SUPPRESSION_TOKENS = ("necrotizing", "toxin", "toxin suppression", "group a strep", "strep pyogenes", "tss")
+
+
 def _assistant_doseid_indication_for_query(medication_id: str, message_text: str) -> str:
     normalized = _assistant_doseid_normalize(message_text)
+    if medication_id == "tmp_smx":
+        if "prophyl" in normalized and "pjp" in normalized:
+            return "pjp_prophylaxis"
+        if _assistant_doseid_has_any(normalized, DOSEID_PJP_TOKENS):
+            return "pjp_treatment"
+        if _assistant_doseid_has_any(normalized, DOSEID_STENO_TOKENS):
+            return "stenotrophomonas"
+        if _assistant_doseid_has_any(normalized, DOSEID_BONE_JOINT_TOKENS):
+            return "staph_bone_joint"
+        if _assistant_doseid_has_any(normalized, DOSEID_SSTI_TOKENS):
+            return "ssti"
+        if _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS):
+            return "gnr_bacteremia"
+    if medication_id == "ampicillin_sulbactam" and _assistant_doseid_has_any(normalized, DOSEID_INTRAABDOMINAL_TOKENS):
+        return "surgical_or_intraabdominal"
+    if medication_id in {"cefepime", "meropenem"} and _assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS):
+        return "cns_meningitis"
+    if medication_id == "piperacillin_tazobactam" and (
+        _assistant_doseid_has_any(normalized, DOSEID_PSEUDOMONAL_TOKENS) or _assistant_doseid_has_any(normalized, DOSEID_SEVERE_TOKENS)
+    ):
+        return "high_inoculum_pseudomonal"
+    if medication_id == "aztreonam" and any(token in normalized for token in ("uti", "urinary", "cystitis")):
+        return "uncomplicated_uti"
+    if medication_id == "cefazolin" and (
+        _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS) or _assistant_doseid_has_any(normalized, DOSEID_BONE_JOINT_TOKENS)
+    ):
+        return "complicated_or_deep"
+    if medication_id == "ceftriaxone":
+        if _assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS):
+            return "meningitis"
+        if _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS) or any(
+            token in normalized for token in ("sepsis", "severe", "invasive")
+        ):
+            return "serious_infection"
+    if medication_id == "ceftazidime" and (
+        _assistant_doseid_has_any(normalized, DOSEID_PSEUDOMONAL_TOKENS) or _assistant_doseid_has_any(normalized, DOSEID_SEVERE_TOKENS)
+    ):
+        return "pseudomonal_or_severe"
+    if medication_id == "ertapenem" and any(token in normalized for token in ("esbl", "extended spectrum beta lactamase")):
+        return "esbl_targeted"
+    if medication_id == "linezolid" and any(token in normalized for token in ("tb", "ntm", "mycobacterial", "prolonged")):
+        return "mycobacterial_or_long_course"
+    if medication_id == "levofloxacin" and (
+        _assistant_doseid_has_any(normalized, DOSEID_PSEUDOMONAL_TOKENS)
+        or any(token in normalized for token in ("pneumonia", "cap", "hap", "vap"))
+    ):
+        return "pneumonia_or_pseudomonas"
+    if medication_id == "ampicillin" and (_assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS) or "enterococcus" in normalized):
+        return "high_exposure"
+    if medication_id == "cefiderocol" and (
+        _assistant_doseid_has_any(normalized, DOSEID_SEVERE_TOKENS)
+        or any(token in normalized for token in ("arc", "augmented renal clearance", "critical"))
+    ):
+        return "high_clearance_or_critical"
+    if medication_id == "ceftaroline" and any(
+        token in normalized for token in ("mrsa", "persistent bacteremia", "endocarditis", "salvage")
+    ):
+        return "high_exposure_mrsa"
+    if medication_id == "ceftazidime_avibactam" and _assistant_doseid_has_any(normalized, DOSEID_SEVERE_TOKENS):
+        return "high_exposure_critical"
+    if medication_id == "ciprofloxacin" and (
+        _assistant_doseid_has_any(normalized, DOSEID_PSEUDOMONAL_TOKENS)
+        or any(token in normalized for token in ("hap", "vap"))
+    ):
+        return "high_exposure_pseudomonal"
+    if medication_id == "clindamycin":
+        if _assistant_doseid_has_any(normalized, DOSEID_BONE_JOINT_TOKENS):
+            return "bone_joint_infection"
+        if _assistant_doseid_has_any(normalized, DOSEID_TOXIN_SUPPRESSION_TOKENS):
+            return "adjunctive_toxin_suppression"
+    if medication_id == "daptomycin":
+        if any(token in normalized for token in ("vre", "vrefm", "enterococcus faecium")):
+            return "vre_high_burden"
+        if _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS):
+            return "bacteremia_endovascular"
+    if medication_id == "imipenem_cilastatin" and any(
+        token in normalized for token in ("resistant", "mdr", "xdr", "carbapenem resistant", "esbl")
+    ):
+        return "high_exposure_resistant"
+    if medication_id == "nafcillin" and _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS):
+        return "mssa_high_burden"
+    if medication_id == "penicillin_g" and (
+        _assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS)
+        or any(token in normalized for token in ("endocarditis", "deep", "high inoculum"))
+    ):
+        return "cns_or_high_exposure"
+    if medication_id == "vancomycin_iv" and any(
+        token in normalized for token in ("mrsa", "bacteremia", "bloodstream", "endocarditis", "invasive")
+    ):
+        return "serious_mrsa_or_invasive"
     if medication_id in {"isoniazid", "rifampin"} and "three times weekly" in normalized:
         return "tb_intermittent" if medication_id == "isoniazid" else "tb_daily"
     if medication_id in {"ethambutol", "pyrazinamide"} and "three times weekly" in normalized:
@@ -6811,8 +6990,14 @@ def _assistant_doseid_indication_for_query(medication_id: str, message_text: str
         return "stepdown_oral" if "stepdown" in normalized or "step-down" in normalized else "invasive_mold_treatment"
     if medication_id == "posaconazole":
         return "mold_prophylaxis" if "prophyl" in normalized else "invasive_fungal_treatment"
+    if medication_id == "fluconazole":
+        return "mucosal_candidiasis" if _assistant_doseid_has_any(normalized, DOSEID_MUCOSAL_CANDIDA_TOKENS) else "candidemia_invasive"
+    if medication_id == "micafungin":
+        return "esophageal_candidiasis" if "esophag" in normalized else "candidemia_invasive"
     if medication_id == "voriconazole":
         return "mold_prophylaxis" if "prophyl" in normalized else "invasive_mold_treatment"
+    if medication_id == "liposomal_amphotericin_b":
+        return "cryptococcal_cns_induction" if any(token in normalized for token in ("crypto", "cryptococ", "cns")) else "invasive_mold_or_severe_yeast"
     return default_indication_id(medication_id)
 
 
@@ -7059,15 +7244,29 @@ def _doseid_recommendations_ready(
 ) -> tuple[List[DoseIDDoseRecommendation], List[str], List[str]]:
     warnings: List[str] = []
     recommendations: List[DoseIDDoseRecommendation] = []
-    patient, _ = normalize_patient_from_available_inputs(
-        total_body_weight_kg=patient_context.total_body_weight_kg,
-        age_years=patient_context.age_years,
-        sex=patient_context.sex,
-        height_cm=patient_context.height_cm,
-        serum_creatinine_mg_dl=patient_context.serum_creatinine_mg_dl,
-        crcl_ml_min=patient_context.crcl_ml_min,
-        renal_mode=patient_context.renal_mode,
+    needs_standard_renal_inputs = patient_context.renal_mode == "standard" and any(
+        medication_id == "foscarnet" or _doseid_standard_renal_inputs_required(medication_id)
+        for medication_id in medication_ids
     )
+    if needs_standard_renal_inputs or patient_context.crcl_ml_min is not None or patient_context.serum_creatinine_mg_dl is not None:
+        patient, _ = normalize_patient_from_available_inputs(
+            total_body_weight_kg=patient_context.total_body_weight_kg,
+            age_years=patient_context.age_years,
+            sex=patient_context.sex,
+            height_cm=patient_context.height_cm,
+            serum_creatinine_mg_dl=patient_context.serum_creatinine_mg_dl,
+            crcl_ml_min=patient_context.crcl_ml_min,
+            renal_mode=patient_context.renal_mode,
+        )
+    else:
+        patient, _ = normalize_patient_from_available_inputs(
+            total_body_weight_kg=patient_context.total_body_weight_kg or 70.0,
+            age_years=patient_context.age_years or 50,
+            sex=patient_context.sex or "male",
+            height_cm=patient_context.height_cm or 170.0,
+            serum_creatinine_mg_dl=1.0,
+            renal_mode="ihd",
+        )
     if patient_context.crcl_ml_min is not None and patient_context.serum_creatinine_mg_dl is None:
         warnings.append("Direct CrCl was used for renal bucketing. If the underlying estimate is uncertain, confirm the final regimen manually.")
     for medication_id in medication_ids[:6]:
@@ -7081,14 +7280,262 @@ def _doseid_recommendations_ready(
     return recommendations, [], warnings
 
 
-def _assistant_build_doseid_analysis(message_text: str) -> DoseIDAssistantAnalysis:
+def _doseid_merge_patient_context(
+    local_context: DoseIDAssistantPatientContext,
+    llm_context: Dict[str, Any],
+) -> DoseIDAssistantPatientContext:
+    llm_renal_mode = str(llm_context.get("renalMode") or "standard")
+    return DoseIDAssistantPatientContext(
+        ageYears=local_context.age_years if local_context.age_years is not None else llm_context.get("ageYears"),
+        sex=local_context.sex if local_context.sex is not None else llm_context.get("sex"),
+        totalBodyWeightKg=(
+            local_context.total_body_weight_kg
+            if local_context.total_body_weight_kg is not None
+            else llm_context.get("totalBodyWeightKg")
+        ),
+        heightCm=local_context.height_cm if local_context.height_cm is not None else llm_context.get("heightCm"),
+        serumCreatinineMgDl=(
+            local_context.serum_creatinine_mg_dl
+            if local_context.serum_creatinine_mg_dl is not None
+            else llm_context.get("serumCreatinineMgDl")
+        ),
+        crclMlMin=local_context.crcl_ml_min if local_context.crcl_ml_min is not None else llm_context.get("crclMlMin"),
+        renalMode=local_context.renal_mode if local_context.renal_mode != "standard" else llm_renal_mode,
+    )
+
+
+def _doseid_rule_parse_payload(text: str) -> Dict[str, Any]:
+    medication_ids = _assistant_detect_doseid_medication_ids(text)
+    patient_context = _assistant_parse_doseid_patient_context(text)
+    selections = [
+        {
+            "medicationId": medication_id,
+            "indicationId": _assistant_doseid_indication_for_query(medication_id, text),
+        }
+        for medication_id in medication_ids
+    ]
+    return {
+        "medications": selections,
+        "patientContext": patient_context.model_dump(by_alias=True),
+        "requiresConfirmation": not medication_ids,
+    }
+
+
+def _doseid_merge_medication_selections(
+    local_selections: List[Dict[str, Any]],
+    llm_selections: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    for item in local_selections:
+        medication_id = str(item.get("medicationId") or "").strip()
+        if not medication_id:
+            continue
+        merged[medication_id] = {"medicationId": medication_id, "indicationId": item.get("indicationId")}
+    for item in llm_selections:
+        medication_id = str(item.get("medicationId") or "").strip()
+        if not medication_id:
+            continue
+        indication_id = item.get("indicationId")
+        if medication_id not in merged:
+            merged[medication_id] = {"medicationId": medication_id, "indicationId": indication_id}
+            continue
+        if indication_id and (
+            not merged[medication_id].get("indicationId")
+            or merged[medication_id].get("indicationId") == default_indication_id(medication_id)
+        ):
+            merged[medication_id]["indicationId"] = indication_id
+    return list(merged.values())
+
+
+def _build_doseid_text_response(
+    text: str,
+    *,
+    parser_strategy: str = "auto",
+    parser_model: str | None = None,
+    allow_fallback: bool = True,
+) -> DoseIDTextAnalyzeResponse:
+    warnings: List[str] = []
+    parser_fallback_used = False
+    local_payload = _doseid_rule_parse_payload(text)
+    selected_payload: Dict[str, Any] | None = None
+    parser_name = "rule-based-v1"
+
+    if parser_strategy == "rule":
+        selected_payload = local_payload
+    elif parser_strategy == "openai":
+        try:
+            llm_payload = parse_doseid_text_with_openai(text=text, parser_model=parser_model)
+            selected_payload = {
+                "medications": _doseid_merge_medication_selections(
+                    local_payload.get("medications", []),
+                    list(llm_payload.get("medications", [])),
+                ),
+                "patientContext": _doseid_merge_patient_context(
+                    DoseIDAssistantPatientContext.model_validate(local_payload.get("patientContext", {})),
+                    dict(llm_payload.get("patientContext") or {}),
+                ).model_dump(by_alias=True),
+                "requiresConfirmation": bool(llm_payload.get("requiresConfirmation") or not llm_payload.get("medications")),
+            }
+            parser_name = str(llm_payload.get("parser") or "openai-doseid")
+            for ambiguity in llm_payload.get("ambiguities", []):
+                warnings.append(f"OpenAI DoseID parser note: {ambiguity}")
+        except LLMParserError as exc:
+            if not allow_fallback:
+                return DoseIDTextAnalyzeResponse(
+                    text=text,
+                    parsedRequest=None,
+                    warnings=[f"OpenAI DoseID parser failed: {exc}"],
+                    requiresConfirmation=True,
+                    parser="openai-doseid",
+                    parserFallbackUsed=False,
+                    analysis=None,
+                )
+            selected_payload = local_payload
+            parser_fallback_used = True
+            warnings.append(f"OpenAI DoseID parser unavailable/failed, used rule parser fallback: {exc}")
+    else:
+        openai_err: str | None = None
+        if (os.getenv("OPENAI_API_KEY") or "").strip():
+            try:
+                llm_payload = parse_doseid_text_with_openai(text=text, parser_model=parser_model)
+                selected_payload = {
+                    "medications": _doseid_merge_medication_selections(
+                        local_payload.get("medications", []),
+                        list(llm_payload.get("medications", [])),
+                    ),
+                    "patientContext": _doseid_merge_patient_context(
+                        DoseIDAssistantPatientContext.model_validate(local_payload.get("patientContext", {})),
+                        dict(llm_payload.get("patientContext") or {}),
+                    ).model_dump(by_alias=True),
+                    "requiresConfirmation": bool(llm_payload.get("requiresConfirmation") or not llm_payload.get("medications")),
+                }
+                parser_name = str(llm_payload.get("parser") or "openai-doseid")
+                for ambiguity in llm_payload.get("ambiguities", []):
+                    warnings.append(f"OpenAI DoseID parser note: {ambiguity}")
+            except LLMParserError as exc:
+                openai_err = str(exc)
+        if selected_payload is None:
+            selected_payload = local_payload
+            parser_name = "rule-based-v1"
+            if openai_err:
+                parser_fallback_used = True
+                warnings.append(f"OpenAI DoseID parser unavailable/failed, used rule parser fallback: {openai_err}")
+
+    parsed_request = DoseIDTextParsedRequest(
+        medications=[
+            {
+                "medicationId": item.get("medicationId"),
+                "indicationId": item.get("indicationId"),
+            }
+            for item in selected_payload.get("medications", [])
+            if item.get("medicationId")
+        ],
+        patientContext=selected_payload.get("patientContext", {}),
+    )
+    analysis = _assistant_build_doseid_analysis(
+        text,
+        parser_strategy=parser_strategy,
+        parser_model=parser_model,
+        allow_fallback=allow_fallback,
+    )
+    requires_confirmation = bool(selected_payload.get("requiresConfirmation")) or not parsed_request.medications
+    if analysis.follow_up_questions:
+        requires_confirmation = True
+    return DoseIDTextAnalyzeResponse(
+        parser=parser_name,
+        text=text,
+        parsedRequest=parsed_request,
+        warnings=warnings,
+        requiresConfirmation=requires_confirmation,
+        parserFallbackUsed=parser_fallback_used,
+        analysis=analysis,
+    )
+
+
+def _assistant_doseid_simple_numeric_reply(reply: str) -> str | None:
+    normalized = _assistant_doseid_normalize(reply)
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(?:\s*(mg/?dl|mg dl|ml/?min|ml min|kg|cm|lb|lbs))?", normalized)
+    if not match:
+        return None
+    number = match.group(1)
+    unit = match.group(2) or ""
+    if unit == "mg/dl":
+        unit = "mg/dl"
+    return f"{number} {unit}".strip()
+
+
+def _assistant_rewrite_doseid_followup_reply(existing_text: str | None, reply: str) -> str:
+    extra = (reply or "").strip()
+    if not extra:
+        return extra
+    prior_analysis = _assistant_build_doseid_analysis(existing_text or "", parser_strategy="rule")
+    if not prior_analysis.follow_up_questions:
+        return extra
+    question_id = prior_analysis.follow_up_questions[0].id
+    normalized = _assistant_doseid_normalize(extra)
+    numeric_value = _assistant_doseid_simple_numeric_reply(extra)
+    if question_id == "serum_creatinine" and numeric_value is not None:
+        return f"serum creatinine {numeric_value.split()[0]}"
+    if question_id == "renal_function":
+        number_match = re.search(r"\b(\d+(?:\.\d+)?)\b", normalized)
+        if number_match:
+            value = number_match.group(1)
+            if re.search(r"\b(crcl|creatinine clearance|ml/?min)\b", normalized):
+                return f"crcl {value}"
+            if re.search(r"\b(scr|serum creatinine|creatinine|mg/?dl)\b", normalized):
+                return f"serum creatinine {value}"
+            return f"serum creatinine {value}" if float(value) < 20 else f"crcl {value}"
+    if question_id == "age" and numeric_value is not None:
+        return f"age {numeric_value.split()[0]}"
+    if question_id == "weight" and numeric_value is not None:
+        if re.search(r"\b(lb|lbs)\b", normalized):
+            return numeric_value
+        return f"{numeric_value.split()[0]} kg"
+    if question_id == "height" and numeric_value is not None:
+        return f"{numeric_value.split()[0]} cm"
+    return extra
+
+
+def _assistant_build_doseid_analysis(
+    message_text: str,
+    *,
+    parser_strategy: str = "auto",
+    parser_model: str | None = None,
+    allow_fallback: bool = True,
+) -> DoseIDAssistantAnalysis:
     medication_ids = _assistant_detect_doseid_medication_ids(message_text)
     patient_context = _assistant_parse_doseid_patient_context(message_text)
     warnings: List[str] = []
-    indication_ids = {
+    indication_ids: Dict[str, str] = {
         medication_id: _assistant_doseid_indication_for_query(medication_id, message_text)
         for medication_id in medication_ids
     }
+    if parser_strategy in {"auto", "openai"} and (os.getenv("OPENAI_API_KEY") or "").strip():
+        try:
+            llm_payload = parse_doseid_text_with_openai(text=message_text, parser_model=parser_model)
+            patient_context = _doseid_merge_patient_context(
+                patient_context,
+                dict(llm_payload.get("patientContext") or {}),
+            )
+            for item in llm_payload.get("medications", []):
+                medication_id = str(item.get("medicationId") or "").strip()
+                if not medication_id:
+                    continue
+                if medication_id not in medication_ids:
+                    medication_ids.append(medication_id)
+                indication_id = str(item.get("indicationId") or "").strip()
+                if indication_id and (
+                    medication_id not in indication_ids
+                    or indication_ids[medication_id] == default_indication_id(medication_id)
+                ):
+                    indication_ids[medication_id] = indication_id
+            for ambiguity in llm_payload.get("ambiguities", []):
+                warnings.append(f"OpenAI DoseID parser note: {ambiguity}")
+        except LLMParserError as exc:
+            if parser_strategy == "openai" and not allow_fallback:
+                warnings.append(f"OpenAI DoseID parser failed: {exc}")
+            else:
+                warnings.append(f"OpenAI DoseID parser unavailable/failed, used rule parser fallback: {exc}")
     follow_up_questions = _doseid_missing_input_questions(
         medication_ids=medication_ids,
         indication_ids=indication_ids,
@@ -7164,10 +7611,20 @@ def _assistant_doseid_response(
     state.endo_blood_culture_context = None
     state.endo_score_factor_ids = []
     _assistant_reset_immunoid_state(state)
-    result = _assistant_build_doseid_analysis(message_text)
-    message = ((prefix or "") + _assistant_doseid_message(result)).strip()
+    result = _assistant_build_doseid_analysis(
+        message_text,
+        parser_strategy=state.parser_strategy,
+        parser_model=state.parser_model,
+        allow_fallback=state.allow_fallback,
+    )
+    fallback_message = ((prefix or "") + _assistant_doseid_message(result)).strip()
+    message, narration_refined = narrate_doseid_assistant_message(
+        doseid_result=result,
+        fallback_message=fallback_message,
+    )
     return AssistantTurnResponse(
         assistantMessage=message,
+        assistantNarrationRefined=narration_refined,
         state=state,
         doseidAnalysis=result,
         options=[
@@ -7756,7 +8213,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "doseid_describe":
         if req.message and req.message.strip():
-            state.doseid_text = _append_case_text(state.doseid_text, req.message)
+            rewritten_message = _assistant_rewrite_doseid_followup_reply(state.doseid_text, req.message)
+            state.doseid_text = _append_case_text(state.doseid_text, rewritten_message)
             return _assistant_doseid_response(
                 state,
                 message_text=state.doseid_text,
