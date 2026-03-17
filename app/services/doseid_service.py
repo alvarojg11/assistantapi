@@ -11,6 +11,8 @@ WeightBasis = Literal["tbw", "ibw", "adjbw", "lbw"]
 ANTIBACTERIAL_SOURCE = (
     "Cross-check: UCSF IDMP + Nebraska Medicine Antimicrobial Renal Dosing Guidance"
 )
+NITROFURANTOIN_SOURCE = "Institutional urinary dosing guidance"
+FOSFOMYCIN_SOURCE = "Institutional urinary dosing guidance"
 TB_SOURCE = "Cross-check: UCSF IDMP + CDC/ATS/IDSA TB guidance"
 ANTIFUNGAL_SOURCE = (
     "Cross-check: UCSF IDMP + Nebraska Medicine Antimicrobial Renal Dosing Guidance"
@@ -1133,6 +1135,92 @@ def _tmp_smx(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMo
                 else f"At very low CrCl, if therapy is used, approximate IV equivalent target (TMP component): {low25}-{high50} mg TMP/day with specialist-guided monitoring."
             ),
             "At CrCl <15 mL/min, use is generally avoided unless benefit outweighs risk and close monitoring is available.",
+        ],
+    )
+
+
+def _nitrofurantoin(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
+    if renal_mode == "ihd":
+        return DoseResult(
+            regimen="Not routinely recommended in intermittent hemodialysis; consider an alternative lower-tract agent.",
+            renal_bucket="Intermittent hemodialysis",
+            notes=[
+                "Limited institutional guidance is available for dialysis pathways.",
+                "Nitrofurantoin is a lower-tract option only and should not be used for pyelonephritis or systemic infection.",
+            ],
+        )
+    if renal_mode == "crrt":
+        return DoseResult(
+            regimen="Not routinely recommended in CRRT; consider an alternative lower-tract agent.",
+            renal_bucket="CRRT",
+            notes=[
+                "Institutional guidance does not provide a clear CRRT pathway.",
+                "Nitrofurantoin is a lower-tract option only and should not be used for pyelonephritis or systemic infection.",
+            ],
+        )
+    if patient.crcl_ml_min >= 60:
+        return DoseResult(
+            regimen="100 mg PO q12h x 5 days",
+            renal_bucket="CrCl >= 60 mL/min",
+            notes=[
+                "Common institutional uncomplicated cystitis pathway: nitrofurantoin 100 mg PO twice daily for 5 days.",
+                "Nitrofurantoin is a lower-tract option only and should not be used for pyelonephritis or systemic infection.",
+            ],
+        )
+    if patient.crcl_ml_min >= 30:
+        return DoseResult(
+            regimen="100 mg PO q12h x 5 days",
+            renal_bucket="CrCl 30-59 mL/min",
+            notes=[
+                "Some institutions allow nitrofurantoin down to CrCl 30 mL/min for lower UTI, but supporting data are still limited at lower renal function.",
+                "Use only for lower UTI and confirm local practice when renal function is borderline.",
+            ],
+        )
+    return DoseResult(
+        regimen="Avoid nitrofurantoin when CrCl < 30 mL/min; select an alternative agent.",
+        renal_bucket="CrCl < 30 mL/min",
+        notes=[
+            "Many institutional pathways avoid nitrofurantoin when CrCl is below 30 mL/min.",
+            "Nitrofurantoin is a lower-tract option only and should not be used for pyelonephritis or systemic infection.",
+        ],
+    )
+
+
+def _fosfomycin(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
+    complicated = indication_id == "complicated_cystitis"
+    if renal_mode == "ihd":
+        return DoseResult(
+            regimen="3 g PO x1 after HD" if not complicated else "3 g PO q3 days x 3 doses after HD",
+            renal_bucket="Intermittent hemodialysis",
+            notes=[
+                "Institutional dosing guidance includes explicit post-HD cystitis pathways.",
+                "Fosfomycin is for lower urinary syndromes and is not appropriate for pyelonephritis or systemic infection.",
+            ],
+        )
+    if renal_mode == "crrt":
+        return DoseResult(
+            regimen="No clear CRRT dosing recommendation; consider an alternative or specialist/pharmacy guidance.",
+            renal_bucket="CRRT",
+            notes=[
+                "Institutional guidance does not provide a clear CRRT pathway.",
+                "Fosfomycin is for lower urinary syndromes and is not appropriate for pyelonephritis or systemic infection.",
+            ],
+        )
+    if complicated:
+        return DoseResult(
+            regimen="3 g PO q2 days x 3 doses" if patient.crcl_ml_min > 50 else "3 g PO q3 days x 3 doses",
+            renal_bucket="CrCl > 50 mL/min" if patient.crcl_ml_min > 50 else "CrCl <= 50 mL/min",
+            notes=[
+                "Common institutional multiple-dose pathway is intended for complicated cystitis.",
+                "Fosfomycin is for lower urinary syndromes and is not appropriate for pyelonephritis or systemic infection.",
+            ],
+        )
+    return DoseResult(
+        regimen="3 g PO x1",
+        renal_bucket="CrCl > 50 mL/min" if patient.crcl_ml_min > 50 else "CrCl <= 50 mL/min",
+        notes=[
+            "Common institutional uncomplicated cystitis pathway uses a single 3 g oral dose.",
+            "Fosfomycin is for lower urinary syndromes and is not appropriate for pyelonephritis or systemic infection.",
         ],
     )
 
@@ -2551,6 +2639,27 @@ MEDICATIONS: Dict[str, MedicationRule] = {
         source_pages=ANTIBACTERIAL_SOURCE,
         calculate=_tmp_smx,
     ),
+    "nitrofurantoin": MedicationRule(
+        id="nitrofurantoin",
+        name="Nitrofurantoin",
+        category="antibacterial",
+        indications=[
+            MedicationIndication("uncomplicated_cystitis", "Uncomplicated cystitis"),
+        ],
+        source_pages=NITROFURANTOIN_SOURCE,
+        calculate=_nitrofurantoin,
+    ),
+    "fosfomycin": MedicationRule(
+        id="fosfomycin",
+        name="Fosfomycin",
+        category="antibacterial",
+        indications=[
+            MedicationIndication("uncomplicated_cystitis", "Uncomplicated cystitis"),
+            MedicationIndication("complicated_cystitis", "Complicated cystitis"),
+        ],
+        source_pages=FOSFOMYCIN_SOURCE,
+        calculate=_fosfomycin,
+    ),
     "amoxicillin": MedicationRule(
         id="amoxicillin",
         name="Amoxicillin",
@@ -2930,6 +3039,11 @@ TEXT_MEDICATION_MAP: List[tuple[str, str]] = [
     ("Trimethoprim/Sulfamethoxazole", "tmp_smx"),
     ("Bactrim", "tmp_smx"),
     ("Septra", "tmp_smx"),
+    ("Nitrofurantoin", "nitrofurantoin"),
+    ("Macrobid", "nitrofurantoin"),
+    ("Macrodantin", "nitrofurantoin"),
+    ("Fosfomycin", "fosfomycin"),
+    ("Monurol", "fosfomycin"),
     ("Cefiderocol", "cefiderocol"),
     ("Fetroja", "cefiderocol"),
     ("Ceftaroline", "ceftaroline"),
@@ -3130,6 +3244,10 @@ def _default_indication_for_mechid(
         if syndrome == "Bloodstream infection":
             return "gnr_bacteremia"
         return "ssti"
+    if medication_id == "nitrofurantoin":
+        return "uncomplicated_cystitis"
+    if medication_id == "fosfomycin":
+        return "uncomplicated_cystitis" if syndrome == "Uncomplicated cystitis" else "complicated_cystitis"
     if medication_id == "amoxicillin":
         return "high_dose_oral" if deep or severe else "standard_oral"
     if medication_id == "amoxicillin_clavulanate":

@@ -4,7 +4,13 @@ import json
 import os
 from typing import Any, Dict, List, Tuple
 
-from ..schemas import DoseIDAssistantAnalysis, ImmunoAnalyzeResponse, MechIDTextAnalyzeResponse, TextAnalyzeResponse
+from ..schemas import (
+    AntibioticAllergyAnalyzeResponse,
+    DoseIDAssistantAnalysis,
+    ImmunoAnalyzeResponse,
+    MechIDTextAnalyzeResponse,
+    TextAnalyzeResponse,
+)
 from .mechid_consult_examples import select_mechid_consult_examples
 from .llm_text_parser import LLMParserError, _try_import_openai
 
@@ -272,6 +278,35 @@ def narrate_doseid_assistant_message(
         "If warnings are present, preserve their meaning without adding new cautions.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 2 short paragraphs. Plain text only."
+    )
+    try:
+        return _call_consult_model(prompt=prompt, payload=payload), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_allergyid_assistant_message(
+    *,
+    allergy_result: AntibioticAllergyAnalyzeResponse,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    payload = {
+        "fallbackMessage": fallback_message,
+        "allergyAnalysis": allergy_result.model_dump(by_alias=True),
+    }
+    prompt = (
+        "You are an infectious diseases consultant rewriting a deterministic antibiotic-allergy compatibility result into a concise clinician-facing answer.\n"
+        "The JSON input is the full source of truth. Do not invent antibiotics, reaction phenotypes, cross-reactivity claims, or safety conclusions.\n"
+        "Do not make a drug sound safe if the JSON says avoid or caution.\n"
+        "If the JSON describes a severe delayed reaction such as SJS/TEN, DRESS, organ injury, immune hemolysis, or serum-sickness-like reaction, preserve that gravity clearly.\n"
+        "If the JSON includes delabeling opportunities, explain them plainly without minimizing real severe reactions.\n"
+        "Do not ask for additional data unless that request already exists in the JSON input.\n"
+        "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
+        "Do not use markdown bullets, asterisks, or arrow symbols.\n"
+        "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
         return _call_consult_model(prompt=prompt, payload=payload), True

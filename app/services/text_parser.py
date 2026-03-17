@@ -81,12 +81,24 @@ MODULE_ALIASES: Dict[str, List[str]] = {
         "staphylococcus aureus bacteremia",
         "staph aureus bacteremia",
         "s aureus bacteremia",
+        "staphylococcus epidermidis bacteremia",
+        "s epidermidis bacteremia",
+        "coagulase negative staph bacteremia",
+        "coagulase negative staphylococcal bacteremia",
+        "coagulase-negative staph bacteremia",
+        "coagulase-negative staphylococcal bacteremia",
         "viridans bacteremia",
         "viridans streptococcal bacteremia",
         "nbhs bacteremia",
         "enterococcus bacteremia",
+        "enterococcal bacteremia",
         "enterococcus faecalis bacteremia",
         "e faecalis bacteremia",
+        "enterococcus faecium bacteremia",
+        "e faecium bacteremia",
+        "prosthetic valve endocarditis",
+        "tavi endocarditis",
+        "tavr endocarditis",
     ],
     "active_tb": ["tb", "active tb", "tuberculosis", "pulmonary tb"],
     "tb_uveitis": [
@@ -106,6 +118,16 @@ MODULE_ALIASES: Dict[str, List[str]] = {
     "spinal_epidural_abscess": ["spinal epidural abscess", "sea", "epidural abscess", "spinal epidural infection"],
     "brain_abscess": ["brain abscess", "cerebral abscess", "intracranial abscess", "pyogenic brain abscess"],
     "necrotizing_soft_tissue_infection": ["necrotizing soft tissue infection", "nsti", "necrotizing fasciitis", "flesh eating infection", "fournier gangrene"],
+    "diabetic_foot_infection": [
+        "diabetic foot infection",
+        "infected diabetic foot ulcer",
+        "diabetic foot ulcer infection",
+        "diabetic foot osteomyelitis",
+        "diabetic foot wound infection",
+        "diabetic wound infection",
+        "diabetic foot wound",
+        "dfi",
+    ],
     "pji": ["pji", "prosthetic joint infection", "joint prosthesis infection"],
 }
 
@@ -233,8 +255,107 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
         "present": ["tee positive", "tee showing vegetation", "vegetation on tee"],
         "absent": ["tee negative", "tee without vegetation", "negative tee"],
     },
-    "endo_bcx_major_typical": {"present": ["typical blood cultures", "major blood culture criterion"]},
-    "endo_bcx_major_persistent": {"present": ["persistent bacteremia", "persistent positive blood cultures"]},
+    "endo_bcx_major_typical": {
+        "present": [
+            "typical blood cultures",
+            "major blood culture criterion",
+            "typical endocarditis blood cultures in at least 2 sets",
+        ]
+    },
+    "endo_bcx_major_persistent": {
+        "present": [
+            "persistent bacteremia",
+            "persistent positive blood cultures",
+            "blood cultures persistently positive",
+        ],
+        "absent": ["blood cultures cleared without persistent positivity"],
+    },
+    "endo_bcx_saureus_multi": {
+        "present": [
+            "staphylococcus aureus in at least 2 blood culture sets",
+            "staphylococcus aureus in 2 blood culture sets",
+            "staphylococcus aureus in >=2 blood culture sets",
+            "staphylococcus aureus in >=2 sets",
+            "s aureus in at least 2 blood culture sets",
+            "s aureus in >=2 blood culture sets",
+            "staphylococcus aureus bacteremia",
+            "staph aureus bacteremia",
+            "mssa bacteremia",
+            "mrsa bacteremia",
+        ],
+        "absent": ["no staphylococcus aureus in at least 2 blood culture sets"],
+    },
+    "endo_bcx_cons_prosthetic_multi": {
+        "present": [
+            "coagulase negative staph in at least 2 blood culture sets with prosthetic valve",
+            "coagulase-negative staph in at least 2 blood culture sets with prosthetic valve",
+            "coagulase negative staph in >=2 blood culture sets with prosthetic valve",
+            "coagulase-negative staph in >=2 blood culture sets with prosthetic valve",
+            "coagulase negative staphylococci in at least 2 blood culture sets with prosthetic valve",
+            "coagulase-negative staphylococci in at least 2 blood culture sets with prosthetic valve",
+            "coagulase negative staphylococci in >=2 blood culture sets with prosthetic valve",
+            "coagulase-negative staphylococci in >=2 blood culture sets with prosthetic valve",
+            "coagulase negative staph bacteremia with prosthetic valve",
+            "prosthetic valve with coagulase negative staph bacteremia",
+            "prosthetic valve with coagulase-negative staph bacteremia",
+            "prosthetic valve endocarditis concern from coagulase negative staph bacteremia",
+            "prosthetic valve endocarditis concern from coagulase-negative staph bacteremia",
+            "coagulase-negative staph bacteremia with prosthetic valve",
+            "coagulase negative staph bacteremia after tavr",
+            "coagulase-negative staph bacteremia after tavr",
+            "coagulase negative staph bacteremia after tavi",
+            "coagulase-negative staph bacteremia after tavi",
+            "tavr patient with coagulase negative staph bacteremia",
+            "tavr patient with coagulase-negative staph bacteremia",
+            "tavi patient with coagulase negative staph bacteremia",
+            "tavi patient with coagulase-negative staph bacteremia",
+            "staphylococcus epidermidis bacteremia with prosthetic valve",
+            "prosthetic valve with staphylococcus epidermidis bacteremia",
+            "prosthetic valve endocarditis concern from staphylococcus epidermidis bacteremia",
+            "s epidermidis bacteremia with prosthetic valve",
+            "prosthetic valve with s epidermidis bacteremia",
+            "staphylococcus epidermidis bacteremia after tavr",
+            "staphylococcus epidermidis bacteremia after tavi",
+            "tavr patient with staphylococcus epidermidis bacteremia",
+            "tavi patient with staphylococcus epidermidis bacteremia",
+            "coagulase negative staph bacteremia with cardiac device",
+            "coagulase-negative staph bacteremia with cardiac device",
+            "coagulase negative staph bacteremia with cied",
+            "coagulase-negative staph bacteremia with cied",
+            "staphylococcus epidermidis bacteremia with cardiac device",
+            "staphylococcus epidermidis bacteremia with cied",
+        ],
+        "absent": ["no coagulase negative staphylococcal prosthetic/device bacteremia"],
+    },
+    "endo_bcx_enterococcus_prosthetic_multi": {
+        "present": [
+            "enterococcus bacteremia with prosthetic valve",
+            "prosthetic valve with enterococcus bacteremia",
+            "enterococcus bacteremia after tavr",
+            "enterococcus bacteremia after tavi",
+            "tavr patient with enterococcus bacteremia",
+            "tavi patient with enterococcus bacteremia",
+            "enterococcal bacteremia with prosthetic valve",
+            "prosthetic valve with enterococcal bacteremia",
+            "enterococcal bacteremia after tavr",
+            "enterococcal bacteremia after tavi",
+            "tavr patient with enterococcal bacteremia",
+            "tavi patient with enterococcal bacteremia",
+            "enterococcus faecium bacteremia with prosthetic valve",
+            "prosthetic valve with enterococcus faecium bacteremia",
+            "e faecium bacteremia with prosthetic valve",
+            "prosthetic valve with e faecium bacteremia",
+            "enterococcus faecium bacteremia after tavr",
+            "enterococcus faecium bacteremia after tavi",
+            "tavr patient with enterococcus faecium bacteremia",
+            "tavi patient with enterococcus faecium bacteremia",
+            "enterococcus bacteremia with cardiac device",
+            "enterococcus bacteremia with cied",
+            "enterococcal bacteremia with cardiac device",
+            "enterococcal bacteremia with cied",
+        ],
+        "absent": ["no enterococcal prosthetic/device bacteremia"],
+    },
     "endo_prosthetic_valve": {"present": ["prosthetic valve"]},
     "endo_cied": {"present": ["cied", "pacemaker", "icd", "cardiac device"]},
     "cdi_freq": {
@@ -1455,6 +1576,127 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
         "present": ["mri not done"],
         "absent": ["mri completed"],
     },
+    "dfi_host_longstanding_or_recurrent_ulcer": {
+        "present": ["chronic ulcer", "nonhealing ulcer", "recurrent ulcer", "longstanding ulcer"],
+        "absent": ["acute new ulcer", "not a chronic ulcer"],
+    },
+    "dfi_host_pad_or_ischemia": {
+        "present": ["pad", "peripheral arterial disease", "ischemia", "ischemic foot", "poor perfusion"],
+        "absent": ["no pad", "no peripheral arterial disease", "no ischemia"],
+    },
+    "dfi_host_prior_dfi_or_osteomyelitis": {
+        "present": ["prior diabetic foot infection", "prior osteomyelitis", "history of osteomyelitis", "prior same foot amputation"],
+        "absent": ["no prior diabetic foot infection", "no prior osteomyelitis"],
+    },
+    "dfi_local_inflammation_2plus": {
+        "present": [
+            "clinically infected ulcer",
+            "local signs of infection",
+            "2 local signs of infection",
+            "cellulitis around the ulcer",
+            "foot ulcer with erythema warmth tenderness",
+            "warmth and erythema",
+        ],
+        "absent": ["clinically uninfected ulcer", "no local signs of infection", "no erythema warmth tenderness or swelling"],
+    },
+    "dfi_purulence": {
+        "present": ["purulence", "purulent drainage", "pus from ulcer", "pus"],
+        "absent": ["no purulence", "no purulent drainage", "dry ulcer"],
+    },
+    "dfi_erythema_ge2cm_or_deep": {
+        "present": ["erythema more than 2 cm", "erythema greater than 2 cm", "infection extends deeper than skin", "deep tissue infection"],
+        "absent": ["erythema less than 2 cm", "superficial only"],
+    },
+    "dfi_systemic_toxicity": {
+        "present": ["hemodynamic instability", "shock", "septic shock", "systemic toxicity", "sirs", "unstable from infection"],
+        "absent": ["hemodynamically stable", "no systemic toxicity", "stable vital signs"],
+    },
+    "dfi_deep_abscess_or_gangrene": {
+        "present": ["deep abscess", "gangrene", "necrosis", "necrotic tissue", "limb threatening infection", "deep space infection"],
+        "absent": ["no gangrene", "no deep abscess", "no necrosis"],
+    },
+    "dfi_probe_to_bone_positive": {
+        "present": ["probe to bone positive", "ptb positive", "probe-to-bone positive"],
+        "absent": ["probe to bone negative", "ptb negative", "probe-to-bone negative"],
+    },
+    "dfi_probe_to_bone_na": {
+        "present": ["probe to bone not done", "ptb not done"],
+        "absent": ["probe to bone completed", "ptb completed"],
+    },
+    "dfi_exposed_bone": {
+        "present": ["exposed bone", "visible bone", "bone exposed", "bone visible in ulcer"],
+        "absent": ["no exposed bone", "no visible bone"],
+    },
+    "dfi_forefoot_only": {
+        "present": ["forefoot only", "forefoot osteomyelitis", "toe osteomyelitis", "metatarsal head osteomyelitis"],
+        "absent": ["midfoot involvement", "hindfoot involvement"],
+    },
+    "dfi_esr_high": {
+        "present": ["esr elevated", "esr high", "esr 70", "esr above 70", "esr markedly elevated"],
+        "absent": ["esr normal", "esr not elevated"],
+    },
+    "dfi_crp_high": {
+        "present": ["crp elevated", "crp high", "crp markedly elevated"],
+        "absent": ["crp normal", "crp not elevated"],
+    },
+    "dfi_wbc_high": {
+        "present": ["leukocytosis", "white count elevated", "wbc elevated", "wbc high"],
+        "absent": ["no leukocytosis", "wbc normal"],
+    },
+    "dfi_xray_osteomyelitis": {
+        "present": [
+            "xray suggests osteomyelitis",
+            "xray concerning for osteomyelitis",
+            "plain film osteomyelitis",
+            "xray with cortical destruction",
+            "xray with periosteal reaction",
+        ],
+        "absent": ["xray not suggestive of osteomyelitis", "plain films negative for osteomyelitis"],
+    },
+    "dfi_xray_na": {
+        "present": ["plain radiographs not done", "xray not done"],
+        "absent": ["plain radiographs completed", "xray completed"],
+    },
+    "dfi_mri_osteomyelitis_or_abscess": {
+        "present": ["mri osteomyelitis", "mri compatible with osteomyelitis", "mri with deep abscess", "mri with osteomyelitis or abscess"],
+        "absent": ["mri not compatible with osteomyelitis", "mri negative for osteomyelitis"],
+    },
+    "dfi_mri_na": {
+        "present": ["mri not done"],
+        "absent": ["mri completed"],
+    },
+    "dfi_deep_tissue_culture_pos": {
+        "present": ["deep tissue culture positive", "operative tissue culture positive", "deep operative culture positive"],
+        "absent": ["deep tissue culture negative", "operative tissue culture negative"],
+    },
+    "dfi_deep_tissue_culture_na": {
+        "present": ["deep tissue culture not done", "operative tissue culture not done"],
+        "absent": ["deep tissue culture completed", "operative tissue culture completed"],
+    },
+    "dfi_bone_biopsy_culture_pos": {
+        "present": ["bone biopsy culture positive", "bone culture positive", "bone specimen culture positive"],
+        "absent": ["bone biopsy culture negative", "bone culture negative"],
+    },
+    "dfi_bone_histology_pos": {
+        "present": ["bone histology positive", "bone pathology positive", "histology consistent with osteomyelitis"],
+        "absent": ["bone histology negative", "bone pathology negative"],
+    },
+    "dfi_bone_biopsy_na": {
+        "present": ["bone biopsy not done", "bone histology not done"],
+        "absent": ["bone biopsy completed", "bone histology completed"],
+    },
+    "dfi_surgery_debridement_done": {
+        "present": ["debridement performed", "surgical debridement performed", "source control done", "surgery performed"],
+        "absent": ["no debridement", "no surgery", "managed nonsurgically"],
+    },
+    "dfi_minor_amputation_done": {
+        "present": ["minor amputation performed", "toe amputation", "ray amputation", "bone resection performed"],
+        "absent": ["no amputation", "no bone resection"],
+    },
+    "dfi_positive_bone_margin": {
+        "present": ["positive bone margin", "positive residual bone margin", "residual osteomyelitis at margin"],
+        "absent": ["negative bone margin", "clean bone margin"],
+    },
 }
 
 
@@ -1842,6 +2084,27 @@ def _augment_tb_uveitis_findings(
                 match_alias["tbu_harm_cld_mild"] = f"meld-na {meld_value}"
 
 
+def _augment_dfi_findings(
+    text_norm: str,
+    findings: Dict[str, str],
+    match_alias: Dict[str, str],
+) -> None:
+    if "dfi_esr_high" not in findings:
+        match = re.search(r"\besr(?:\s*(?:of|is|=))?\s*(\d{2,3})\b", text_norm)
+        if match:
+            esr_value = int(match.group(1))
+            if esr_value >= 70:
+                findings["dfi_esr_high"] = "present"
+                match_alias["dfi_esr_high"] = f"esr {esr_value}"
+            elif esr_value < 40:
+                findings["dfi_esr_high"] = "absent"
+                match_alias["dfi_esr_high"] = f"esr {esr_value}"
+
+    if "dfi_local_inflammation_2plus" not in findings and all(token in text_norm for token in ("erythema", "warmth")):
+        findings["dfi_local_inflammation_2plus"] = "present"
+        match_alias["dfi_local_inflammation_2plus"] = "erythema and warmth"
+
+
 def _extract_findings(module: SyndromeModule, text: str) -> tuple[Dict[str, str], List[str], Dict[str, str]]:
     text_norm = normalize(text)
     findings: Dict[str, str] = {}
@@ -1859,6 +2122,8 @@ def _extract_findings(module: SyndromeModule, text: str) -> tuple[Dict[str, str]
 
     if module.id == "tb_uveitis":
         _augment_tb_uveitis_findings(text_norm, findings, match_alias)
+    if module.id == "diabetic_foot_infection":
+        _augment_dfi_findings(text_norm, findings, match_alias)
 
     if not findings:
         warnings.append("No findings/tests were confidently extracted from text.")

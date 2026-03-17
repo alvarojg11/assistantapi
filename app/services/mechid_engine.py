@@ -484,6 +484,9 @@ def canonical_antibiotic_aliases(organism: str) -> Dict[str, str]:
         aliases[key.replace("/", "")] = ab
         aliases[key.replace("/", "-")] = ab
         aliases[key.replace("/", " ")] = ab
+    if "Moxifloxacin" in panel:
+        aliases["levo"] = "Moxifloxacin"
+        aliases["levofloxacin"] = "Moxifloxacin"
     for alias, canonical in custom.items():
         if canonical in panel:
             aliases[alias] = canonical

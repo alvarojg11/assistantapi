@@ -818,6 +818,15 @@
         "notes": "Typical IE organism; choose one microbiology option to avoid double counting."
       },
       {
+        "id": "endo_bcx_cons_prosthetic_multi",
+        "label": "Blood cultures: CoNS in >=2 sets with prosthetic valve/TAVI/device",
+        "category": "micro",
+        "lrPos": 8,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Major prosthetic-material microbiology context (for example CoNS or S. epidermidis with prosthetic valve, TAVI, or intracardiac device). Choose one microbiology option to avoid double counting."
+      },
+      {
         "id": "endo_bcx_efaecalis_multi",
         "label": "Blood cultures: Enterococcus faecalis in >=2 sets",
         "category": "micro",
@@ -825,6 +834,15 @@
         "lrNeg": 0.9,
         "group": "endo_micro",
         "notes": "Typical organism in appropriate context; pair with DENOVA only if clinically justified."
+      },
+      {
+        "id": "endo_bcx_enterococcus_prosthetic_multi",
+        "label": "Blood cultures: Enterococcus spp in >=2 sets with prosthetic valve/TAVI/device",
+        "category": "micro",
+        "lrPos": 7,
+        "lrNeg": 0.9,
+        "group": "endo_micro",
+        "notes": "Useful for prosthetic-valve or TAVI/device endocarditis when enterococcal bacteremia is present but species-specific Duke wording is not yet available. Choose one microbiology option to avoid double counting."
       },
       {
         "id": "endo_bcx_nbhs_multi",
@@ -3913,6 +3931,390 @@
           "short": "MRI and CT Systematic Review",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34302500/"
+        }
+      }
+    ]
+  },
+  {
+    "id": "diabetic_foot_infection",
+    "name": "Diabetic Foot Infection / Osteomyelitis",
+    "description": "Diabetic foot infection probability update using bedside infection signs, host and perfusion risk, inflammatory markers, probe-to-bone testing, plain radiography, MRI, and bone-sampling data. The module is meant to support both soft-tissue diabetic foot infection and contiguous diabetic foot osteomyelitis decision-making.",
+    "pretestPresets": [
+      {
+        "id": "dfi_outpatient_ulcer",
+        "label": "Outpatient diabetic foot ulcer evaluation",
+        "p": 0.08,
+        "notes": "Setting-only baseline for an ambulatory diabetic foot ulcer where infection is being considered but is not yet clearly established.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_ed_possible",
+        "label": "ED / inpatient diabetic foot wound evaluation",
+        "p": 0.22,
+        "notes": "Intermediate setting-only baseline for emergency or early inpatient diabetic foot wound evaluation before deeper testing is added.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_consult_high",
+        "label": "Limb-threatening / specialty consult diabetic foot infection workup",
+        "p": 0.4,
+        "notes": "Higher baseline for severe, limb-threatening, or specialty-consult diabetic foot infection and osteomyelitis workups.",
+        "source": {
+          "short": "Diabetic foot osteomyelitis prevalence review",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/38054111/"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "dfi_host_longstanding_or_recurrent_ulcer",
+        "label": "Long-standing, recurrent, or nonhealing ulcer",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.88,
+        "notes": "Chronic or recurrent ulcer history increases the chance of contiguous deep infection and osteomyelitis.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_host_pad_or_ischemia",
+        "label": "Peripheral arterial disease, ischemia, or poor perfusion",
+        "category": "host",
+        "lrPos": 1.7,
+        "lrNeg": 0.9,
+        "notes": "Perfusion problems do not diagnose infection by themselves, but they meaningfully enrich risk and raise management stakes.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_host_prior_dfi_or_osteomyelitis",
+        "label": "Prior diabetic foot infection, osteomyelitis, or same-foot amputation history",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.92,
+        "notes": "Previous deep infection or surgery in the same foot raises concern for recurrent infection and chronic bone involvement.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_local_inflammation_2plus",
+        "label": "At least 2 local signs of infection (erythema, warmth, swelling/induration, pain/tenderness, or purulence)",
+        "category": "exam",
+        "lrPos": 4.2,
+        "lrNeg": 0.28,
+        "notes": "Diagnosis of soft-tissue diabetic foot infection is primarily clinical; absence of local inflammatory signs makes active infection less likely.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_purulence",
+        "label": "Purulent drainage or pus",
+        "category": "exam",
+        "lrPos": 3,
+        "lrNeg": 0.72,
+        "notes": "Purulence is a strong bedside clue for soft-tissue infection but does not by itself establish osteomyelitis.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_erythema_ge2cm_or_deep",
+        "label": "Erythema greater than 2 cm or infection extending deeper than skin/subcutaneous tissue",
+        "category": "exam",
+        "lrPos": 2.6,
+        "lrNeg": 0.78,
+        "notes": "Supports at least a moderate diabetic foot infection severity category when present.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_systemic_toxicity",
+        "label": "Systemic inflammatory response, hemodynamic instability, or shock",
+        "category": "vital",
+        "lrPos": 4.5,
+        "lrNeg": 0.9,
+        "notes": "Defines severe infection context more than pure diagnostic discrimination; also lowers the treatment threshold.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_deep_abscess_or_gangrene",
+        "label": "Deep abscess, gangrene, necrosis, or other limb-threatening destructive finding",
+        "category": "exam",
+        "lrPos": 5,
+        "lrNeg": 0.82,
+        "notes": "Strong clue for severe infection and an urgent surgical-assessment problem rather than a routine superficial wound infection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_probe_to_bone_positive",
+        "label": "Probe-to-bone test positive",
+        "category": "exam",
+        "group": "dfi_probe_to_bone",
+        "lrPos": 5.12,
+        "lrNeg": 0.16,
+        "notes": "Pooled probe-to-bone performance in diabetic foot osteomyelitis; strong when interpreted in the right ulcer context.",
+        "source": {
+          "short": "Lam et al. Clin Infect Dis",
+          "year": 2016,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/27369321/"
+        }
+      },
+      {
+        "id": "dfi_probe_to_bone_na",
+        "label": "Probe-to-bone not done/unknown",
+        "category": "exam",
+        "group": "dfi_probe_to_bone",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_exposed_bone",
+        "label": "Exposed or visible bone at the ulcer base",
+        "category": "exam",
+        "notes": "Context-only management item. Exposed bone raises osteomyelitis concern and makes purely nonsurgical management less attractive.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_forefoot_only",
+        "label": "Forefoot-only infection or osteomyelitis",
+        "category": "context",
+        "notes": "Context-only item that helps decide whether a nonsurgical antibiotic-first osteomyelitis approach is reasonable.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_esr_high",
+        "label": "ESR markedly elevated (for example around 70 mm/h or higher)",
+        "category": "lab",
+        "lrPos": 4.05,
+        "lrNeg": 0.24,
+        "notes": "ESR is especially helpful when osteomyelitis is the main question; interpret it with bedside findings and imaging.",
+        "source": {
+          "short": "Meta-analysis of inflammatory markers in infected DFU",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/39667886/"
+        }
+      },
+      {
+        "id": "dfi_crp_high",
+        "label": "CRP elevated",
+        "category": "lab",
+        "lrPos": 3.5,
+        "lrNeg": 0.45,
+        "notes": "Supportive inflammatory marker; cutoff heterogeneity makes it best used as an adjunct rather than a stand-alone rule-in test.",
+        "source": {
+          "short": "Meta-analysis of inflammatory markers in infected DFU",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/39667886/"
+        }
+      },
+      {
+        "id": "dfi_wbc_high",
+        "label": "Peripheral WBC elevated",
+        "category": "lab",
+        "lrPos": 1.8,
+        "lrNeg": 0.76,
+        "notes": "Peripheral leukocytosis is supportive when present but absence does not exclude diabetic foot infection or osteomyelitis.",
+        "source": {
+          "short": "Meta-analysis of inflammatory markers in infected DFU",
+          "year": 2024,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/39667886/"
+        }
+      },
+      {
+        "id": "dfi_xray_osteomyelitis",
+        "label": "Plain radiograph suggests osteomyelitis (cortical destruction, periosteal reaction, or other compatible bony change)",
+        "category": "imaging",
+        "group": "dfi_xray",
+        "lrPos": 1.69,
+        "lrNeg": 0.68,
+        "notes": "Initial imaging test with modest standalone discrimination; best combined with probe-to-bone and inflammatory markers.",
+        "source": {
+          "short": "Dinh et al. Clin Infect Dis",
+          "year": 2008,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/18611152/"
+        }
+      },
+      {
+        "id": "dfi_xray_na",
+        "label": "Plain radiographs not done/unknown",
+        "category": "imaging",
+        "group": "dfi_xray",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_mri_osteomyelitis_or_abscess",
+        "label": "MRI compatible with osteomyelitis or deep soft-tissue abscess",
+        "category": "imaging",
+        "group": "dfi_mri",
+        "lrPos": 4.29,
+        "lrNeg": 0.13,
+        "notes": "MRI is the preferred next imaging test when uncertainty persists after the bedside exam, plain films, and inflammatory markers.",
+        "source": {
+          "short": "Dinh et al. Clin Infect Dis",
+          "year": 2008,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/18611152/"
+        }
+      },
+      {
+        "id": "dfi_mri_na",
+        "label": "MRI not done/unknown",
+        "category": "imaging",
+        "group": "dfi_mri",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_deep_tissue_culture_pos",
+        "label": "Deep tissue or operative culture positive from the foot infection site",
+        "category": "micro",
+        "group": "dfi_deep_tissue_culture",
+        "lrPos": 2.2,
+        "lrNeg": 0.82,
+        "notes": "Deep tissue culture helps steer therapy more than diagnosis; it is more informative than a superficial swab but still not equivalent to bone biopsy for osteomyelitis.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_deep_tissue_culture_na",
+        "label": "Deep tissue/operative culture not done/unknown",
+        "category": "micro",
+        "group": "dfi_deep_tissue_culture",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_bone_biopsy_culture_pos",
+        "label": "Bone biopsy culture positive",
+        "category": "micro",
+        "group": "dfi_bone_reference",
+        "lrPos": 9,
+        "lrNeg": 0.45,
+        "notes": "Bone sampling is the preferred microbiologic specimen when osteomyelitis is the question, although prior antibiotics and sampling issues can blunt sensitivity.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_bone_histology_pos",
+        "label": "Bone histology/pathology consistent with osteomyelitis",
+        "category": "micro",
+        "group": "dfi_bone_reference",
+        "lrPos": 15,
+        "lrNeg": 0.3,
+        "notes": "Histology is a near-reference standard for diabetic foot osteomyelitis when available.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_bone_biopsy_na",
+        "label": "Bone biopsy/histology not done/unknown",
+        "category": "micro",
+        "group": "dfi_bone_reference",
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_surgery_debridement_done",
+        "label": "Surgical debridement or source-control procedure already performed",
+        "category": "management",
+        "notes": "Context-only management item; useful for duration and source-control recommendations rather than probability updating.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_minor_amputation_done",
+        "label": "Minor amputation or bone resection already performed",
+        "category": "management",
+        "notes": "Context-only management item; helps choose post-procedure osteomyelitis duration guidance.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
+        }
+      },
+      {
+        "id": "dfi_positive_bone_margin",
+        "label": "Positive residual bone margin culture or histology after resection/amputation",
+        "category": "management",
+        "notes": "Context-only management item; shortens or extends osteomyelitis duration planning after bone resection.",
+        "source": {
+          "short": "IWGDF/IDSA DFI Guideline",
+          "year": 2023,
+          "url": "https://doi.org/10.1093/cid/ciad527"
         }
       }
     ]

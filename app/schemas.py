@@ -373,6 +373,98 @@ class ImmunoAnalyzeResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+AntibioticAllergyReactionType = Literal[
+    "unknown",
+    "intolerance",
+    "isolated_gi",
+    "headache",
+    "family_history_only",
+    "benign_delayed_rash",
+    "urticaria",
+    "angioedema",
+    "anaphylaxis",
+    "scar",
+    "organ_injury",
+    "serum_sickness_like",
+    "hemolytic_anemia",
+]
+AntibioticAllergyTiming = Literal["unknown", "immediate", "delayed"]
+AntibioticAllergyRecommendationLevel = Literal["preferred", "caution", "avoid"]
+
+
+class AntibioticAllergyEntry(BaseModel):
+    reported_agent: str = Field(alias="reportedAgent", min_length=1)
+    reaction_type: AntibioticAllergyReactionType = Field(default="unknown", alias="reactionType")
+    timing: AntibioticAllergyTiming = "unknown"
+    verified: bool = False
+    notes: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibioticAllergyRecommendation(BaseModel):
+    agent: str
+    normalized_agent: str = Field(alias="normalizedAgent")
+    recommendation: AntibioticAllergyRecommendationLevel
+    summary: str
+    rationale: str
+    triggered_by: List[str] = Field(default_factory=list, alias="triggeredBy")
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibioticAllergyFollowUpQuestion(BaseModel):
+    id: str
+    prompt: str
+    reason: str
+
+
+class AntibioticAllergyAnalyzeRequest(BaseModel):
+    candidate_agents: List[str] = Field(default_factory=list, alias="candidateAgents")
+    tolerated_agents: List[str] = Field(default_factory=list, alias="toleratedAgents")
+    allergy_entries: List[AntibioticAllergyEntry] = Field(default_factory=list, alias="allergyEntries")
+    infection_context: Optional[str] = Field(default=None, alias="infectionContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibioticAllergyAnalyzeResponse(BaseModel):
+    summary: str
+    overall_risk: str = Field(alias="overallRisk")
+    recommendations: List[AntibioticAllergyRecommendation] = Field(default_factory=list)
+    general_advice: List[str] = Field(default_factory=list, alias="generalAdvice")
+    delabeling_opportunities: List[str] = Field(default_factory=list, alias="delabelingOpportunities")
+    follow_up_questions: List[AntibioticAllergyFollowUpQuestion] = Field(default_factory=list, alias="followUpQuestions")
+    warnings: List[str] = Field(default_factory=list)
+    references: List[ReferenceEntry] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibioticAllergyTextAnalyzeRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
+class AntibioticAllergyTextParsedRequest(BaseModel):
+    candidate_agents: List[str] = Field(default_factory=list, alias="candidateAgents")
+    tolerated_agents: List[str] = Field(default_factory=list, alias="toleratedAgents")
+    allergy_entries: List[AntibioticAllergyEntry] = Field(default_factory=list, alias="allergyEntries")
+    infection_context: Optional[str] = Field(default=None, alias="infectionContext")
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibioticAllergyTextAnalyzeResponse(BaseModel):
+    parser: str = "rule-based-v1"
+    text: str
+    parsed_request: Optional[AntibioticAllergyTextParsedRequest] = Field(default=None, alias="parsedRequest")
+    warnings: List[str] = Field(default_factory=list)
+    requires_confirmation: bool = Field(default=False, alias="requiresConfirmation")
+    analysis: Optional[AntibioticAllergyAnalyzeResponse] = None
+
+    model_config = {"populate_by_name": True}
+
+
 class ParserTrainingExample(BaseModel):
     text: str = Field(min_length=1)
     module_id: Optional[str] = Field(default=None, alias="moduleId")
@@ -396,6 +488,7 @@ AssistantStage = Literal[
     "mechid_describe",
     "mechid_confirm",
     "doseid_describe",
+    "allergyid_describe",
     "immunoid_select_agents",
     "immunoid_collect_context",
     "done",
@@ -414,7 +507,7 @@ class AssistantOption(BaseModel):
 
 class AssistantState(BaseModel):
     stage: AssistantStage = "select_module"
-    workflow: Literal["probid", "mechid", "immunoid", "doseid"] = "probid"
+    workflow: Literal["probid", "mechid", "immunoid", "doseid", "allergyid"] = "probid"
     module_id: Optional[str] = Field(default=None, alias="moduleId")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
     pending_intake_text: Optional[str] = Field(default=None, alias="pendingIntakeText")
@@ -430,6 +523,7 @@ class AssistantState(BaseModel):
     case_text: Optional[str] = Field(default=None, alias="caseText")
     mechid_text: Optional[str] = Field(default=None, alias="mechidText")
     doseid_text: Optional[str] = Field(default=None, alias="doseidText")
+    allergyid_text: Optional[str] = Field(default=None, alias="allergyidText")
     immunoid_selected_regimen_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedRegimenIds")
     immunoid_selected_agent_ids: List[str] = Field(default_factory=list, alias="immunoidSelectedAgentIds")
     immunoid_planned_steroid_duration_days: Optional[int] = Field(default=None, alias="immunoidPlannedSteroidDurationDays")
@@ -501,6 +595,7 @@ class AssistantTurnResponse(BaseModel):
     mechid_analysis: Optional["MechIDTextAnalyzeResponse"] = Field(default=None, alias="mechidAnalysis")
     immunoid_analysis: Optional[ImmunoAnalyzeResponse] = Field(default=None, alias="immunoidAnalysis")
     doseid_analysis: Optional[DoseIDAssistantAnalysis] = Field(default=None, alias="doseidAnalysis")
+    allergyid_analysis: Optional[AntibioticAllergyAnalyzeResponse] = Field(default=None, alias="allergyidAnalysis")
     tips: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}

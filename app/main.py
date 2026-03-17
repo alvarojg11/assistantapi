@@ -29,6 +29,10 @@ from .schemas import (
     AssistantOption,
     DoseIDAssistantAnalysis,
     DoseIDAssistantPatientContext,
+    AntibioticAllergyAnalyzeRequest,
+    AntibioticAllergyAnalyzeResponse,
+    AntibioticAllergyTextAnalyzeRequest,
+    AntibioticAllergyTextAnalyzeResponse,
     AssistantState,
     AssistantTurnRequest,
     AssistantTurnResponse,
@@ -79,7 +83,9 @@ from .schemas import (
     TextAnalyzeResponse,
 )
 from .services.module_store import InMemoryModuleStore
+from .services.antibiotic_allergy_service import AGENT_ALIASES, analyze_antibiotic_allergy, parse_antibiotic_allergy_text
 from .services.consult_narrator import (
+    narrate_allergyid_assistant_message,
     narrate_doseid_assistant_message,
     narrate_immunoid_assistant_message,
     narrate_mechid_assistant_message,
@@ -150,6 +156,7 @@ ASSISTANT_MODULE_LABELS = {
     "spinal_epidural_abscess": "Spinal epidural abscess",
     "brain_abscess": "Brain abscess",
     "necrotizing_soft_tissue_infection": "Necrotizing soft tissue infection",
+    "diabetic_foot_infection": "Diabetic foot infection / osteomyelitis",
     "pji": "Prosthetic joint infection (PJI)",
 }
 
@@ -167,6 +174,11 @@ IMMUNOID_ASSISTANT_ID = "immunoid"
 IMMUNOID_ASSISTANT_LABEL = "Immunosuppression screening + prophylaxis"
 IMMUNOID_ASSISTANT_DESCRIPTION = (
     "Review chemotherapy, steroids, biologics, or transplant immunosuppression for infection screening, prophylaxis, and geography-sensitive follow-up."
+)
+ALLERGYID_ASSISTANT_ID = "allergyid"
+ALLERGYID_ASSISTANT_LABEL = "Antibiotic allergy compatibility"
+ALLERGYID_ASSISTANT_DESCRIPTION = (
+    "Interpret antibiotic allergy labels, reaction phenotype, and cross-reactivity so the safest preferred therapy stays in play."
 )
 DOSEID_INTENT_TOKENS = (
     "dose",
@@ -218,6 +230,22 @@ IMMUNOID_COMMON_REGIMEN_IDS = (
     "flag_ida",
     "vrd",
     "dara_vrd",
+)
+ALLERGYID_INTENT_TOKENS = (
+    "allergy",
+    "allergic",
+    "anaphylaxis",
+    "hives",
+    "urticaria",
+    "angioedema",
+    "sjs",
+    "ten",
+    "dress",
+    "cross reactivity",
+    "cross-reactivity",
+    "penicillin allergy",
+    "cephalosporin allergy",
+    "beta lactam allergy",
 )
 MECHID_INTENT_TOKENS = (
     "mechanism",
@@ -430,6 +458,28 @@ MODULE_EVIDENCE_REFERENCES: Dict[str, List[Dict[str, str]]] = {
             "url": "https://pubmed.ncbi.nlm.nih.gov/29672405/",
         },
     ],
+    "diabetic_foot_infection": [
+        {
+            "context": "Evidence base: Diabetic foot infection and osteomyelitis",
+            "citation": "IWGDF/IDSA diabetic foot infection guideline (2023)",
+            "url": "https://doi.org/10.1093/cid/ciad527",
+        },
+        {
+            "context": "Evidence base: Diabetic foot osteomyelitis imaging",
+            "citation": "Dinh et al. Diagnostic accuracy of exam and imaging tests for diabetic foot osteomyelitis (2008)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/18611152/",
+        },
+        {
+            "context": "Evidence base: Probe-to-bone test",
+            "citation": "Lam et al. Diagnostic accuracy of probe to bone to detect osteomyelitis in the diabetic foot (2016)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/27369321/",
+        },
+        {
+            "context": "Evidence base: Inflammatory markers in infected diabetic foot ulcers",
+            "citation": "Suwanwongse et al. Inflammatory blood laboratory markers meta-analysis (2024)",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/39667886/",
+        },
+    ],
     "tb_uveitis": [
         {
             "context": "Evidence base: Tuberculous uveitis consensus calculator",
@@ -451,8 +501,8 @@ MODULE_EVIDENCE_REFERENCES: Dict[str, List[Dict[str, str]]] = {
 
 ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
     "staph": {
-        "label": "Staphylococcus aureus",
-        "description": "Use the S. aureus pathway and show VIRSTA-overlap baseline modifiers.",
+        "label": "Staphylococci",
+        "description": "Use the staphylococcal pathway and show VIRSTA-overlap baseline modifiers; in prosthetic valve/TAVI/device cases this also supports CoNS prosthetic-material bacteremia.",
         "score_id": "virsta",
     },
     "strep": {
@@ -462,7 +512,7 @@ ENDO_ASSISTANT_BLOOD_CULTURE_CHOICES = {
     },
     "enterococcus": {
         "label": "Enterococcus",
-        "description": "Use the enterococcal pathway and show DENOVA-overlap baseline modifiers.",
+        "description": "Use the enterococcal pathway and show DENOVA-overlap baseline modifiers; in prosthetic valve/TAVI/device cases this also supports prosthetic-material enterococcal bacteremia.",
         "score_id": "denova",
     },
     "other_unknown_pending": {
@@ -718,6 +768,28 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
         "uti_cx_pos": (
             "Urine culture above 100000 CFU",
             "Urine culture below 100000 CFU",
+        ),
+    },
+    "endo": {
+        "endo_bcx_saureus_multi": (
+            "Staphylococcus aureus in at least 2 blood culture sets",
+            "No Staphylococcus aureus in at least 2 blood culture sets",
+        ),
+        "endo_bcx_cons_prosthetic_multi": (
+            "Coagulase-negative staphylococci in at least 2 blood culture sets with prosthetic valve, TAVI, or intracardiac device context",
+            "No coagulase-negative staphylococcal prosthetic/device blood culture pattern",
+        ),
+        "endo_bcx_major_persistent": (
+            "Persistent positive blood cultures",
+            "Blood cultures cleared without persistent positivity",
+        ),
+        "endo_bcx_major_typical": (
+            "Typical endocarditis blood cultures in at least 2 sets",
+            "No typical endocarditis blood cultures in at least 2 sets",
+        ),
+        "endo_bcx_enterococcus_prosthetic_multi": (
+            "Enterococcal bacteremia in at least 2 blood culture sets with prosthetic valve, TAVI, or intracardiac device context",
+            "No enterococcal prosthetic/device blood culture pattern",
         ),
     },
     "active_tb": {
@@ -1472,6 +1544,104 @@ ASSISTANT_CASE_TEXT_OVERRIDES: Dict[str, Dict[str, tuple[str, str]]] = {
             "MRI completed",
         ),
     },
+    "diabetic_foot_infection": {
+        "dfi_local_inflammation_2plus": (
+            "At least 2 local signs of diabetic foot infection",
+            "No convincing local diabetic foot infection signs",
+        ),
+        "dfi_purulence": (
+            "Purulent drainage or pus from the ulcer",
+            "No purulence",
+        ),
+        "dfi_erythema_ge2cm_or_deep": (
+            "Erythema greater than 2 cm or infection deeper than skin/subcutaneous tissue",
+            "No erythema greater than 2 cm and no obvious deeper infection",
+        ),
+        "dfi_systemic_toxicity": (
+            "Systemic toxicity, hemodynamic instability, or shock",
+            "Hemodynamically stable without systemic toxicity",
+        ),
+        "dfi_deep_abscess_or_gangrene": (
+            "Deep abscess, gangrene, or other limb-threatening destructive feature",
+            "No deep abscess, gangrene, or destructive limb-threatening feature",
+        ),
+        "dfi_probe_to_bone_positive": (
+            "Probe-to-bone positive",
+            "Probe-to-bone negative",
+        ),
+        "dfi_probe_to_bone_na": (
+            "Probe-to-bone not done",
+            "Probe-to-bone completed",
+        ),
+        "dfi_exposed_bone": (
+            "Exposed or visible bone",
+            "No exposed or visible bone",
+        ),
+        "dfi_forefoot_only": (
+            "Forefoot-only infection or osteomyelitis",
+            "Not limited to the forefoot",
+        ),
+        "dfi_esr_high": (
+            "ESR markedly elevated",
+            "ESR not markedly elevated",
+        ),
+        "dfi_crp_high": (
+            "CRP elevated",
+            "CRP not elevated",
+        ),
+        "dfi_wbc_high": (
+            "Peripheral WBC elevated",
+            "Peripheral WBC not elevated",
+        ),
+        "dfi_xray_osteomyelitis": (
+            "Plain radiograph suggests osteomyelitis",
+            "Plain radiograph does not suggest osteomyelitis",
+        ),
+        "dfi_xray_na": (
+            "Plain radiographs not done",
+            "Plain radiographs completed",
+        ),
+        "dfi_mri_osteomyelitis_or_abscess": (
+            "MRI compatible with osteomyelitis or deep abscess",
+            "MRI not compatible with osteomyelitis or deep abscess",
+        ),
+        "dfi_mri_na": (
+            "MRI not done",
+            "MRI completed",
+        ),
+        "dfi_deep_tissue_culture_pos": (
+            "Deep tissue or operative culture positive",
+            "Deep tissue or operative culture negative",
+        ),
+        "dfi_deep_tissue_culture_na": (
+            "Deep tissue or operative culture not done",
+            "Deep tissue or operative culture completed",
+        ),
+        "dfi_bone_biopsy_culture_pos": (
+            "Bone biopsy culture positive",
+            "Bone biopsy culture negative",
+        ),
+        "dfi_bone_histology_pos": (
+            "Bone histology positive for osteomyelitis",
+            "Bone histology negative for osteomyelitis",
+        ),
+        "dfi_bone_biopsy_na": (
+            "Bone biopsy or histology not done",
+            "Bone biopsy or histology completed",
+        ),
+        "dfi_surgery_debridement_done": (
+            "Surgical debridement or source control already performed",
+            "No surgical debridement or source control yet",
+        ),
+        "dfi_minor_amputation_done": (
+            "Minor amputation or bone resection already performed",
+            "No minor amputation or bone resection",
+        ),
+        "dfi_positive_bone_margin": (
+            "Positive residual bone margin after resection",
+            "Negative residual bone margin after resection",
+        ),
+    },
 }
 
 
@@ -2064,6 +2234,241 @@ def list_doseid_medications() -> DoseIDCatalogResponse:
     return _doseid_catalog_response()
 
 
+@app.post("/v1/allergyid/analyze", response_model=AntibioticAllergyAnalyzeResponse)
+def analyze_antibiotic_allergy_endpoint(req: AntibioticAllergyAnalyzeRequest) -> AntibioticAllergyAnalyzeResponse:
+    return analyze_antibiotic_allergy(req)
+
+
+@app.post("/v1/allergyid/analyze-text", response_model=AntibioticAllergyTextAnalyzeResponse)
+def analyze_antibiotic_allergy_text_endpoint(
+    req: AntibioticAllergyTextAnalyzeRequest,
+) -> AntibioticAllergyTextAnalyzeResponse:
+    return parse_antibiotic_allergy_text(req)
+
+
+def _assistant_allergyid_message(result: AntibioticAllergyAnalyzeResponse) -> str:
+    parts: List[str] = [result.summary]
+    if result.general_advice:
+        parts.append(result.general_advice[0])
+    if result.follow_up_questions:
+        parts.append(result.follow_up_questions[0].prompt)
+    elif result.delabeling_opportunities:
+        parts.append(result.delabeling_opportunities[0])
+    if result.recommendations:
+        avoids = [item.agent for item in result.recommendations if item.recommendation == "avoid"]
+        cautions = [item.agent for item in result.recommendations if item.recommendation == "caution"]
+        preferred = [item.agent for item in result.recommendations if item.recommendation == "preferred"]
+        if avoids:
+            parts.append(f"I would avoid {', '.join(avoids[:3])} based on the current allergy history.")
+        elif cautions:
+            parts.append(f"I would treat {', '.join(cautions[:3])} as caution choices rather than routine substitutions.")
+        elif preferred:
+            parts.append(f"The best-supported options from the current allergy profile are {', '.join(preferred[:3])}.")
+        top_recommendation = next((item for item in result.recommendations if item.rationale), None)
+        if top_recommendation is not None:
+            parts.append(top_recommendation.rationale)
+    return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def _assistant_allergyid_entry_phrase(entry) -> str:
+    reaction_map = {
+        "anaphylaxis": "anaphylaxis",
+        "angioedema": "angioedema",
+        "urticaria": "urticaria",
+        "benign_delayed_rash": "a delayed rash",
+        "isolated_gi": "GI upset",
+        "headache": "headache",
+        "family_history_only": "family history only",
+        "scar": "SJS/TEN or another severe cutaneous reaction",
+        "organ_injury": "organ injury",
+        "serum_sickness_like": "a serum-sickness-like reaction",
+        "hemolytic_anemia": "immune hemolysis",
+        "unknown": "an unclear reaction",
+        "intolerance": "intolerance",
+    }
+    phrase = reaction_map.get(getattr(entry, "reaction_type", "unknown"), "an unclear reaction")
+    return f"{entry.reported_agent} caused {phrase}"
+
+
+def _assistant_reply_introduces_candidate_agents(reply: str) -> bool:
+    normalized = _normalize_choice(reply)
+    candidate_markers = (
+        "can i use",
+        "could i use",
+        "can we use",
+        "what can i use",
+        "what about",
+        "would you use",
+        "is it safe to use",
+        "best antibiotic",
+        "candidate antibiotic",
+        "candidate antibiotics",
+        "which antibiotic",
+        "which antibiotics",
+        "should i use",
+        "considering",
+        "instead use",
+    )
+    return any(marker in normalized for marker in candidate_markers)
+
+
+def _assistant_extract_allergy_culprit_override(reply: str) -> str | None:
+    normalized = _normalize_choice(reply)
+    alias_pattern = "|".join(sorted((re.escape(alias) for alias in AGENT_ALIASES.keys()), key=len, reverse=True))
+    patterns = (
+        rf"(?:it was|it was actually|actually it was|the culprit was|actually the culprit was)\s+(?P<drug>{alias_pattern})(?:\s+not\s+(?:the\s+)?(?P<old>{alias_pattern}))?",
+        rf"not\s+(?P<old>{alias_pattern})\s*,?\s*(?:it was|it was actually|actually it was|the culprit was)\s+(?P<drug>{alias_pattern})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, normalized)
+        if match:
+            return match.group("drug").strip()
+    return None
+
+
+def _assistant_reply_updates_reaction_details(reply: str) -> bool:
+    normalized = _normalize_choice(reply)
+    markers = (
+        "anaphylaxis",
+        "hives",
+        "urticaria",
+        "angioedema",
+        "rash",
+        "sjs",
+        "ten",
+        "dress",
+        "serum sickness",
+        "hemolytic",
+        "hepatitis",
+        "liver injury",
+        "kidney injury",
+        "nephritis",
+        "nausea",
+        "vomiting",
+        "diarrhea",
+        "gi",
+        "headache",
+        "family history",
+        "reaction was",
+        "only",
+    )
+    return any(marker in normalized for marker in markers)
+
+
+def _assistant_clean_allergy_reaction_reply(reply: str) -> str:
+    cleaned = reply.strip()
+    substitutions = (
+        r"^(?:actually|well)\s+",
+        r"^(?:the\s+)?reaction\s+was\s+",
+        r"^(?:it|this)\s+was\s+",
+        r"^(?:only|just)\s+",
+    )
+    for pattern in substitutions:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.strip(" .")
+    return cleaned or reply.strip()
+
+
+def _assistant_merge_allergyid_followup_text(existing_text: str | None, reply: str) -> str:
+    previous = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=existing_text or ""))
+    update = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=reply))
+    previous_parsed = previous.parsed_request
+    update_parsed = update.parsed_request
+
+    candidate_agents: List[str] = []
+    tolerated_agents: List[str] = list(update_parsed.tolerated_agents if update_parsed else [])
+    if update_parsed and update_parsed.candidate_agents and _assistant_reply_introduces_candidate_agents(reply):
+        candidate_agents = list(update_parsed.candidate_agents)
+    if not candidate_agents and previous_parsed:
+        candidate_agents = list(previous_parsed.candidate_agents)
+    if not tolerated_agents and previous_parsed:
+        tolerated_agents = list(previous_parsed.tolerated_agents)
+
+    allergy_entries = list(update_parsed.allergy_entries if update_parsed else [])
+    if not allergy_entries and previous_parsed and previous_parsed.allergy_entries:
+        culprit_override = _assistant_extract_allergy_culprit_override(reply)
+        culprit_name = culprit_override or previous_parsed.allergy_entries[0].reported_agent
+        if _assistant_reply_updates_reaction_details(reply):
+            cleaned_reply = _assistant_clean_allergy_reaction_reply(reply)
+            synthetic_text = f"{culprit_name} caused {cleaned_reply}"
+            synthetic = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=synthetic_text))
+            allergy_entries = list(synthetic.parsed_request.allergy_entries if synthetic.parsed_request else [])
+        elif culprit_override:
+            previous_entry = previous_parsed.allergy_entries[0]
+            allergy_entries = [
+                type(previous_entry)(
+                    reportedAgent=culprit_name,
+                    reactionType=previous_entry.reaction_type,
+                    timing=previous_entry.timing,
+                )
+            ]
+        if not allergy_entries:
+            allergy_entries = list(previous_parsed.allergy_entries)
+
+    pieces: List[str] = []
+    for entry in allergy_entries:
+        pieces.append(_assistant_allergyid_entry_phrase(entry) + ".")
+    for agent in tolerated_agents:
+        pieces.append(f"Previously tolerated {agent}.")
+    if candidate_agents:
+        pieces.append("Candidate antibiotics: " + ", ".join(candidate_agents) + ".")
+    if not pieces:
+        return reply
+    return " ".join(pieces)
+
+
+def _assistant_allergyid_response(
+    state: AssistantState,
+    *,
+    message_text: str,
+    prefix: str = "",
+) -> AssistantTurnResponse:
+    state.workflow = "allergyid"
+    state.stage = "done"
+    state.module_id = None
+    state.preset_id = None
+    state.case_section = None
+    state.case_text = None
+    state.mechid_text = None
+    state.doseid_text = None
+    state.allergyid_text = message_text
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+    _assistant_reset_immunoid_state(state)
+    parsed = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=message_text))
+    result = parsed.analysis or analyze_antibiotic_allergy(AntibioticAllergyAnalyzeRequest(infectionContext=message_text))
+    fallback_message = ((prefix or "") + _assistant_allergyid_message(result)).strip()
+    message, narration_refined = narrate_allergyid_assistant_message(
+        allergy_result=result,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=message,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        allergyidAnalysis=result,
+        options=[
+            AssistantOption(value="add_more_details", label="Update allergy details"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "A useful reply would be: 'the reaction was hives within 1 hour' or 'the culprit was ceftriaxone, not amoxicillin'.",
+            "If MechID already gave you candidate antibiotics, paste them here and I can sort out which ones stay preferred despite the allergy label.",
+        ],
+    )
+
+
+def _assistant_start_allergyid_from_text(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    if not message_text or not _assistant_is_allergyid_intent(message_text):
+        return None
+    return _assistant_allergyid_response(state, message_text=message_text)
+
+
 @app.post("/v1/doseid/parse-text", response_model=DoseIDTextAnalyzeResponse)
 def parse_doseid_text_endpoint(req: DoseIDTextAnalyzeRequest) -> DoseIDTextAnalyzeResponse:
     return _build_doseid_text_response(
@@ -2461,6 +2866,91 @@ def _build_risk_flags(*, posttest_probability: float, thresholds: DecisionThresh
     return flags
 
 
+def _endo_recommendation_floor(
+    *,
+    recommendation: str,
+    prep_findings: dict[str, str],
+    harm_findings: dict[str, str],
+) -> tuple[str, str | None]:
+    if recommendation != "observe":
+        return recommendation, None
+
+    prosthetic_or_device = any(
+        harm_findings.get(item_id) == "present"
+        for item_id in {"endo_prosthetic_valve", "endo_cied"}
+    )
+    if not prosthetic_or_device:
+        return recommendation, None
+
+    major_microbiology_present = any(
+        prep_findings.get(item_id) == "present"
+        for item_id in {
+            "endo_bcx_major_typical",
+            "endo_bcx_major_persistent",
+            "endo_bcx_saureus_multi",
+            "endo_bcx_cons_prosthetic_multi",
+            "endo_bcx_efaecalis_multi",
+            "endo_bcx_enterococcus_prosthetic_multi",
+            "endo_bcx_nbhs_multi",
+            "endo_coxiella_major",
+        }
+    )
+    if not major_microbiology_present:
+        return recommendation, None
+
+    return (
+        "test",
+        "Because prosthetic valve or intracardiac device risk is present alongside major endocarditis microbiology, I raised the action floor to diagnostic testing even though the raw probability remained just below the default testing threshold.",
+    )
+
+
+def _dfi_recommendation_floor(
+    *,
+    recommendation: str,
+    prep_findings: dict[str, str],
+) -> tuple[str, str | None]:
+    if recommendation == "treat":
+        return recommendation, None
+
+    has_local_infection = any(
+        prep_findings.get(item_id) == "present"
+        for item_id in {
+            "dfi_local_inflammation_2plus",
+            "dfi_purulence",
+            "dfi_erythema_ge2cm_or_deep",
+        }
+    )
+    has_severe_feature = any(
+        prep_findings.get(item_id) == "present"
+        for item_id in {
+            "dfi_systemic_toxicity",
+            "dfi_deep_abscess_or_gangrene",
+        }
+    )
+    if has_local_infection and has_severe_feature:
+        return (
+            "treat",
+            "Because bedside findings already suggest a severe diabetic foot infection with systemic toxicity or destructive deep-tissue features, I raised the action floor to treatment rather than waiting for more testing to justify starting therapy.",
+        )
+
+    if recommendation == "observe" and any(
+        prep_findings.get(item_id) == "present"
+        for item_id in {
+            "dfi_probe_to_bone_positive",
+            "dfi_xray_osteomyelitis",
+            "dfi_mri_osteomyelitis_or_abscess",
+            "dfi_bone_biopsy_culture_pos",
+            "dfi_bone_histology_pos",
+        }
+    ):
+        return (
+            "test",
+            "Because there is already meaningful diabetic foot osteomyelitis signal, I raised the action floor to further testing or directed management even though the raw probability remained below the generic testing threshold.",
+        )
+
+    return recommendation, None
+
+
 def _build_recommendation_summary(
     *,
     module: SyndromeModule,
@@ -2667,6 +3157,110 @@ def _build_recommendation_summary(
 
         return None, []
 
+    if module.id == "diabetic_foot_infection":
+        next_steps: List[str] = []
+        severe_features = any(
+            prep_findings.get(item_id) == "present"
+            for item_id in {"dfi_systemic_toxicity", "dfi_deep_abscess_or_gangrene"}
+        )
+        local_infection = any(
+            prep_findings.get(item_id) == "present"
+            for item_id in {"dfi_local_inflammation_2plus", "dfi_purulence", "dfi_erythema_ge2cm_or_deep"}
+        )
+        pad_or_ischemia = prep_findings.get("dfi_host_pad_or_ischemia") == "present"
+        osteomyelitis_signal = any(
+            prep_findings.get(item_id) == "present"
+            for item_id in {
+                "dfi_probe_to_bone_positive",
+                "dfi_exposed_bone",
+                "dfi_xray_osteomyelitis",
+                "dfi_mri_osteomyelitis_or_abscess",
+                "dfi_bone_biopsy_culture_pos",
+                "dfi_bone_histology_pos",
+            }
+        )
+        xray_done = prep_findings.get("dfi_xray_na", "unknown") != "present"
+        mri_done = prep_findings.get("dfi_mri_na", "unknown") != "present"
+        ptb_done = prep_findings.get("dfi_probe_to_bone_na", "unknown") != "present"
+        bone_sampling_done = prep_findings.get("dfi_bone_biopsy_na", "unknown") != "present"
+
+        if recommendation == "observe":
+            summary = (
+                "The current data do not support an infected diabetic foot ulcer strongly enough to justify antibiotics right now."
+            )
+            if not local_infection:
+                summary += (
+                    " For a clinically uninfected ulcer, I would focus on wound care, off-loading, perfusion assessment, and local follow-up rather than empiric antibiotics."
+                )
+            if osteomyelitis_signal and not severe_features:
+                summary += (
+                    " Because there is still some osteomyelitis signal, I would at least complete the initial bone-oriented workup rather than dismissing the concern."
+                )
+            if not ptb_done:
+                next_steps.append("Perform a bedside probe-to-bone test if it has not been done yet.")
+            if not xray_done:
+                next_steps.append("Obtain plain foot radiographs as part of the initial osteomyelitis screen.")
+            if prep_findings.get("dfi_esr_high", "unknown") == "unknown" and prep_findings.get("dfi_crp_high", "unknown") == "unknown":
+                next_steps.append("Send ESR and/or CRP if bone infection is still on the differential.")
+            return summary, next_steps
+
+        if recommendation == "test":
+            summary = (
+                "This diabetic foot case still sits in a zone where better diagnostic definition should guide whether prolonged antibiotic therapy or surgery is needed."
+            )
+            if severe_features:
+                summary += (
+                    " Even while testing continues, I would manage this with the urgency of a potentially limb-threatening infection."
+                )
+            else:
+                summary += (
+                    " In a hemodynamically stable patient, this is the range where I would usually gather the next highest-yield data before committing to a long treatment course."
+                )
+            if not ptb_done:
+                next_steps.append("Perform a bedside probe-to-bone test if it has not been done yet.")
+            if not xray_done:
+                next_steps.append("Obtain plain foot radiographs as part of the initial workup.")
+            if prep_findings.get("dfi_esr_high", "unknown") == "unknown":
+                next_steps.append("Check ESR because a marked elevation can materially raise concern for osteomyelitis.")
+            if prep_findings.get("dfi_crp_high", "unknown") == "unknown":
+                next_steps.append("Check CRP as an adjunct inflammatory marker.")
+            if osteomyelitis_signal and not mri_done and prep_findings.get("dfi_mri_osteomyelitis_or_abscess", "unknown") == "unknown":
+                next_steps.append("If uncertainty persists after bedside exam, plain films, and inflammatory markers, obtain MRI.")
+            if osteomyelitis_signal and not bone_sampling_done:
+                next_steps.append("If osteomyelitis remains likely and the patient is stable enough, obtain bone culture or histology when feasible rather than relying on superficial swabs.")
+            if severe_features or pad_or_ischemia:
+                next_steps.append("Get urgent surgical and vascular input if there is gangrene, deep abscess, or ischemia.")
+            return summary, next_steps
+
+        if recommendation == "treat":
+            if severe_features and local_infection:
+                summary = (
+                    "This looks severe enough that I would start antibiotics now and involve surgery urgently rather than waiting for more tests to justify treatment."
+                )
+            elif osteomyelitis_signal:
+                summary = (
+                    "The probability of diabetic foot osteomyelitis is high enough that treatment is justified, but I would still try to anchor therapy to deep tissue or bone sampling when feasible, especially if a long course is anticipated."
+                )
+            else:
+                summary = (
+                    "Diabetic foot infection is likely enough that syndrome-directed treatment is justified now."
+                )
+            if local_infection and not severe_features:
+                summary += (
+                    " If this is a milder infection without ischemia or polymicrobial concern, empiric therapy can often focus on gram-positive pathogens first; broader coverage makes more sense for deeper, ischemic, necrotic, or severe presentations."
+                )
+            if severe_features:
+                next_steps.append("Start antibiotics now and obtain urgent surgical assessment for drainage, debridement, or amputation planning as needed.")
+            if pad_or_ischemia:
+                next_steps.append("Reassess perfusion urgently and involve vascular surgery because ischemia changes both healing and source-control decisions.")
+            if osteomyelitis_signal and not bone_sampling_done:
+                next_steps.append("If feasible, obtain bone culture or histology before or early in therapy, especially if prolonged osteomyelitis treatment is expected.")
+            if prep_findings.get("dfi_forefoot_only") == "present" and not pad_or_ischemia and prep_findings.get("dfi_exposed_bone") != "present" and not severe_features:
+                next_steps.append("A nonsurgical antibiotic-first strategy can be reasonable for selected forefoot osteomyelitis cases without PAD, exposed bone, or an immediate drainage need.")
+            return summary, next_steps
+
+        return None, []
+
     if module.id != "endo":
         return None, []
 
@@ -2676,22 +3270,33 @@ def _build_recommendation_summary(
     next_steps: List[str] = []
 
     if recommendation == "observe":
-        summary = "Endocarditis probability is below the observation threshold, so treating this as complicated bacteremia is reasonable."
+        summary = (
+            "Endocarditis probability is below the observation threshold, so treating this as complicated bacteremia is reasonable."
+        )
         if not advanced_imaging_done:
             summary += " TEE is probably not necessary unless new features increase concern for endocarditis."
         return summary, next_steps
 
     if recommendation == "test":
-        summary = "Endocarditis probability remains in an intermediate range, so further diagnostic testing is appropriate before escalating to full endocarditis-directed treatment."
+        summary = (
+            "Endocarditis probability remains in an intermediate range, so further diagnostic testing is appropriate before escalating to full endocarditis-directed treatment. "
+            "If the main question is whether more imaging is needed, this is a range where TEE is appropriate."
+        )
         if not tee_done:
             next_steps.append("Consider TEE if it has not been performed yet.")
         if not pet_done:
-            next_steps.append("Consider FDG PET/CT if prosthetic valve/device infection remains a concern and it has not been performed yet.")
+            next_steps.append(
+                "Consider FDG PET/CT if prosthetic valve/device infection remains a concern and it has not been performed yet."
+            )
+        next_steps.append(
+            "Consider gated CTA when peri-annular extension, root abscess, or other structural complications are the main concern."
+        )
         return summary, next_steps
 
     if recommendation == "treat":
         summary = (
-            "Endocarditis probability is high enough that endocarditis-directed treatment is justified based on the current risk-benefit balance."
+            "Endocarditis probability is high enough that endocarditis-directed treatment is justified based on the current risk-benefit balance. "
+            "I would not wait for another imaging test to justify treatment, although TEE can still help define complications and guide surgery."
         )
         return summary, next_steps
 
@@ -2775,6 +3380,62 @@ def _build_duration_monitoring_guidance(
         ]
         return duration, monitoring
 
+    if module.id == "diabetic_foot_infection":
+        osteomyelitis_signal = any(
+            prep_findings.get(item_id) == "present"
+            for item_id in {
+                "dfi_probe_to_bone_positive",
+                "dfi_exposed_bone",
+                "dfi_xray_osteomyelitis",
+                "dfi_mri_osteomyelitis_or_abscess",
+                "dfi_bone_biopsy_culture_pos",
+                "dfi_bone_histology_pos",
+            }
+        )
+        surgery_done = prep_findings.get("dfi_surgery_debridement_done") == "present"
+        amputation_done = prep_findings.get("dfi_minor_amputation_done") == "present"
+        positive_margin = prep_findings.get("dfi_positive_bone_margin") == "present"
+        pad_or_ischemia = prep_findings.get("dfi_host_pad_or_ischemia") == "present"
+
+        if osteomyelitis_signal:
+            if amputation_done and positive_margin:
+                duration = [
+                    "After minor amputation or bone resection with a positive residual bone margin, the usual framework is up to about 3 weeks of antibiotic therapy.",
+                    "If the margin status is uncertain, the final course should still follow the operative findings, pathology or culture results, and whether additional infected bone remains in place.",
+                ]
+            elif amputation_done:
+                duration = [
+                    "After bone resection or minor amputation with clean margins, duration is often much shorter than a full nonsurgical osteomyelitis course and should be tied to the residual soft-tissue infection burden, if any.",
+                    "If all infected bone appears to have been removed, prolonged osteomyelitis-duration therapy is often unnecessary."
+                ]
+            else:
+                duration = [
+                    "For diabetic foot osteomyelitis managed without bone resection or amputation, the usual framework is about 6 weeks of antibiotic therapy.",
+                    "Selected forefoot osteomyelitis cases without PAD, exposed bone, or an immediate need for drainage can sometimes be managed nonsurgically, but that decision depends on source control and clinical stability.",
+                ]
+            monitoring = [
+                "Follow serial wound appearance, drainage, erythema, pain, and the need for additional debridement or off-loading.",
+                "Reassess perfusion and healing potential, especially if PAD or ischemia is present.",
+                "For osteomyelitis, judge remission over months rather than days; guideline-based follow-up often looks at outcomes at 6 months or more after antibiotics end.",
+            ]
+            return duration, monitoring
+
+        duration = [
+            "For a soft-tissue diabetic foot infection without convincing osteomyelitis, the usual antibiotic course is about 1 to 2 weeks.",
+            "If the infection is extensive, slow to improve, or complicated by severe PAD or delayed source control, treatment may need to continue for up to about 3 to 4 weeks."
+        ]
+        if surgery_done:
+            duration.append(
+                "After surgical debridement for a moderate or severe soft-tissue diabetic foot infection, some patients can be treated with a shorter roughly 10-day postoperative course if the trajectory is improving."
+            )
+        monitoring = [
+            "Reassess the wound frequently for shrinking erythema, less drainage, less pain, and a clean granulating base rather than relying on labs alone.",
+            "Keep reviewing whether more debridement, drainage, off-loading, or vascular optimization is needed."
+        ]
+        if pad_or_ischemia:
+            monitoring.append("PAD or ischemia should trigger close perfusion follow-up because it slows healing and raises the risk of treatment failure.")
+        return duration, monitoring
+
     return duration, monitoring
 
 
@@ -2790,6 +3451,24 @@ def _build_mechid_duration_monitoring_guidance(
     notes_text = " ".join(therapy_notes).lower()
     duration: List[str] = []
     monitoring: List[str] = []
+
+    if focus_detail == "Prosthetic joint infection":
+        duration = [
+            "For prosthetic joint infection, duration depends heavily on the operative plan, whether hardware is being retained, and the organism, so I would not force this into the same simple timeline as native osteomyelitis."
+        ]
+        if organism in {"Staphylococcus aureus", "Staphylococcus lugdunensis"}:
+            duration.append(
+                "If this is staphylococcal PJI with retained hardware, I would usually think in terms of a prolonged companion-drug strategy rather than a short native-joint-style course."
+            )
+        monitoring = [
+            "Keep the antibiotic plan aligned with the surgical pathway, such as DAIR versus one-stage or two-stage exchange, because that changes both duration and what counts as adequate source control.",
+            "Follow wound drainage, pain, range of motion or function, inflammatory markers when useful, and weekly CBC/CMP plus drug-specific toxicity labs during prolonged therapy.",
+        ]
+        if organism in {"Staphylococcus aureus", "Staphylococcus lugdunensis"}:
+            monitoring.append(
+                "If a rifampin-based companion strategy is being used for retained staphylococcal hardware, make sure it is paired with another active agent and watch closely for drug interactions and hepatotoxicity."
+            )
+        return duration, monitoring
 
     if organism == "Staphylococcus aureus":
         if syndrome == "Bloodstream infection" or focus_detail == "Endocarditis":
@@ -2821,6 +3500,22 @@ def _build_mechid_duration_monitoring_guidance(
                 "Repeat blood cultures until clearance and reassess whether endocarditis or another deep focus is present.",
                 "If daptomycin is used for VRE, follow CK at least weekly; if linezolid is used, follow CBC and watch for neuropathy or serotonin-toxicity issues during longer courses.",
             ]
+            if organism == "Enterococcus faecium":
+                duration.insert(
+                    0,
+                    "Enterococcus faecium endovascular infection can be especially difficult to sterilize, so I would be cautious about calling this uncomplicated bacteremia until clearance is documented and endocarditis has been addressed.",
+                )
+                monitoring.append(
+                    "For E. faecium bacteremia or endocarditis, keep a low threshold for repeat echocardiography, source-control review, and expert input because persistent bacteremia can be difficult to clear."
+                )
+                if final_results.get("Vancomycin") == "Resistant" and focus_detail == "Endocarditis":
+                    duration.insert(
+                        1,
+                        "For VRE Enterococcus faecium endocarditis, I would usually think in terms of a high-dose daptomycin-based combination for at least 8 weeks rather than a shorter standard enterococcal course.",
+                    )
+                    monitoring.append(
+                        "With high-dose daptomycin-based combination therapy, follow CK, CBC, renal function, and electrolytes closely, especially if a beta-lactam or fosfomycin partner is added."
+                    )
             return duration, monitoring
         if syndrome == "Bone/joint infection":
             duration = [
@@ -2869,6 +3564,7 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
             response.explanation_for_user = _build_probid_consult_message(module, response)
         return response
 
+    module = module.model_copy(deep=True)
     prep = prepare_probid_inputs(module, req)
 
     base_pretest, adjusted_pretest, preset_id = resolve_pretest(
@@ -2882,6 +3578,17 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
     harms = resolve_harms(module, req, states_override=prep.harm_findings)
     thresholds = derive_decision_thresholds(harms)
     recommendation = recommendation_for_probability(posttest_probability, thresholds)
+    recommendation, endo_floor_note = _endo_recommendation_floor(
+        recommendation=recommendation,
+        prep_findings=prep.analysis_findings,
+        harm_findings=prep.harm_findings,
+    )
+    dfi_floor_note = None
+    if module.id == "diabetic_foot_infection":
+        recommendation, dfi_floor_note = _dfi_recommendation_floor(
+            recommendation=recommendation,
+            prep_findings=prep.analysis_findings,
+        )
     confidence = confidence_from_thresholds(posttest_probability, thresholds)
 
     applied_findings = applied_finding_summaries(module, prep.analysis_findings)
@@ -2903,6 +3610,10 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         applied_findings=applied_findings,
         prep_notes=prep.notes,
     )
+    if endo_floor_note:
+        reasons.append(endo_floor_note)
+    if dfi_floor_note:
+        reasons.append(dfi_floor_note)
     if req.harms is None and module.default_harms is None:
         harm_estimate = estimate_harms(module.id, prep.harm_findings)
         if harm_estimate.rationale:
@@ -3106,6 +3817,11 @@ def _assistant_module_options() -> List[AssistantOption]:
             label=IMMUNOID_ASSISTANT_LABEL,
             description=IMMUNOID_ASSISTANT_DESCRIPTION,
         ),
+        AssistantOption(
+            value=ALLERGYID_ASSISTANT_ID,
+            label=ALLERGYID_ASSISTANT_LABEL,
+            description=ALLERGYID_ASSISTANT_DESCRIPTION,
+        ),
     ]
 
 
@@ -3197,6 +3913,127 @@ def _assistant_single_case_follow_up(
     )
 
 
+def _assistant_is_endo_imaging_question(text: str | None) -> bool:
+    if not text:
+        return False
+    normalized = _normalize_choice(text)
+    if not re.search(
+        r"\b(?:tee|transesophageal echocardiogram|transesophageal echo|pet/?ct|pet ct|fdg pet/?ct|gated cta|cardiac cta|cta)\b",
+        normalized,
+    ):
+        return False
+    return any(
+        token in normalized
+        for token in (
+            "should i order",
+            "should we order",
+            "should i get",
+            "should we get",
+            "do i need",
+            "does this patient need",
+            "does the patient need",
+            "need a",
+            "need an",
+            "needs a",
+            "needs an",
+            "require a",
+            "requires a",
+            "necessary",
+            "indicated",
+            "is tee needed",
+            "is pet ct needed",
+            "is gated cta needed",
+            "would you order",
+            "would you get",
+        )
+    )
+
+
+def _assistant_endo_imaging_guidance(
+    analysis: AnalyzeResponse,
+    *,
+    case_text: str | None = None,
+) -> str | None:
+    if analysis.module_id != "endo":
+        return None
+    if not _assistant_is_endo_imaging_question(case_text):
+        return None
+    if analysis.recommendation == "observe":
+        return (
+            "Regarding TEE or advanced endocarditis imaging: with the current probability, I would not routinely order TEE right now. "
+            "I would treat this as lower-risk bacteremia unless new features raise concern."
+        )
+    if analysis.recommendation == "test":
+        return (
+            "Regarding TEE or advanced endocarditis imaging: the current probability is high enough that I would pursue more endocarditis-directed imaging now. "
+            "TEE is usually the next study I would prioritize. FDG PET/CT or gated CTA can help when prosthetic valve, device, or peri-annular extension is the concern."
+        )
+    if analysis.recommendation == "treat":
+        return (
+            "Regarding TEE or advanced endocarditis imaging: the current probability is high enough that I would treat this as endocarditis now rather than waiting for another test to justify therapy. "
+            "TEE can still help define valve complications or surgical planning, and FDG PET/CT or gated CTA can be useful in prosthetic valve, device, or peri-annular disease."
+        )
+    return None
+
+
+def _assistant_has_explicit_endo_imaging_result(text: str | None, modality: str) -> bool:
+    if not text:
+        return False
+    normalized = _normalize_choice(text)
+    modality_tokens = {
+        "tee": ("tee", "transesophageal echocardiogram", "transesophageal echo"),
+        "tte": ("tte", "transthoracic echocardiogram", "transthoracic echo"),
+        "pet": ("pet/ct", "pet ct", "fdg pet/ct", "fdg pet ct"),
+    }
+    patterns = {
+        "tee": r"\b(?:tee|transesophageal echocardiogram|transesophageal echo)\b.{0,24}\b(?:positive|negative|showing|shows|done|performed)\b|\b(?:positive|negative)\b.{0,12}\b(?:tee|transesophageal echocardiogram|transesophageal echo)\b|\b(?:vegetation|regurgitation|perforation)\b.{0,12}\b(?:on|seen on)\s+(?:tee|transesophageal echocardiogram|transesophageal echo)\b|\b(?:tee|transesophageal echocardiogram|transesophageal echo)\b.{0,16}\bwithout vegetation\b",
+        "tte": r"\b(?:tte|transthoracic echocardiogram|transthoracic echo)\b.{0,24}\b(?:positive|negative|showing|shows|done|performed)\b|\b(?:positive|negative)\b.{0,12}\b(?:tte|transthoracic echocardiogram|transthoracic echo)\b|\b(?:vegetation|regurgitation|perforation)\b.{0,12}\b(?:on|seen on)\s+(?:tte|transthoracic echocardiogram|transthoracic echo)\b|\b(?:tte|transthoracic echocardiogram|transthoracic echo)\b.{0,16}\bwithout vegetation\b",
+        "pet": r"\b(?:pet/?ct|pet ct|fdg pet/?ct)\b.{0,24}\b(?:positive|negative|showing|shows|done|performed)\b|\b(?:positive|negative)\b.{0,12}\b(?:pet/?ct|pet ct|fdg pet/?ct)\b|\b(?:uptake|avid)\b.{0,12}\b(?:on|seen on)\s+(?:pet/?ct|pet ct|fdg pet/?ct)\b|\b(?:pet/?ct|pet ct|fdg pet/?ct)\b.{0,16}\bwithout uptake\b",
+    }
+    pattern = patterns.get(modality)
+    tokens = modality_tokens.get(modality)
+    if pattern is None or tokens is None:
+        return False
+    clauses = [segment.strip() for segment in re.split(r"[.\n;]+", normalized) if segment.strip()]
+    return any(any(token in clause for token in tokens) and re.search(pattern, clause) for clause in clauses)
+
+
+def _assistant_sanitize_endo_imaging_question_parse(
+    text_result: TextAnalyzeResponse,
+    message_text: str | None,
+) -> None:
+    if text_result.parsed_request is None or text_result.parsed_request.module_id != "endo":
+        return
+    if not _assistant_is_endo_imaging_question(message_text):
+        return
+    findings = dict(text_result.parsed_request.findings or {})
+    if "endo_tee" in findings and not _assistant_has_explicit_endo_imaging_result(message_text, "tee"):
+        findings.pop("endo_tee", None)
+        text_result.understood.findings_present = [
+            label
+            for label in text_result.understood.findings_present
+            if "transesophageal echo" not in label.lower() and "tee" not in label.lower()
+        ]
+        text_result.understood.findings_absent = [
+            label
+            for label in text_result.understood.findings_absent
+            if "transesophageal echo" not in label.lower() and "tee" not in label.lower()
+        ]
+    if "endo_pet" in findings and not _assistant_has_explicit_endo_imaging_result(message_text, "pet"):
+        findings.pop("endo_pet", None)
+        text_result.understood.findings_present = [
+            label
+            for label in text_result.understood.findings_present
+            if "pet/ct" not in label.lower() and "pet ct" not in label.lower() and "fdg pet" not in label.lower()
+        ]
+        text_result.understood.findings_absent = [
+            label
+            for label in text_result.understood.findings_absent
+            if "pet/ct" not in label.lower() and "pet ct" not in label.lower() and "fdg pet" not in label.lower()
+        ]
+    text_result.parsed_request.findings = findings
+
+
 def _assistant_populate_case_review_analysis(
     module: SyndromeModule,
     text_result: TextAnalyzeResponse,
@@ -3233,6 +4070,12 @@ def _assistant_case_is_consult_ready(
             continue
         informative_count += 1
 
+    if module.id == "endo":
+        if len(text_result.analysis.applied_findings) >= 1:
+            return True
+        if _assistant_is_endo_imaging_question(state.case_text) and informative_count >= 1:
+            return True
+
     if len(text_result.analysis.applied_findings) >= 2:
         return True
     if informative_count >= 3:
@@ -3252,10 +4095,16 @@ def _assistant_ready_for_consult_message(
     state: AssistantState,
 ) -> str:
     next_items = _top_missing_item_specs(module, text_result.parsed_request, limit=1, state=state)
-    message = (
-        "I have enough to run the consult with what you gave me. "
-        "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
-    )
+    if module.id == "endo" and _assistant_is_endo_imaging_question(state.case_text):
+        message = (
+            "I have enough to answer the imaging question from what you gave me. "
+            "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
+        )
+    else:
+        message = (
+            "I have enough to run the consult with what you gave me. "
+            "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
+        )
     if next_items:
         message += f" If you want to sharpen it further, the next useful detail would be {next_items[0][1]}."
     return message
@@ -3475,6 +4324,7 @@ def _build_probid_consult_message(
     *,
     missing_suggestions: List[str] | None = None,
     include_panel_note: bool = False,
+    case_text: str | None = None,
 ) -> str:
     lines = [
         "My impression:",
@@ -3484,6 +4334,9 @@ def _build_probid_consult_message(
         f"What I would do next: {_friendly_probid_next_steps(analysis)}",
         f"What would change my mind: {_friendly_probid_change_mind(analysis, missing_suggestions)}",
     ]
+    imaging_guidance = _assistant_endo_imaging_guidance(analysis, case_text=case_text)
+    if imaging_guidance:
+        lines.append(imaging_guidance)
     if analysis.treatment_duration_guidance:
         lines.append(f"How long I would usually treat: {_join_readable(analysis.treatment_duration_guidance[:2])}.")
     if analysis.monitoring_recommendations:
@@ -3607,10 +4460,11 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
                 "For a diabetic foot or deep wound infection, I would match therapy to severity, depth, and whether the picture looks polymicrobial rather than relying only on the first culture names."
             ),
             recommendedOptions=[
+                "If the patient is clinically stable, source control is adequate, and the AST supports it: I would actively look first for a high-bioavailability oral option rather than defaulting to prolonged IV therapy.",
                 "If the culture is mainly gram-positive and the patient is stable: choose focused gram-positive coverage.",
                 "If the wound is severe, deep, limb-threatening, or clearly polymicrobial: add gram-negative and anaerobic coverage."
             ],
-            oralOptions=["Oral step-down may be possible later if the patient is improving and the susceptibilities support it."] if oral_preference else [],
+            oralOptions=["High-bioavailability oral therapy can be reasonable in selected stable diabetic foot cases once the AST and source-control plan are clear."],
             missingSusceptibilities=_base_missing(
                 "clindamycin",
                 "linezolid",
@@ -3620,7 +4474,33 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
             ),
             notes=[
                 "Source control, debridement, and depth of infection matter as much as the isolate list in diabetic foot infections.",
-                "If osteomyelitis is also present, definitive oral step-down usually depends on reliable AST plus clinical improvement.",
+                "In clinically stable diabetic foot osteomyelitis, high-bioavailability oral therapy can be a reasonable primary strategy when the isolate is susceptible and source control is adequate.",
+            ],
+        )
+
+    if focus_detail == "Prosthetic joint infection":
+        return MechIDProvisionalAdvice(
+            summary=(
+                "For prosthetic joint infection, the antibiotic plan depends on the organism, the operative strategy, and whether hardware is being retained rather than treating this exactly like native osteomyelitis."
+            ),
+            recommendedOptions=[
+                "Build the plan around the surgical pathway first, such as DAIR versus one-stage or two-stage exchange, because that changes how aggressive and how long therapy needs to be.",
+                "If the patient is clinically stable, the joint has been drained or revised, and the AST supports it, a high-bioavailability oral option can still be reasonable rather than assuming the whole course must stay IV.",
+                "If this is staphylococcal PJI with retained hardware, a rifampin-based companion strategy may become important, but only after active companion therapy is in place and the wound is stable rather than as standalone treatment.",
+            ],
+            oralOptions=[
+                "High-bioavailability oral therapy can be reasonable in selected stable PJI cases, but it should be aligned with the hardware plan and source control."
+            ],
+            missingSusceptibilities=_base_missing(
+                "clindamycin",
+                "linezolid",
+                "doxycycline",
+                "trimethoprim/sulfamethoxazole",
+                "fluoroquinolone susceptibilities when gram-negatives are present",
+            ),
+            notes=[
+                "PJI should be framed around hardware retention versus exchange and whether surgical source control is adequate.",
+                "If staphylococcal hardware-associated infection is being treated with retained hardware, rifampin is generally a companion drug discussion rather than the first or only agent."
             ],
         )
 
@@ -3628,10 +4508,11 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
         return MechIDProvisionalAdvice(
             summary="For osteomyelitis, I would choose therapy that reliably covers the recovered organisms and then narrow once susceptibilities and source-control plans are clear.",
             recommendedOptions=[
+                "If the patient is clinically stable and source control is in place, I would look first for a high-bioavailability oral option supported by the AST rather than assuming prolonged IV therapy is required.",
                 "For MRSA concern: Vancomycin, Linezolid, or Daptomycin for non-pulmonary infection",
                 "For streptococcal-only infection: a beta-lactam is often preferred once confirmed susceptible",
             ],
-            oralOptions=["Linezolid can be a bridge oral option in selected cases.", "Other oral step-down options depend heavily on susceptibilities and source control."] if oral_preference else [],
+            oralOptions=["High-bioavailability oral therapy is often reasonable in selected stable osteomyelitis cases once the AST and source-control plan are clear."],
             missingSusceptibilities=_base_missing(
                 "clindamycin",
                 "linezolid",
@@ -3648,10 +4529,11 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
         return MechIDProvisionalAdvice(
             summary="For septic arthritis, I would start with dependable coverage for the recovered organisms and then narrow quickly once susceptibilities return and the joint has been drained.",
             recommendedOptions=[
+                "If the patient is clinically stable after drainage and source control, a high-bioavailability oral option can be reasonable when the AST supports it.",
                 "For MRSA concern: Vancomycin or Linezolid",
                 "For streptococcal-only infection: a beta-lactam is often preferred once susceptibility is known",
             ],
-            oralOptions=["Linezolid may be a temporary oral bridge in selected stable patients, but most early septic arthritis treatment starts IV."] if oral_preference else [],
+            oralOptions=["High-bioavailability oral therapy can be reasonable in selected stable patients after drainage/source control."],
             missingSusceptibilities=_base_missing(
                 "clindamycin",
                 "linezolid",
@@ -3717,9 +4599,10 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
         return MechIDProvisionalAdvice(
             summary="For a bone or joint infection, I can give a provisional site-based recommendation now, but definitive therapy still depends on susceptibilities and source control.",
             recommendedOptions=[
+                "If the patient is clinically stable and source control is adequate, I would first look for a high-bioavailability oral option supported by the AST.",
                 "Use dependable coverage for the listed organisms first, then narrow once susceptibilities return.",
             ],
-            oralOptions=["Oral step-down may be possible later if the patient is improving and the susceptibilities support it."] if oral_preference else [],
+            oralOptions=["High-bioavailability oral therapy may be reasonable when the AST supports it and source control is adequate."],
             missingSusceptibilities=_base_missing(
                 "clindamycin",
                 "linezolid",
@@ -3751,6 +4634,103 @@ def _clean_mechid_text(text: str) -> str:
     return cleaned
 
 
+def _mechid_high_bioavailability_oral_choices(
+    result: MechIDAnalyzeResponse,
+    parsed: MechIDTextParsedRequest | None,
+) -> List[str]:
+    if parsed is None:
+        return []
+
+    syndrome = parsed.tx_context.syndrome
+    focus_detail = parsed.tx_context.focus_detail
+    severity = parsed.tx_context.severity
+    provided_results = parsed.susceptibility_results or result.final_results
+    susceptible_agents = {
+        antibiotic
+        for antibiotic, call in provided_results.items()
+        if call == "Susceptible"
+    }
+    organism = parsed.organism or ""
+    is_bone_joint = syndrome == "Bone/joint infection"
+    is_diabetic_foot = focus_detail == "Diabetic foot infection" or (
+        syndrome == "Other deep-seated / high-inoculum focus" and "diabetic foot" in focus_detail.lower()
+    )
+    is_streptococcal = organism in {
+        "β-hemolytic Streptococcus (GAS/GBS)",
+        "Viridans group streptococci (VGS)",
+        "Streptococcus pneumoniae",
+    }
+    if not (is_bone_joint or is_diabetic_foot):
+        return []
+    if severity == "Severe / septic shock":
+        return []
+
+    staphylococcal_hardware_case = (
+        organism.startswith("Staphylococcus")
+        and is_bone_joint
+        and focus_detail == "Prosthetic joint infection"
+    )
+
+    oral_choices: List[str] = []
+
+    def _add(choice: str) -> None:
+        if choice not in oral_choices:
+            oral_choices.append(choice)
+
+    if "Trimethoprim/Sulfamethoxazole" in susceptible_agents:
+        _add("Trimethoprim/Sulfamethoxazole")
+    if "Linezolid" in susceptible_agents:
+        _add("Linezolid")
+    if "Clindamycin" in susceptible_agents:
+        _add("Clindamycin")
+    if "Metronidazole" in susceptible_agents:
+        _add("Metronidazole")
+    if "Levofloxacin" in susceptible_agents or "Moxifloxacin" in susceptible_agents:
+        if staphylococcal_hardware_case:
+            _add("Levofloxacin plus Rifampin")
+        else:
+            _add("Levofloxacin")
+    if "Ciprofloxacin" in susceptible_agents:
+        _add("Ciprofloxacin")
+    if "Doxycycline" in susceptible_agents or "Tetracycline/Doxycycline" in susceptible_agents:
+        _add("Doxycycline")
+
+    if (organism.startswith("Enterococcus") or is_streptococcal) and (
+        "Ampicillin" in susceptible_agents or "Penicillin" in susceptible_agents
+    ):
+        _add("Amoxicillin")
+        _add("Amoxicillin/Clavulanate")
+
+    return oral_choices
+
+
+def _assistant_mechid_should_pair_levo_with_rifampin(result: MechIDTextAnalyzeResponse) -> bool:
+    parsed = result.parsed_request
+    analysis = result.analysis
+    if parsed is None or analysis is None:
+        return False
+    if parsed.tx_context.syndrome != "Bone/joint infection":
+        return False
+    organism = parsed.organism or ""
+    if not organism.startswith("Staphylococcus"):
+        return False
+    normalized_text = _normalize_choice(result.text)
+    hardware_case = (
+        parsed.tx_context.focus_detail == "Prosthetic joint infection"
+        or any(
+            token in normalized_text
+            for token in ("prosthetic", "hardware", "retained", "implant", "biofilm", "dair")
+        )
+    )
+    if not hardware_case:
+        return False
+    final_results = parsed.susceptibility_results or analysis.final_results
+    return (
+        final_results.get("Levofloxacin") == "Susceptible"
+        or final_results.get("Moxifloxacin") == "Susceptible"
+    )
+
+
 def _friendly_mechid_mechanism(result: MechIDAnalyzeResponse) -> str:
     if not result.mechanisms:
         return "I do not see a single dominant resistance mechanism from the submitted pattern."
@@ -3780,6 +4760,24 @@ def _friendly_mechid_therapy(
     parsed: MechIDTextParsedRequest | None,
 ) -> str:
     organism_local = parsed.organism if parsed is not None else None
+    organism_norm = (organism_local or "").lower()
+
+    def _is_enterococcus_faecium() -> bool:
+        return organism_norm == "enterococcus faecium"
+
+    def _is_vre_faecium_endocarditis(
+        syndrome_local: str,
+        focus_local: str,
+        resistant_agents_local: list[str],
+        susceptible_agents_local: list[str],
+    ) -> bool:
+        return (
+            _is_enterococcus_faecium()
+            and syndrome_local == "Bloodstream infection"
+            and focus_local == "Endocarditis"
+            and "Vancomycin" in resistant_agents_local
+            and "Daptomycin" in susceptible_agents_local
+        )
 
     def _option_overview(
         syndrome_local: str,
@@ -3830,6 +4828,27 @@ def _friendly_mechid_therapy(
             )
 
         if syndrome_local == "Bloodstream infection":
+            if _is_enterococcus_faecium():
+                provided_map = parsed.susceptibility_results if parsed is not None else result.final_results
+                if _is_vre_faecium_endocarditis(
+                    syndrome_local,
+                    focus_local,
+                    ["Vancomycin"] if provided_map.get("Vancomycin") == "Resistant" else [],
+                    susceptible_agents,
+                ):
+                    return (
+                        "For VRE Enterococcus faecium endocarditis, I would treat this as a salvage-level endovascular infection. "
+                        "An ESC-style approach is high-dose Daptomycin 10 to 12 mg/kg IV every 24 hours for at least 8 weeks, usually combined with a synergy partner rather than using Daptomycin alone."
+                    )
+                if focus_local == "Endocarditis":
+                    return (
+                        "For Enterococcus faecium endocarditis, I would treat this as a hard-to-treat endovascular infection rather than routine bacteremia. "
+                        "I would usually think in terms of high-exposure IV therapy, serial blood-culture clearance, and early endocarditis-focused management."
+                    )
+                return (
+                    "For Enterococcus faecium bacteremia, I would treat this as a potentially endovascular problem until blood cultures clear and the endocarditis workup is settled. "
+                    "This is not a syndrome where I would be casual about oral therapy up front."
+                )
             if focus_local == "Endocarditis":
                 return (
                     "For endocarditis, I would treat this as an IV-first problem and would not usually frame the answer around oral options unless there is a very specific validated step-down plan."
@@ -3842,45 +4861,39 @@ def _friendly_mechid_therapy(
             return "For bacteremia, I would usually start with dependable IV therapy and only think about oral step-down much later in selected uncomplicated cases."
 
         if syndrome_local == "Bone/joint infection":
-            oral_choices = [
-                agent
-                for agent in (
-                    "Linezolid",
-                    "Trimethoprim/Sulfamethoxazole",
-                    "Doxycycline",
-                    "Ciprofloxacin",
-                    "Levofloxacin",
+            oral_choices = _mechid_high_bioavailability_oral_choices(result, parsed)
+            if focus_local == "Prosthetic joint infection":
+                if oral_choices:
+                    return (
+                        "For prosthetic joint infection, I would anchor the antibiotic plan to the hardware strategy first. "
+                        f"If the patient is clinically stable, the joint has been drained or revised, and the AST supports it, a high-bioavailability oral option such as {_join_readable(oral_choices)} can still be reasonable rather than assuming prolonged IV therapy is mandatory."
+                        + (
+                            " If this is staphylococcal PJI with retained hardware, I would also think explicitly about a rifampin-based companion strategy once effective therapy is established and the wound is stable."
+                            if organism_local in {"Staphylococcus aureus", "Staphylococcus lugdunensis"}
+                            else ""
+                        )
+                    )
+                return (
+                    "For prosthetic joint infection, I would not treat this exactly like native osteomyelitis. The hardware plan, whether DAIR or exchange is being used, and whether there is a clearly reliable oral option matter as much as the susceptibility list itself."
                 )
-                if agent in susceptible
-            ]
             if oral_choices:
                 return (
-                    "For osteomyelitis or septic arthritis, I would mainly think about reliable upfront therapy, "
-                    f"with oral step-down later sometimes possible using {_join_readable(oral_choices)} once source control is addressed."
+                    "For osteomyelitis or septic arthritis, if the patient is clinically stable and source control is adequate, "
+                    f"I would now look first for a high-bioavailability oral option such as {_join_readable(oral_choices)} rather than defaulting to prolonged IV therapy."
                 )
             return (
-                "For osteomyelitis or septic arthritis, I would usually start with dependable therapy and only think about oral step-down later if source control is in place and the isolate leaves a clearly reliable oral option."
+                "For osteomyelitis or septic arthritis, I would still actively look for a high-bioavailability oral option first, but only if the isolate leaves a clearly reliable oral choice and source control is in place."
             )
 
         if syndrome_local == "Other deep-seated / high-inoculum focus":
-            oral_choices = [
-                agent
-                for agent in (
-                    "Linezolid",
-                    "Trimethoprim/Sulfamethoxazole",
-                    "Doxycycline",
-                    "Ciprofloxacin",
-                    "Levofloxacin",
-                )
-                if agent in susceptible
-            ]
+            oral_choices = _mechid_high_bioavailability_oral_choices(result, parsed)
             if oral_choices:
                 return (
-                    "For a diabetic foot or other deep wound infection, I would first make sure drainage or debridement is adequate, "
-                    f"then think about step-down options such as {_join_readable(oral_choices)} if the patient is improving."
+                    "For a diabetic foot or other deep wound infection, if the patient is clinically stable and debridement or drainage is adequate, "
+                    f"I would look first for a high-bioavailability oral option such as {_join_readable(oral_choices)}."
                 )
             return (
-                "For a diabetic foot or other deep wound infection, I would usually start with reliable therapy for a deep or severe infection and then reassess after source control and AST review."
+                "For a diabetic foot or other deep wound infection, I would still think about oral-first treatment when possible, but only if the AST gives a clearly reliable option and the wound has adequate source control."
             )
 
         if syndrome_local == "Pneumonia (HAP/VAP or severe CAP)":
@@ -3905,7 +4918,13 @@ def _friendly_mechid_therapy(
             return None
 
         if syndrome_local == "Uncomplicated cystitis":
-            for candidate in ("Nitrofurantoin", "Trimethoprim/Sulfamethoxazole", "Fosfomycin"):
+            for candidate in (
+                "Nitrofurantoin",
+                "Trimethoprim/Sulfamethoxazole",
+                "Fosfomycin",
+                "Ciprofloxacin",
+                "Levofloxacin",
+            ):
                 if candidate in susceptible_set:
                     return candidate
 
@@ -3920,6 +4939,14 @@ def _friendly_mechid_therapy(
                     return candidate
 
         if organism_local and organism_local.startswith("Enterococcus"):
+            if organism_local == "Enterococcus faecium":
+                if focus_local == "Endocarditis":
+                    for candidate in ("Daptomycin", "Linezolid", "Vancomycin"):
+                        if candidate in susceptible_set:
+                            return candidate
+                for candidate in ("Vancomycin", "Daptomycin", "Linezolid", "Ampicillin", "Penicillin"):
+                    if candidate in susceptible_set:
+                        return candidate
             for candidate in ("Ampicillin", "Penicillin", "Vancomycin", "Linezolid", "Daptomycin"):
                 if candidate in susceptible_set:
                     return candidate
@@ -3995,15 +5022,76 @@ def _friendly_mechid_therapy(
         selected_note_local: str | None,
         preferred_local: str | None,
         syndrome_local: str,
+        focus_local: str,
         severity_local: str,
         resistant_agents_local: list[str],
+        susceptible_agents_local: list[str],
     ) -> str | None:
+        if syndrome_local == "Uncomplicated cystitis":
+            oral_choices = [
+                agent
+                for agent in (
+                    "Nitrofurantoin",
+                    "Trimethoprim/Sulfamethoxazole",
+                    "Fosfomycin",
+                    "Ciprofloxacin",
+                    "Levofloxacin",
+                )
+                if agent in susceptible_agents_local
+            ]
+            if oral_choices:
+                return (
+                    "For uncomplicated cystitis, I would favor a susceptible oral lower-tract option such as "
+                    f"{_join_readable(oral_choices)} rather than leading with an IV regimen."
+                )
+            return (
+                "For uncomplicated cystitis, I would look first for a susceptible oral lower-tract option rather than defaulting to a broad IV agent."
+            )
+
+        if _is_enterococcus_faecium():
+            if syndrome_local == "Bloodstream infection" and focus_local == "Endocarditis":
+                if _is_vre_faecium_endocarditis(
+                    syndrome_local,
+                    focus_local,
+                    resistant_agents_local,
+                    susceptible_agents_local,
+                ):
+                    return (
+                        "Because this looks like VRE Enterococcus faecium endocarditis, I would frame the regimen around high-dose Daptomycin 10 to 12 mg/kg IV every 24 hours for at least 8 weeks, "
+                        "plus one synergy partner such as Ampicillin 300 mg/kg per 24 hours IV in 4 to 6 divided doses, Ertapenem 2 g IV once daily, Ceftaroline 1800 mg/day IV in 3 divided doses, or Fosfomycin 12 g/day IV in 4 divided doses. "
+                        "If Daptomycin cannot be used, Linezolid can still be active, but I would treat that as a fallback discussion rather than the preferred ESC-style backbone."
+                    )
+                if preferred_local is not None:
+                    return (
+                        "Because this looks like Enterococcus faecium endocarditis, I would treat it as a hard-to-treat endovascular infection and would lean on "
+                        f"{preferred_local} only in the context of a full endocarditis plan rather than as routine bacteremia therapy."
+                    )
+            if syndrome_local == "Bloodstream infection":
+                if (
+                    "Vancomycin" in resistant_agents_local
+                    and "Daptomycin" in susceptible_agents_local
+                    and "Linezolid" in susceptible_agents_local
+                ):
+                    return (
+                        "For Enterococcus faecium bacteremia, I would usually think in terms of Daptomycin or Linezolid when the isolate is vancomycin-resistant, "
+                        "while continuing to reassess whether this is really uncomplicated bacteremia versus endovascular infection."
+                    )
+                if preferred_local is not None:
+                    return (
+                        "For Enterococcus faecium bacteremia, I would lean toward "
+                        f"{preferred_local}, but I would keep a low threshold to treat this as an endovascular problem if clearance is delayed or the echo strategy is incomplete."
+                    )
+
         if selected_note_local is not None:
             lead, sep, rest = selected_note_local.partition(":")
             if sep and rest.strip():
+                rest_text = rest.strip().rstrip(".")
+                if re.match(r"^(use|avoid|prefer|treat|consider|choose|lean toward)\b", rest_text.lower()):
+                    return (
+                        f"Based on the susceptibilities you gave me, {lead.strip().lower()} means I would {rest_text}."
+                    )
                 return (
-                    f"Based on the susceptibilities you gave me, this fits {lead.strip().lower()}, "
-                    f"so I would {rest.strip().rstrip('.')}."
+                    f"Based on the susceptibilities you gave me, {lead.strip().lower()} suggests {rest_text}."
                 )
             return (
                 "Based on the susceptibilities you gave me, "
@@ -4119,14 +5207,20 @@ def _friendly_mechid_therapy(
         selected_note,
         preferred,
         syndrome,
+        focus,
         severity,
         resistant_agents,
+        susceptible_agents,
     )
 
     lines: List[str] = []
     if option_overview is not None:
         lines.append(option_overview)
-    if recommendation is not None:
+    if recommendation is not None and not (
+        option_overview is not None
+        and syndrome in {"Bone/joint infection", "Other deep-seated / high-inoculum focus"}
+        and recommendation.startswith("Based on the susceptibilities you gave me")
+    ):
         lines.append(recommendation)
 
     return " ".join(lines) if lines else "I would match therapy to the susceptible agents and infection source."
@@ -4155,6 +5249,8 @@ def _friendly_mechid_oral_options(
                 "Nitrofurantoin",
                 "Trimethoprim/Sulfamethoxazole",
                 "Fosfomycin",
+                "Ciprofloxacin",
+                "Levofloxacin",
             )
             if agent in susceptible_agents
         ]
@@ -4182,43 +5278,29 @@ def _friendly_mechid_oral_options(
             )
         return "For pyelonephritis or complicated UTI, I would be more cautious about oral step-down unless a clearly active oral option is available."
 
-    if syndrome == "Bone/joint infection" and oral_preference:
-        oral_choices = [
-            agent
-            for agent in (
-                "Trimethoprim/Sulfamethoxazole",
-                "Ciprofloxacin",
-                "Levofloxacin",
-                "Linezolid",
-                "Doxycycline",
-            )
-            if agent in susceptible_agents
-        ]
+    if syndrome == "Bone/joint infection":
+        oral_choices = _mechid_high_bioavailability_oral_choices(result, parsed)
+        if parsed is not None and parsed.tx_context.focus_detail == "Prosthetic joint infection":
+            if oral_choices:
+                return (
+                    f"For prosthetic joint infection, high-bioavailability oral therapy can still be used with {_join_readable(oral_choices)} in selected stable cases, but it should be matched to the hardware plan, debridement status, and whether implant retention is being attempted."
+                )
+            return "For prosthetic joint infection, I would only frame this as oral-first if the hardware strategy and source control are both clear enough to support that plan."
         if oral_choices:
             return (
-                f"For osteomyelitis, septic arthritis, or another bone/joint infection, oral therapy can sometimes be used with "
-                f"{_join_readable(oral_choices)} once the patient is stable and source control is addressed."
+                f"For osteomyelitis, septic arthritis, or another bone/joint infection, high-bioavailability oral therapy can often be used with "
+                f"{_join_readable(oral_choices)} when the patient is clinically stable and source control is addressed."
             )
-        return "For bone or joint infection, I would be cautious about promising an oral option unless the isolate leaves you with a clearly reliable oral agent."
+        return "For bone or joint infection, I would still look for an oral-first option when possible, but only if the isolate leaves a clearly reliable high-bioavailability agent."
 
-    if syndrome == "Other deep-seated / high-inoculum focus" and oral_preference:
-        oral_choices = [
-            agent
-            for agent in (
-                "Trimethoprim/Sulfamethoxazole",
-                "Ciprofloxacin",
-                "Levofloxacin",
-                "Linezolid",
-                "Doxycycline",
-            )
-            if agent in susceptible_agents
-        ]
+    if syndrome == "Other deep-seated / high-inoculum focus":
+        oral_choices = _mechid_high_bioavailability_oral_choices(result, parsed)
         if oral_choices:
             return (
-                f"For a diabetic foot or deep wound-type infection, oral step-down might be possible with "
-                f"{_join_readable(oral_choices)} if the patient is improving and the wound has been adequately drained or debrided."
+                f"For a diabetic foot or deep wound-type infection, I would prefer a high-bioavailability oral option such as "
+                f"{_join_readable(oral_choices)} when the patient is stable and the wound has been adequately drained or debrided."
             )
-        return "For a diabetic foot or other deep wound infection, I would be cautious about oral therapy unless you have a clearly active oral option plus good source control."
+        return "For a diabetic foot or other deep wound infection, I would still think oral-first when possible, but only if you have a clearly active oral option plus good source control."
 
     if oral_preference:
         oral_choices = [
@@ -4230,6 +5312,7 @@ def _friendly_mechid_oral_options(
                 "Nitrofurantoin",
                 "Fosfomycin",
                 "Linezolid",
+                "Clindamycin",
                 "Doxycycline",
             )
             if agent in susceptible_agents
@@ -4419,24 +5502,15 @@ def _assistant_review_options_for_case(
 ) -> List[AssistantOption]:
     options: List[AssistantOption] = []
     items_by_id = {item.id: item for item in module.items}
-    score_options = _assistant_missing_endo_score_options(state)
+    score_options = _assistant_missing_endo_score_options(state, limit=3)
     missing_item_specs = _top_missing_item_specs(
         module,
         text_result.parsed_request,
-        limit=3,
+        limit=2 if _assistant_case_is_consult_ready(module, text_result, state) else 3,
         state=state,
     )
     if score_options:
-        options.append(
-            AssistantOption(
-                value="section:score_review",
-                label=f"{(_assistant_selected_endo_score_id(state) or 'Score').upper()} Components To Confirm",
-            )
-        )
         options.extend(score_options)
-    if missing_item_specs:
-        if score_options:
-            options.append(AssistantOption(value="section:missing_findings", label="Important Missing Findings"))
     for item_id, label in missing_item_specs:
         item = items_by_id.get(item_id)
         if item is None:
@@ -4466,6 +5540,32 @@ def _assistant_endo_blood_culture_options() -> List[AssistantOption]:
     ]
 
 
+def _assistant_endo_score_applicable(state: AssistantState | None, score_id: str | None) -> bool:
+    if state is None or state.module_id != "endo" or not score_id:
+        return False
+    case_norm = _normalize_choice(state.case_text)
+    prosthetic_material_context = _assistant_endo_has_prosthetic_material_risk(state)
+    if score_id == "virsta" and any(
+        token in case_norm
+        for token in (
+            "coagulase negative staph",
+            "coagulase-negative staph",
+            "coagulase negative staphylococci",
+            "coagulase-negative staphylococci",
+            "staphylococcus epidermidis",
+            "s epidermidis",
+            "cons",
+        )
+    ):
+        return False
+    if score_id == "denova":
+        if any(token in case_norm for token in ("enterococcus faecium", "e faecium")):
+            return False
+        if prosthetic_material_context and not any(token in case_norm for token in ("enterococcus faecalis", "e faecalis")):
+            return False
+    return True
+
+
 def _assistant_selected_endo_score_id(state: AssistantState | None) -> str | None:
     if state is None or state.module_id != "endo":
         return None
@@ -4476,7 +5576,8 @@ def _assistant_selected_endo_score_id(state: AssistantState | None) -> str | Non
     if choice is None:
         return None
     score_id = choice.get("score_id")
-    return str(score_id) if score_id else None
+    score_id = str(score_id) if score_id else None
+    return score_id if _assistant_endo_score_applicable(state, score_id) else None
 
 
 def _assistant_merge_endo_score_factor_ids(state: AssistantState, factor_ids: List[str]) -> None:
@@ -4493,6 +5594,16 @@ def _assistant_merge_endo_score_factor_ids(state: AssistantState, factor_ids: Li
     state.endo_score_factor_ids = current
 
 
+def _assistant_merge_pretest_factor_ids(state: AssistantState, factor_ids: List[str]) -> None:
+    if not factor_ids:
+        return
+    current = list(state.pretest_factor_ids)
+    for factor_id in factor_ids:
+        if factor_id not in current:
+            current.append(factor_id)
+    state.pretest_factor_ids = current
+
+
 def _assistant_endo_score_component_entries(state: AssistantState | None) -> List[tuple[str, str]]:
     score_id = _assistant_selected_endo_score_id(state)
     if not score_id:
@@ -4500,7 +5611,11 @@ def _assistant_endo_score_component_entries(state: AssistantState | None) -> Lis
     return list(ENDO_ASSISTANT_SCORE_COMPONENTS.get(score_id, ()))
 
 
-def _assistant_missing_endo_score_options(state: AssistantState | None) -> List[AssistantOption]:
+def _assistant_missing_endo_score_options(
+    state: AssistantState | None,
+    *,
+    limit: int | None = None,
+) -> List[AssistantOption]:
     if state is None or state.module_id != "endo":
         return []
     selected = set(state.endo_score_factor_ids)
@@ -4518,6 +5633,8 @@ def _assistant_missing_endo_score_options(state: AssistantState | None) -> List[
                 description=f"Click if this {score_name.upper()} component applies.",
             )
         )
+        if limit is not None and len(options) >= limit:
+            break
     return options
 
 
@@ -4537,6 +5654,28 @@ def _assistant_infer_endo_score_factor_ids_from_text(state: AssistantState, text
     return inferred
 
 
+def _assistant_infer_pretest_factor_ids_from_text(
+    module: SyndromeModule,
+    text: str,
+    state: AssistantState | None = None,
+) -> List[str]:
+    text_norm = _normalize_choice(text)
+    if not text_norm:
+        return []
+
+    if module.id == "endo":
+        inferred: List[str] = []
+        available_ids = {factor_id for factor_id, _, _ in _assistant_pretest_factor_entries(module, state)}
+        for factor_id, aliases in ENDO_PRETEST_FACTOR_TEXT_ALIASES.items():
+            if factor_id not in available_ids:
+                continue
+            if any(alias in text_norm for alias in aliases):
+                inferred.append(factor_id)
+        return inferred
+
+    return []
+
+
 def _assistant_pretest_factor_entries(
     module: SyndromeModule,
     state: AssistantState | None = None,
@@ -4545,6 +5684,36 @@ def _assistant_pretest_factor_entries(
     if module.id == "endo":
         specs = [spec for spec in specs if spec.context_group != "score_overlap"]
     return [(spec.id, spec.label, spec.weight) for spec in specs]
+
+
+ENDO_PRETEST_FACTOR_TEXT_ALIASES: Dict[str, tuple[str, ...]] = {
+    "prosthetic_valve": (
+        "prosthetic valve",
+        "prosthetic aortic valve",
+        "prosthetic mitral valve",
+        "mechanical valve",
+        "bioprosthetic valve",
+        "prosthetic mitral prosthesis",
+        "prosthetic aortic prosthesis",
+        "tavr",
+        "tavi",
+        "transcatheter aortic valve",
+        "transcatheter valve",
+    ),
+    "chd": ("congenital heart disease", "congenital valve disease", "repaired congenital heart disease"),
+    "hemodialysis": ("hemodialysis", "haemodialysis", "dialysis", "esrd", "hd", "ihd"),
+    "central_venous_catheter": ("central venous catheter", "central line", "cvc", "picc", "port", "hickman"),
+    "immunosuppression": ("immunosuppressed", "immunocompromised", "on chemotherapy", "transplant recipient", "high dose steroids"),
+    "recent_healthcare_or_invasive_exposure": (
+        "healthcare associated",
+        "recent hospitalization",
+        "recent healthcare exposure",
+        "recent invasive procedure",
+        "recent surgery",
+        "nosocomial",
+    ),
+    "cied": ("pacemaker", "icd", "cied", "cardiac device", "intracardiac device"),
+}
 
 
 def _module_supports_pretest_factors(module: SyndromeModule | None, state: AssistantState | None = None) -> bool:
@@ -4569,8 +5738,6 @@ def _assistant_pretest_factor_options(
     selected_set = set(selected_ids)
     available_ids = {factor_id for factor_id, _, _ in _assistant_pretest_factor_entries(module, state)}
     if available_ids:
-        if module.id == "endo":
-            options.append(AssistantOption(value="section:baseline", label="Baseline Modifiers"))
         for spec in resolve_pretest_factor_specs(module):
             if spec.id in selected_set or spec.id not in available_ids:
                 continue
@@ -4585,8 +5752,7 @@ def _assistant_pretest_factor_options(
     score_selected_set = set(state.endo_score_factor_ids if state is not None else [])
     score_entries = _assistant_endo_score_component_entries(state)
     if score_entries:
-        score_name = (_assistant_selected_endo_score_id(state) or "").upper()
-        options.append(AssistantOption(value="section:score", label=f"{score_name} Components"))
+        score_name = (_assistant_selected_endo_score_id(state) or "score").upper()
         for score_factor_id, label in score_entries:
             if score_factor_id in score_selected_set:
                 continue
@@ -4612,6 +5778,30 @@ def _assistant_selected_factor_labels(module: SyndromeModule, selected_ids: List
 
 def _sync_pretest_factor_labels(state: AssistantState, module: SyndromeModule | None) -> None:
     state.pretest_factor_labels = _assistant_selected_factor_labels(module, state.pretest_factor_ids) if module else []
+
+
+def _assistant_endo_has_prosthetic_material_risk(state: AssistantState | None) -> bool:
+    if state is None:
+        return False
+    if {"prosthetic_valve", "cied"} & set(state.pretest_factor_ids):
+        return True
+    case_norm = _normalize_choice(state.case_text)
+    return any(
+        token in case_norm
+        for token in (
+            "prosthetic valve",
+            "mechanical valve",
+            "bioprosthetic valve",
+            "tavr",
+            "tavi",
+            "transcatheter aortic valve",
+            "pacemaker",
+            "icd",
+            "cied",
+            "cardiac device",
+            "intracardiac device",
+        )
+    )
 
 
 def _assistant_pretest_factor_prompt(
@@ -4690,9 +5880,32 @@ def _select_endo_blood_culture_context_from_turn(req: AssistantTurnRequest) -> s
         return None
 
     keyword_map = {
-        "staph": {"staph", "staphylococcus", "staph aureus", "staphylococcus aureus", "s aureus", "saureus", "sab"},
+        "staph": {
+            "staph",
+            "staphylococcus",
+            "staph aureus",
+            "staphylococcus aureus",
+            "s aureus",
+            "saureus",
+            "sab",
+            "coagulase negative staph",
+            "coagulase negative staphylococci",
+            "coagulase-negative staph",
+            "coagulase-negative staphylococci",
+            "cons",
+            "s epidermidis",
+            "staphylococcus epidermidis",
+        },
         "strep": {"strep", "streptococcus", "viridans", "viridans group", "vgs", "nbhs", "s gallolyticus"},
-        "enterococcus": {"enterococcus", "enterococcal", "e faecalis", "enterococcus faecalis", "efaecalis"},
+        "enterococcus": {
+            "enterococcus",
+            "enterococcal",
+            "e faecalis",
+            "enterococcus faecalis",
+            "efaecalis",
+            "e faecium",
+            "enterococcus faecium",
+        },
         "other_unknown_pending": {"other", "unknown", "pending", "not sure", "not yet", "no cultures"},
     }
     for context_id, keywords in keyword_map.items():
@@ -4877,6 +6090,13 @@ def _is_ready_to_assess(req: AssistantTurnRequest) -> bool:
         "yes",
         "yes run it",
         "run it",
+        "give consultant impression",
+        "consultant impression",
+        "give consult impression",
+        "consult impression",
+        "give my consultant impression",
+        "give impression",
+        "my consultant impression",
         "analyze",
         "analyse",
         "looks good",
@@ -5023,6 +6243,16 @@ ASSISTANT_MISSING_PRIORITY_BY_MODULE: Dict[str, List[str]] = {
         "nsti_crp_high",
         "nsti_lactate_high",
     ],
+    "diabetic_foot_infection": [
+        "dfi_local_inflammation_2plus",
+        "dfi_probe_to_bone_positive",
+        "dfi_xray_osteomyelitis",
+        "dfi_esr_high",
+        "dfi_mri_osteomyelitis_or_abscess",
+        "dfi_bone_biopsy_culture_pos",
+        "dfi_bone_histology_pos",
+        "dfi_systemic_toxicity",
+    ],
 }
 
 
@@ -5034,8 +6264,14 @@ def _assistant_missing_priority_ids(
         return ASSISTANT_MISSING_PRIORITY_BY_MODULE.get(module.id, [])
 
     context = state.endo_blood_culture_context if state is not None else None
+    prosthetic_material_context = _assistant_endo_has_prosthetic_material_risk(state)
     if context == "staph":
         micro_priority = [
+            *(
+                ["endo_bcx_cons_prosthetic_multi"]
+                if prosthetic_material_context
+                else []
+            ),
             "endo_bcx_saureus_multi",
             "endo_bcx_major_persistent",
             "endo_bcx_pos_not_major",
@@ -5049,6 +6285,11 @@ def _assistant_missing_priority_ids(
         ]
     elif context == "enterococcus":
         micro_priority = [
+            *(
+                ["endo_bcx_enterococcus_prosthetic_multi"]
+                if prosthetic_material_context
+                else []
+            ),
             "endo_bcx_efaecalis_multi",
             "endo_bcx_pos_not_major",
             "endo_bcx_negative",
@@ -5065,10 +6306,6 @@ def _assistant_missing_priority_ids(
     return [
         *micro_priority,
         "endo_tte",
-        "endo_tee",
-        "endo_pet",
-        "endo_esr_crp",
-        "endo_anemia",
     ]
 
 
@@ -5090,6 +6327,13 @@ def _top_missing_item_specs(
         item = items_by_id.get(item_id)
         if item is None or item.id in seen_ids or item.id in conflicting_ids:
             continue
+        if (
+            module.id == "endo"
+            and state is not None
+            and _assistant_is_endo_imaging_question(state.case_text)
+            and item.id in {"endo_tee", "endo_pet"}
+        ):
+            continue
         if item.category not in {"lab", "imaging", "micro"}:
             continue
         if not _assistant_case_item_allowed(module, item, state):
@@ -5104,6 +6348,13 @@ def _top_missing_item_specs(
 
     for item in module.items:
         if item.id in seen_ids or item.id in conflicting_ids:
+            continue
+        if (
+            module.id == "endo"
+            and state is not None
+            and _assistant_is_endo_imaging_question(state.case_text)
+            and item.id in {"endo_tee", "endo_pet"}
+        ):
             continue
         if item.category not in {"lab", "imaging", "micro"}:
             continue
@@ -5156,7 +6407,9 @@ def _assistant_conflicting_missing_ids(
             "endo_bcx_major_typical",
             "endo_bcx_major_persistent",
             "endo_bcx_saureus_multi",
+            "endo_bcx_cons_prosthetic_multi",
             "endo_bcx_efaecalis_multi",
+            "endo_bcx_enterococcus_prosthetic_multi",
             "endo_bcx_nbhs_multi",
             "endo_coxiella_major",
         }
@@ -5221,19 +6474,31 @@ def _assistant_case_item_allowed(module: SyndromeModule, item, state: AssistantS
     if "not done" in label_lower or "unknown" in label_lower:
         return False
     if module.id == "endo":
+        prosthetic_material_context = _assistant_endo_has_prosthetic_material_risk(state)
         if item.id in ENDO_ASSISTANT_SCORE_ITEM_IDS:
+            return False
+        if item.id in {
+            "endo_bcx_cons_prosthetic_multi",
+            "endo_bcx_enterococcus_prosthetic_multi",
+        } and not prosthetic_material_context:
             return False
         if item.category == "micro":
             context = state.endo_blood_culture_context if state is not None else None
             allowed_micro_ids = {
                 "staph": {
                     "endo_bcx_saureus_multi",
+                    "endo_bcx_cons_prosthetic_multi",
                     "endo_bcx_major_persistent",
                     "endo_bcx_pos_not_major",
                     "endo_bcx_negative",
                 },
                 "strep": {"endo_bcx_nbhs_multi", "endo_bcx_pos_not_major", "endo_bcx_negative"},
-                "enterococcus": {"endo_bcx_efaecalis_multi", "endo_bcx_pos_not_major", "endo_bcx_negative"},
+                "enterococcus": {
+                    "endo_bcx_efaecalis_multi",
+                    "endo_bcx_enterococcus_prosthetic_multi",
+                    "endo_bcx_pos_not_major",
+                    "endo_bcx_negative",
+                },
                 "other_unknown_pending": {
                     "endo_bcx_major_typical",
                     "endo_bcx_major_persistent",
@@ -5363,13 +6628,6 @@ def _assistant_case_prompt_options(
         candidates.sort(key=lambda item: (-_lr_strength(item), item.label))
         if not candidates:
             continue
-        options.append(
-            AssistantOption(
-                value=f"section:{group_label}",
-                label=group_label,
-                description=None,
-            )
-        )
         if module.id == "active_tb" and group_label == "Symptoms":
             for helper_id, helper_label, insert_text, absent_text in ACTIVE_TB_WHO_SYMPTOM_HELPERS:
                 options.append(
@@ -5467,6 +6725,7 @@ def _assistant_parse_case_text(module: SyndromeModule, state: AssistantState) ->
             includeExplanation=True,
         )
     )
+    _assistant_sanitize_endo_imaging_question_parse(text_result, state.case_text)
     _apply_pretest_factors_to_parsed_request(module=module, state=state, parsed_request=text_result.parsed_request)
     _sync_text_result_references(
         text_result=text_result,
@@ -5483,17 +6742,37 @@ def _assistant_infer_endo_blood_culture_context(
     findings = set((text_result.parsed_request.findings or {}).keys()) if text_result.parsed_request is not None else set()
     if "endo_bcx_saureus_multi" in findings:
         return "staph"
+    if "endo_bcx_cons_prosthetic_multi" in findings:
+        return "staph"
     if "endo_bcx_nbhs_multi" in findings:
         return "strep"
     if "endo_bcx_efaecalis_multi" in findings:
         return "enterococcus"
+    if "endo_bcx_enterococcus_prosthetic_multi" in findings:
+        return "enterococcus"
 
     message_norm = _normalize_choice(message_text)
-    if any(token in message_norm for token in {"staphylococcus aureus", "s aureus", "staph aureus", "mrsa", "mssa"}):
+    if any(
+        token in message_norm
+        for token in {
+            "staphylococcus aureus",
+            "s aureus",
+            "staph aureus",
+            "mrsa",
+            "mssa",
+            "coagulase negative staph",
+            "coagulase negative staphylococci",
+            "coagulase-negative staph",
+            "coagulase-negative staphylococci",
+            "cons",
+            "staphylococcus epidermidis",
+            "s epidermidis",
+        }
+    ):
         return "staph"
     if any(token in message_norm for token in {"viridans", "strep sanguinis", "strep mitis", "strep gordonii"}):
         return "strep"
-    if "enterococcus" in message_norm or "e faecalis" in message_norm:
+    if any(token in message_norm for token in {"enterococcus", "enterococcal", "e faecalis", "e faecium", "enterococcus faecium"}):
         return "enterococcus"
     return "other_unknown_pending"
 
@@ -5538,6 +6817,7 @@ def _assistant_preview_case_from_text(
     )
     if text_result.parsed_request is None:
         return None
+    _assistant_sanitize_endo_imaging_question_parse(text_result, message_text)
 
     module = store.get(text_result.parsed_request.module_id or module_hint or "")
     if module is None:
@@ -5580,9 +6860,24 @@ def _assistant_start_case_from_text(
         return None
 
     text_result, module, inferred_context, inferred_score_factor_ids = preview
+    inferred_pretest_factor_ids = _assistant_infer_pretest_factor_ids_from_text(module, message_text, state)
     _assistant_reset_immunoid_state(state)
     explicit_preset_supported = bool(preset_hint) or _assistant_text_explicitly_supports_preset(message_text, module)
-    if module.pretest_presets and (not text_result.parsed_request.preset_id or not explicit_preset_supported):
+    implicit_preset_note: str | None = None
+    allow_implicit_preset = False
+    if module.id == "endo" and _assistant_is_endo_imaging_question(message_text):
+        if not text_result.parsed_request.preset_id:
+            text_result.parsed_request.preset_id = "endo_low"
+        allow_implicit_preset = True
+        implicit_preset_note = (
+            "I defaulted the baseline setting to ED / inpatient for now because this reads like an active endocarditis imaging question. "
+            "If this is really outpatient or tertiary-referral context, tell me and I’ll update the probability."
+        )
+
+    if module.pretest_presets and (
+        not text_result.parsed_request.preset_id
+        or (not explicit_preset_supported and not allow_implicit_preset)
+    ):
         state.module_id = module.id
         state.workflow = "probid"
         state.preset_id = None
@@ -5596,6 +6891,7 @@ def _assistant_start_case_from_text(
         else:
             state.endo_blood_culture_context = None
             state.endo_score_factor_ids = []
+        _assistant_merge_pretest_factor_ids(state, inferred_pretest_factor_ids)
         _sync_pretest_factor_labels(state, module)
         return AssistantTurnResponse(
             assistantMessage=_assistant_lay_preset_prompt(module),
@@ -5623,6 +6919,7 @@ def _assistant_start_case_from_text(
     else:
         state.endo_blood_culture_context = None
         state.endo_score_factor_ids = []
+    _assistant_merge_pretest_factor_ids(state, inferred_pretest_factor_ids)
     _sync_pretest_factor_labels(state, module)
     _apply_pretest_factors_to_parsed_request(module=module, state=state, parsed_request=text_result.parsed_request)
     _sync_text_result_references(
@@ -5635,7 +6932,10 @@ def _assistant_start_case_from_text(
         module,
         text_result,
         state,
-        prefix="I parsed your case description and pre-populated the calculator inputs. ",
+        prefix=(
+            "I parsed your case description and pre-populated the calculator inputs. "
+            + (implicit_preset_note + " " if implicit_preset_note else "")
+        ),
     )
     return AssistantTurnResponse(
         assistantMessage=review_message,
@@ -5644,10 +6944,33 @@ def _assistant_start_case_from_text(
         options=_assistant_review_options_for_case(module, text_result, state),
         analysis=text_result,
         tips=[
+            *(
+                ["If the setting is not the usual inpatient baseline, tell me and I’ll update the estimate."]
+                if implicit_preset_note
+                else []
+            ),
             "Reply with the single follow-up detail I asked for, in normal words, and I will keep the case moving.",
             "If the extraction already looks right, ask for my consultant impression.",
         ],
     )
+
+
+def _assistant_append_case_item_from_selection(
+    module: SyndromeModule,
+    state: AssistantState,
+    selection: str,
+) -> tuple[str | None, str | None]:
+    if not selection.startswith("insert_text:"):
+        return None, None
+    item_id = selection.split(":", 1)[1]
+    item = _assistant_case_item_by_id(module, item_id)
+    if item is None or not _assistant_case_item_allowed(module, item, state):
+        return None, None
+    present_text, _ = _assistant_case_item_text(item, module)
+    existing_lines = {line.strip().lower() for line in (state.case_text or "").splitlines() if line.strip()}
+    if present_text.strip().lower() not in existing_lines:
+        state.case_text = _append_case_text(state.case_text, present_text)
+    return item_id, item.label
 
 
 def _assistant_is_mechid_intent(message: str | None) -> bool:
@@ -6117,6 +7440,48 @@ def _assistant_is_immunoid_intent(message_text: str) -> bool:
         return True
     keywords = ("prophyl", "screen", "immunosupp", "chemotherapy", "steroid", "biologic", "reactivation")
     return any(keyword in normalized for keyword in keywords)
+
+
+def _assistant_is_allergyid_intent(message_text: str) -> bool:
+    normalized = _normalize_choice(message_text)
+    if not normalized:
+        return False
+    if any(token in normalized for token in ALLERGYID_INTENT_TOKENS):
+        return True
+    return any(
+        phrase in normalized
+        for phrase in (
+            "can i use",
+            "can i still use",
+            "can i use again",
+            "can they use",
+            "what can i use",
+            "what can they use",
+            "best antibiotic with",
+            "best antibiotic if allergic",
+        )
+    ) and any(
+        token in normalized
+        for token in (
+            "allergy",
+            "allergic",
+            "anaphylaxis",
+            "hives",
+            "rash",
+            "reaction",
+            "caused",
+            "headache",
+            "nausea",
+            "vomiting",
+            "diarrhea",
+            "gi",
+            "sjs",
+            "ten",
+            "dress",
+            "angioedema",
+            "unknown",
+        )
+    )
 
 
 def _assistant_parse_immunoid_serology_state(message_text: str, aliases: List[str]) -> str | None:
@@ -6711,6 +8076,36 @@ def _assistant_doseid_normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9.]+", " ", (value or "").lower()).strip()
 
 
+def _assistant_text_mentions_doseid_age(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"\bage\s*(?:is|=|:)?\s*\d{1,3}\b|\b\d{1,3}\s*(?:yo|y o|y/o|yr old|yrs old|year old|years old)\b",
+            normalized,
+        )
+    )
+
+
+def _assistant_text_mentions_doseid_crcl(normalized: str) -> bool:
+    return bool(re.search(r"\b(?:crcl|creatinine clearance)\b", normalized))
+
+
+def _assistant_text_mentions_doseid_scr(normalized: str) -> bool:
+    return bool(re.search(r"\b(?:scr|serum creatinine|creatinine)\b", normalized))
+
+
+def _assistant_text_mentions_doseid_ihd(normalized: str) -> bool:
+    return bool(
+        re.search(
+            r"\b(?:hemodialysis|haemodialysis|dialysis|esrd|ihd|hd)\b",
+            normalized,
+        )
+    )
+
+
+def _assistant_text_mentions_doseid_crrt(normalized: str) -> bool:
+    return bool(re.search(r"\b(?:crrt|cvvh|cvvhd|cvvhdf)\b", normalized))
+
+
 def _assistant_doseid_medications_by_id() -> Dict[str, Any]:
     return {med.id: med for med in list_medications()}
 
@@ -6730,6 +8125,10 @@ def _assistant_doseid_alias_map() -> Dict[str, List[str]]:
             aliases.update({"unasyn", "unsyn"})
         elif med.id == "tmp_smx":
             aliases.update({"tmp smx", "tmp-smx", "bactrim", "septra", "trimethoprim sulfamethoxazole"})
+        elif med.id == "nitrofurantoin":
+            aliases.update({"macrobid", "macrodantin", "nitro"})
+        elif med.id == "fosfomycin":
+            aliases.update({"monurol"})
         elif med.id == "cefepime":
             aliases.update({"maxipime"})
         elif med.id == "ceftriaxone":
@@ -6827,15 +8226,17 @@ def _assistant_is_doseid_intent(message_text: str) -> bool:
 
 def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistantPatientContext:
     normalized = _assistant_doseid_normalize(message_text)
-    normalized_padded = f" {normalized} "
     renal_mode = "standard"
-    if any(token in normalized_padded for token in (" crrt ", " cvvh ", " cvvhd ", " cvvhdf ")):
+    if _assistant_text_mentions_doseid_crrt(normalized):
         renal_mode = "crrt"
-    elif any(token in normalized_padded for token in (" hemodialysis ", " haemodialysis ", " dialysis ", " esrd ", " i hd ", " hd ")):
+    elif _assistant_text_mentions_doseid_ihd(normalized):
         renal_mode = "ihd"
 
     age_years = None
-    age_match = re.search(r"\bage\s*(?:is|=|:)?\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:yo|y/o|year old|years old)\b", normalized)
+    age_match = re.search(
+        r"\bage\s*(?:is|=|:)?\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:yo|y o|y/o|yr old|yrs old|year old|years old)\b",
+        normalized,
+    )
     if age_match:
         age_years = int(age_match.group(1) or age_match.group(2))
 
@@ -6871,7 +8272,10 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
         scr = float(scr_match.group(1))
 
     crcl = None
-    crcl_match = re.search(r"\b(?:crcl|creatinine clearance)\s*(?:is|=|:|of)?\s*(\d+(?:\.\d+)?)\b", normalized)
+    crcl_match = re.search(
+        r"\b(?:crcl|creatinine clearance)\s*(?:is|=|:|of)?\s*(\d+(?:\.\d+)?)\b",
+        normalized,
+    )
     if crcl_match:
         crcl = float(crcl_match.group(1))
 
@@ -6903,8 +8307,64 @@ DOSEID_INTRAABDOMINAL_TOKENS = ("intraabdominal", "intra abdominal", "abdominal"
 DOSEID_TOXIN_SUPPRESSION_TOKENS = ("necrotizing", "toxin", "toxin suppression", "group a strep", "strep pyogenes", "tss")
 
 
+def _assistant_doseid_structured_context_indication(medication_id: str, normalized: str) -> str | None:
+    bloodstream = "syndrome: bloodstream infection" in normalized
+    endocarditis = "focus: endocarditis" in normalized
+    cystitis = "syndrome: uncomplicated cystitis" in normalized
+    complicated_uti = "syndrome: complicated uti / pyelonephritis" in normalized
+    bone_joint = "syndrome: bone/joint infection" in normalized
+    pneumonia = "syndrome: pneumonia (hap/vap or severe cap)" in normalized
+    intraabdominal = "syndrome: intra-abdominal infection" in normalized
+    cns = "syndrome: cns infection" in normalized
+    enterococcal = any(token in normalized for token in ("enterococcus", "enterococcal", "e faecium", "e faecalis"))
+    vre = any(token in normalized for token in ("vre", "vrefm", "vancomycin resistant enterococcus"))
+
+    if medication_id == "nitrofurantoin" and cystitis:
+        return "uncomplicated_cystitis"
+    if medication_id == "fosfomycin":
+        if cystitis:
+            return "uncomplicated_cystitis"
+        if complicated_uti:
+            return "complicated_cystitis"
+    if medication_id == "daptomycin" and (endocarditis or bloodstream):
+        if vre or "enterococcus faecium" in normalized:
+            return "vre_high_burden"
+        return "bacteremia_endovascular"
+    if medication_id == "linezolid" and (endocarditis or bloodstream or bone_joint or pneumonia):
+        return "standard_bacterial"
+    if medication_id == "ampicillin" and (endocarditis or bloodstream or enterococcal or cns):
+        return "high_exposure"
+    if medication_id == "ceftriaxone":
+        if cns:
+            return "meningitis"
+        if endocarditis or bloodstream:
+            return "serious_infection"
+    if medication_id == "cefazolin" and (endocarditis or bloodstream or bone_joint):
+        return "complicated_or_deep"
+    if medication_id == "nafcillin" and (endocarditis or bloodstream):
+        return "mssa_high_burden"
+    if medication_id == "penicillin_g" and (endocarditis or bloodstream or cns):
+        return "cns_or_high_exposure"
+    if medication_id == "vancomycin_iv" and (endocarditis or bloodstream):
+        return "serious_mrsa_or_invasive"
+    if medication_id == "levofloxacin" and pneumonia:
+        return "pneumonia_or_pseudomonas"
+    if medication_id == "ciprofloxacin" and pneumonia:
+        return "high_exposure_pseudomonal"
+    if medication_id == "clindamycin" and bone_joint:
+        return "bone_joint_infection"
+    if medication_id == "metronidazole" and intraabdominal:
+        return "intraabdominal_coverage"
+    if medication_id == "ampicillin_sulbactam" and intraabdominal:
+        return "surgical_or_intraabdominal"
+    return None
+
+
 def _assistant_doseid_indication_for_query(medication_id: str, message_text: str) -> str:
     normalized = _assistant_doseid_normalize(message_text)
+    structured_context = _assistant_doseid_structured_context_indication(medication_id, normalized)
+    if structured_context is not None:
+        return structured_context
     if medication_id == "tmp_smx":
         if "prophyl" in normalized and "pjp" in normalized:
             return "pjp_prophylaxis"
@@ -6918,6 +8378,12 @@ def _assistant_doseid_indication_for_query(medication_id: str, message_text: str
             return "ssti"
         if _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS):
             return "gnr_bacteremia"
+    if medication_id == "nitrofurantoin":
+        return "uncomplicated_cystitis"
+    if medication_id == "fosfomycin":
+        if any(token in normalized for token in ("complicated cystitis", "recurrent cystitis", "multiple dose")):
+            return "complicated_cystitis"
+        return "uncomplicated_cystitis"
     if medication_id == "ampicillin_sulbactam" and _assistant_doseid_has_any(normalized, DOSEID_INTRAABDOMINAL_TOKENS):
         return "surgical_or_intraabdominal"
     if medication_id in {"cefepime", "meropenem"} and _assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS):
@@ -7121,7 +8587,9 @@ def _doseid_patient_context_from_partial_input(
     )
 
 
-def _doseid_standard_renal_inputs_required(medication_id: str) -> bool:
+def _doseid_standard_renal_inputs_required(medication_id: str, indication_id: str | None = None) -> bool:
+    if medication_id == "fosfomycin" and indication_id == "uncomplicated_cystitis":
+        return False
     return medication_id not in DOSEID_STANDARD_NONRENAL_MEDICATION_IDS
 
 
@@ -7248,7 +8716,7 @@ def _doseid_missing_input_questions(
                 _doseid_add_missing_reason(reasons_by_field, "height", "foscarnet obesity-adjusted dosing weight")
             continue
 
-        if not _doseid_standard_renal_inputs_required(medication_id):
+        if not _doseid_standard_renal_inputs_required(medication_id, indication_id):
             continue
         if patient_context.crcl_ml_min is not None:
             continue
@@ -7278,7 +8746,8 @@ def _doseid_recommendations_ready(
     warnings: List[str] = []
     recommendations: List[DoseIDDoseRecommendation] = []
     needs_standard_renal_inputs = patient_context.renal_mode == "standard" and any(
-        medication_id == "foscarnet" or _doseid_standard_renal_inputs_required(medication_id)
+        medication_id == "foscarnet"
+        or _doseid_standard_renal_inputs_required(medication_id, indication_ids.get(medication_id))
         for medication_id in medication_ids
     )
     if needs_standard_renal_inputs or patient_context.crcl_ml_min is not None or patient_context.serum_creatinine_mg_dl is not None:
@@ -7314,12 +8783,36 @@ def _doseid_recommendations_ready(
 
 
 def _doseid_merge_patient_context(
+    message_text: str,
     local_context: DoseIDAssistantPatientContext,
     llm_context: Dict[str, Any],
 ) -> DoseIDAssistantPatientContext:
+    normalized = _assistant_doseid_normalize(message_text)
+    mentions_age = _assistant_text_mentions_doseid_age(normalized)
+    mentions_crcl = _assistant_text_mentions_doseid_crcl(normalized)
+    mentions_scr = _assistant_text_mentions_doseid_scr(normalized)
+    mentions_ihd = _assistant_text_mentions_doseid_ihd(normalized)
+    mentions_crrt = _assistant_text_mentions_doseid_crrt(normalized)
     llm_renal_mode = str(llm_context.get("renalMode") or "standard")
+    llm_age = llm_context.get("ageYears") if mentions_age else None
+    llm_scr = llm_context.get("serumCreatinineMgDl") if mentions_scr else None
+    llm_crcl = llm_context.get("crclMlMin") if mentions_crcl else None
+    if (
+        llm_crcl is not None
+        and local_context.age_years is not None
+        and local_context.crcl_ml_min is None
+        and float(llm_crcl) == float(local_context.age_years)
+    ):
+        llm_crcl = None
+    if mentions_crrt:
+        llm_renal_mode = "crrt"
+    elif mentions_ihd:
+        llm_renal_mode = "ihd"
+    else:
+        llm_renal_mode = "standard"
+
     return DoseIDAssistantPatientContext(
-        ageYears=local_context.age_years if local_context.age_years is not None else llm_context.get("ageYears"),
+        ageYears=local_context.age_years if local_context.age_years is not None else llm_age,
         sex=local_context.sex if local_context.sex is not None else llm_context.get("sex"),
         totalBodyWeightKg=(
             local_context.total_body_weight_kg
@@ -7330,9 +8823,9 @@ def _doseid_merge_patient_context(
         serumCreatinineMgDl=(
             local_context.serum_creatinine_mg_dl
             if local_context.serum_creatinine_mg_dl is not None
-            else llm_context.get("serumCreatinineMgDl")
+            else llm_scr
         ),
-        crclMlMin=local_context.crcl_ml_min if local_context.crcl_ml_min is not None else llm_context.get("crclMlMin"),
+        crclMlMin=local_context.crcl_ml_min if local_context.crcl_ml_min is not None else llm_crcl,
         renalMode=local_context.renal_mode if local_context.renal_mode != "standard" else llm_renal_mode,
     )
 
@@ -7404,6 +8897,7 @@ def _build_doseid_text_response(
                     list(llm_payload.get("medications", [])),
                 ),
                 "patientContext": _doseid_merge_patient_context(
+                    text,
                     DoseIDAssistantPatientContext.model_validate(local_payload.get("patientContext", {})),
                     dict(llm_payload.get("patientContext") or {}),
                 ).model_dump(by_alias=True),
@@ -7547,6 +9041,7 @@ def _assistant_build_doseid_analysis(
         try:
             llm_payload = parse_doseid_text_with_openai(text=message_text, parser_model=parser_model)
             patient_context = _doseid_merge_patient_context(
+                message_text,
                 patient_context,
                 dict(llm_payload.get("patientContext") or {}),
             )
@@ -7712,6 +9207,19 @@ def _assistant_build_doseid_followup_prompt(
     return prompt
 
 
+def _assistant_append_dosing_invitation(message: str) -> str:
+    text = (message or "").strip()
+    if not text:
+        return "If you want, I can also calculate the right dose for this patient next."
+    normalized = _assistant_doseid_normalize(text)
+    if any(token in normalized for token in ("dose", "dosing", "doseid")):
+        return text
+    suffix = " If you want, I can also calculate the right dose for this patient next."
+    if text.endswith(("?", "!", ".")):
+        return text + suffix
+    return text + "." + suffix
+
+
 def _assistant_probid_doseid_candidate_ids(
     module: SyndromeModule,
     text_result: TextAnalyzeResponse,
@@ -7773,14 +9281,194 @@ def _assistant_probid_doseid_candidate_ids(
     return []
 
 
-def _assistant_mechid_doseid_candidate_ids(result: MechIDTextAnalyzeResponse) -> List[str]:
-    if result.analysis is None:
+def _assistant_dfi_has_osteomyelitis_signal(text_result: TextAnalyzeResponse, case_text: str | None = None) -> bool:
+    parsed_request = text_result.parsed_request
+    findings = parsed_request.findings if parsed_request is not None else {}
+    if any(
+        findings.get(item_id) == "present"
+        for item_id in {
+            "dfi_probe_to_bone_positive",
+            "dfi_exposed_bone",
+            "dfi_xray_osteomyelitis",
+            "dfi_mri_osteomyelitis_or_abscess",
+            "dfi_bone_biopsy_culture_pos",
+            "dfi_bone_histology_pos",
+            "dfi_positive_bone_margin",
+        }
+    ):
+        return True
+    return "osteomyelitis" in _normalize_choice(case_text)
+
+
+def _assistant_build_probid_mechid_followup_text(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> str | None:
+    case_text = (state.case_text or "").strip()
+    if not case_text:
+        return None
+
+    mechid_result = _build_mechid_text_response(
+        case_text,
+        parser_strategy=state.parser_strategy,
+        parser_model=state.parser_model,
+        allow_fallback=state.allow_fallback,
+    )
+    parsed = mechid_result.parsed_request
+    if parsed is None:
+        return None
+    has_organism_signal = bool(parsed.organism or parsed.mentioned_organisms)
+    has_ast_signal = bool(parsed.susceptibility_results)
+    if not (has_organism_signal and has_ast_signal):
+        return None
+
+    if module.id != "diabetic_foot_infection":
+        return case_text
+
+    findings = text_result.parsed_request.findings if text_result.parsed_request is not None else {}
+    prefix_parts: List[str] = []
+    if _assistant_dfi_has_osteomyelitis_signal(text_result, case_text):
+        prefix_parts.append("Diabetic foot osteomyelitis.")
+    else:
+        prefix_parts.append("Diabetic foot infection.")
+
+    if findings.get("dfi_bone_biopsy_culture_pos") == "present" or any(
+        token in _normalize_choice(case_text) for token in ("bone culture", "bone biopsy", "bone specimen")
+    ):
+        prefix_parts.append("Use the bone culture isolate and susceptibility results for treatment planning.")
+    elif findings.get("dfi_deep_tissue_culture_pos") == "present" or any(
+        token in _normalize_choice(case_text) for token in ("deep tissue culture", "operative culture", "tissue culture")
+    ):
+        prefix_parts.append("Use the deep tissue culture isolate and susceptibility results for treatment planning.")
+
+    if findings.get("dfi_surgery_debridement_done") == "present":
+        prefix_parts.append("Surgical debridement or source control has already been performed.")
+    if findings.get("dfi_minor_amputation_done") == "present":
+        prefix_parts.append("Minor amputation or bone resection has already been performed.")
+    if findings.get("dfi_positive_bone_margin") == "present":
+        prefix_parts.append("There is a positive residual bone margin after resection.")
+
+    prefix_parts.append(case_text)
+    return " ".join(prefix_parts)
+
+
+def _assistant_mechid_supported_oral_candidates(result: MechIDTextAnalyzeResponse) -> List[str]:
+    parsed = result.parsed_request
+    if parsed is None or result.analysis is None:
         return []
-    text_blocks: List[str] = []
-    text_blocks.extend(result.analysis.therapy_notes or [])
-    text_blocks.extend(result.analysis.mechanisms or [])
-    text_blocks.extend(result.analysis.cautions or [])
-    return _assistant_detect_doseid_medication_ids("\n".join(text_blocks))
+    syndrome = parsed.tx_context.syndrome
+    if syndrome == "Uncomplicated cystitis":
+        susceptible_agents = [
+            antibiotic
+            for antibiotic, call in parsed.susceptibility_results.items()
+            if call == "Susceptible"
+        ]
+        return [
+            agent
+            for agent in (
+                "Nitrofurantoin",
+                "Trimethoprim/Sulfamethoxazole",
+                "Fosfomycin",
+                "Ciprofloxacin",
+                "Levofloxacin",
+            )
+            if agent in susceptible_agents
+        ]
+    if syndrome in {"Bone/joint infection", "Other deep-seated / high-inoculum focus"}:
+        return _mechid_high_bioavailability_oral_choices(result.analysis, parsed)
+    return []
+
+
+def _assistant_append_detected_doseid_ids(candidates: List[str], text: str | None) -> None:
+    if not text:
+        return
+    for medication_id in _assistant_detect_doseid_medication_ids(text):
+        if medication_id not in candidates:
+            candidates.append(medication_id)
+
+
+def _assistant_mechid_doseid_candidate_ids(result: MechIDTextAnalyzeResponse) -> List[str]:
+    candidates: List[str] = []
+    for item in _assistant_mechid_supported_oral_candidates(result):
+        _assistant_append_detected_doseid_ids(candidates, item)
+    if result.provisional_advice is not None:
+        for item in result.provisional_advice.oral_options or []:
+            _assistant_append_detected_doseid_ids(candidates, item)
+        for item in result.provisional_advice.recommended_options or []:
+            _assistant_append_detected_doseid_ids(candidates, item)
+    if result.analysis is not None:
+        for item in result.analysis.dosing_recommendations or []:
+            _assistant_append_detected_doseid_ids(candidates, item.medication_name)
+        for item in result.analysis.therapy_notes or []:
+            _assistant_append_detected_doseid_ids(candidates, item)
+        for item in result.analysis.favorable_signals or []:
+            _assistant_append_detected_doseid_ids(candidates, item)
+    if _assistant_mechid_should_pair_levo_with_rifampin(result) and "rifampin" not in candidates:
+        candidates.insert(1 if candidates else 0, "rifampin")
+    return _assistant_unique_medication_ids(candidates)[:4]
+
+
+def _assistant_mechid_doseid_options(result: MechIDTextAnalyzeResponse) -> List[AssistantOption]:
+    medication_ids = _assistant_mechid_doseid_candidate_ids(result)
+    if not medication_ids:
+        return []
+    meds_by_id = _assistant_doseid_medications_by_id()
+    options: List[AssistantOption] = []
+    pair_levo_with_rifampin = _assistant_mechid_should_pair_levo_with_rifampin(result)
+    for medication_id in medication_ids:
+        med = meds_by_id.get(medication_id)
+        if med is None:
+            continue
+        description = "Carry this antibiotic into DoseID with the same case context."
+        if pair_levo_with_rifampin and medication_id == "levofloxacin":
+            description = "Carry levofloxacin plus rifampin into DoseID with the same hardware-associated staphylococcal context."
+        options.append(
+            AssistantOption(
+                value=f"doseid_pick:{medication_id}",
+                label=f"Dose {med.name}",
+                description=description,
+            )
+        )
+    return options
+
+
+def _assistant_build_mechid_doseid_prompt(
+    result: MechIDTextAnalyzeResponse,
+    *,
+    case_text: str | None,
+    medication_ids: List[str] | None = None,
+) -> str | None:
+    medication_ids = _assistant_unique_medication_ids(
+        medication_ids if medication_ids is not None else _assistant_mechid_doseid_candidate_ids(result)
+    )
+    if not medication_ids:
+        return None
+    meds_by_id = _assistant_doseid_medications_by_id()
+    medication_names = [meds_by_id[item].name for item in medication_ids if item in meds_by_id]
+    if not medication_names:
+        return None
+
+    parsed = result.parsed_request
+    context_bits: List[str] = []
+    if parsed is not None:
+        if parsed.organism:
+            context_bits.append(f"Organism: {parsed.organism}")
+        if parsed.tx_context.syndrome != "Not specified":
+            context_bits.append(f"Syndrome: {parsed.tx_context.syndrome}")
+        if parsed.tx_context.focus_detail != "Not specified":
+            context_bits.append(f"Focus: {parsed.tx_context.focus_detail}")
+        if parsed.tx_context.severity != "Not specified":
+            context_bits.append(f"Severity: {parsed.tx_context.severity}")
+        if parsed.tx_context.oral_preference:
+            context_bits.append("Prefer an oral option if supported")
+
+    prompt = f"Please calculate dosing for {_join_readable(medication_names)} using the same case context."
+    if context_bits:
+        prompt += " " + " ".join(context_bits) + "."
+    if case_text and case_text.strip():
+        prompt += f" Case context: {case_text.strip()}"
+    return prompt
 
 
 def _assistant_start_doseid_from_probid_state(state: AssistantState) -> AssistantTurnResponse | None:
@@ -7807,6 +9495,26 @@ def _assistant_start_doseid_from_probid_state(state: AssistantState) -> Assistan
 
 
 def _assistant_start_doseid_from_mechid_state(state: AssistantState) -> AssistantTurnResponse | None:
+    return _assistant_start_selected_doseid_from_mechid_state(state, medication_id=None)
+
+
+def _assistant_expand_mechid_selected_doseid_ids(
+    result: MechIDTextAnalyzeResponse,
+    medication_id: str | None,
+) -> List[str] | None:
+    if medication_id is None:
+        return None
+    medication_ids = [medication_id]
+    if medication_id == "levofloxacin" and _assistant_mechid_should_pair_levo_with_rifampin(result):
+        medication_ids.append("rifampin")
+    return _assistant_unique_medication_ids(medication_ids)
+
+
+def _assistant_start_selected_doseid_from_mechid_state(
+    state: AssistantState,
+    *,
+    medication_id: str | None,
+) -> AssistantTurnResponse | None:
     if not (state.mechid_text or "").strip():
         return None
     result = _build_mechid_text_response(
@@ -7815,13 +9523,53 @@ def _assistant_start_doseid_from_mechid_state(state: AssistantState) -> Assistan
         parser_model=state.parser_model,
         allow_fallback=state.allow_fallback,
     )
-    medication_ids = _assistant_mechid_doseid_candidate_ids(result)
-    prompt = _assistant_build_doseid_followup_prompt(medication_ids, case_text=state.mechid_text)
+    selected_ids = _assistant_expand_mechid_selected_doseid_ids(result, medication_id)
+    prompt = _assistant_build_mechid_doseid_prompt(
+        result,
+        case_text=state.mechid_text,
+        medication_ids=selected_ids,
+    )
     if not prompt:
         return None
     response = _assistant_start_doseid_from_text(prompt, state)
     if response is not None:
-        response.assistant_message = "I carried the isolate consult forward into dosing. " + response.assistant_message
+        syndrome = result.parsed_request.tx_context.syndrome if result.parsed_request is not None else "Not specified"
+        focus = result.parsed_request.tx_context.focus_detail if result.parsed_request is not None else "Not specified"
+        context_label = focus if focus != "Not specified" else syndrome
+        med_name = None
+        if medication_id:
+            med = _assistant_doseid_medications_by_id().get(medication_id)
+            if med is not None:
+                med_name = med.name
+        paired_name = None
+        if selected_ids and len(selected_ids) > 1:
+            meds_by_id = _assistant_doseid_medications_by_id()
+            paired_names = [meds_by_id[item].name for item in selected_ids if item in meds_by_id]
+            if paired_names:
+                paired_name = _join_readable(paired_names)
+        if context_label != "Not specified":
+            if paired_name:
+                response.assistant_message = (
+                    f"I carried {paired_name} forward into dosing using the same {context_label.lower()} context. "
+                    + response.assistant_message
+                )
+            elif med_name:
+                response.assistant_message = (
+                    f"I carried {med_name} forward into dosing using the same {context_label.lower()} context. "
+                    + response.assistant_message
+                )
+            else:
+                response.assistant_message = (
+                    f"I carried the isolate consult forward into dosing using the same {context_label.lower()} context. "
+                    + response.assistant_message
+                )
+        else:
+            if paired_name:
+                response.assistant_message = f"I carried {paired_name} forward into dosing. " + response.assistant_message
+            elif med_name:
+                response.assistant_message = f"I carried {med_name} forward into dosing. " + response.assistant_message
+            else:
+                response.assistant_message = "I carried the isolate consult forward into dosing. " + response.assistant_message
     return response
 
 
@@ -7835,12 +9583,16 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
         return sel
     if sel == IMMUNOID_ASSISTANT_ID:
         return sel
+    if sel == ALLERGYID_ASSISTANT_ID:
+        return sel
     if sel and store.get(sel):
         return sel
 
     msg = (req.message or "").strip()
     if not msg:
         return None
+    if _assistant_is_allergyid_intent(msg):
+        return ALLERGYID_ASSISTANT_ID
     if _assistant_is_mechid_intent(msg):
         return MECHID_ASSISTANT_ID
     if _assistant_is_doseid_intent(msg):
@@ -7995,8 +9747,33 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if direct_immunoid_response is not None:
                 return direct_immunoid_response
             probid_preview = _assistant_preview_case_from_text(message_text, state, require_high_confidence=True)
+            if _assistant_is_endo_imaging_question(message_text):
+                endo_preview = _assistant_preview_case_from_text(
+                    message_text,
+                    state,
+                    module_hint="endo",
+                    require_high_confidence=False,
+                )
+                if endo_preview is not None:
+                    probid_preview = endo_preview
             mechid_intent = _assistant_mechid_intent_profile(message_text)
             mechid_preview = _assistant_preview_mechid_from_text(message_text, state)
+            if (
+                probid_preview is not None
+                and probid_preview[1].id == "endo"
+                and _assistant_is_endo_imaging_question(message_text)
+            ):
+                case_response = _assistant_intake_case_from_text(req, state)
+                if case_response is not None:
+                    case_response.assistant_message = (
+                        "This reads mainly like an endocarditis imaging question, so I’ll focus on the syndrome side first. "
+                        + case_response.assistant_message
+                    )
+                    case_response.tips = [
+                        "If this is really more about antibiotic choice for an isolate, we can still move into resistance afterward.",
+                        *(case_response.tips or []),
+                    ][:3]
+                    return case_response
             if probid_preview is not None and mechid_preview is not None and mechid_intent["strong_mechid_trigger"]:
                 _, module, _, _ = probid_preview
                 state.stage = "select_consult_focus"
@@ -8052,6 +9829,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         "For syndrome help, a useful reply would be: 'fever, flank pain, pyuria, and positive urine culture'.",
                     ],
                 )
+
+        direct_allergy_response = _assistant_start_allergyid_from_text(req.message or "", state)
+        if direct_allergy_response is not None:
+            return direct_allergy_response
 
         direct_mechid_response = _assistant_intake_mechid_from_text(req, state)
         if direct_mechid_response is not None:
@@ -8170,6 +9951,34 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
 
+            if chosen_module_id == ALLERGYID_ASSISTANT_ID:
+                state.workflow = "allergyid"
+                state.stage = "done"
+                state.module_id = None
+                state.preset_id = None
+                state.case_section = None
+                state.case_text = None
+                state.mechid_text = None
+                state.doseid_text = None
+                state.allergyid_text = None
+                state.pretest_factor_ids = []
+                state.pretest_factor_labels = []
+                state.endo_blood_culture_context = None
+                state.endo_score_factor_ids = []
+                _assistant_reset_immunoid_state(state)
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Describe the allergy history and the antibiotics you are considering. "
+                        "For example: 'amoxicillin anaphylaxis, can I use cefazolin for MSSA bacteremia?'"
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                    tips=[
+                        "The most useful details are the culprit antibiotic, what happened, and the candidate drug you want to use.",
+                        "If the reaction was severe, say so explicitly, for example SJS/TEN, DRESS, organ injury, or hemolysis.",
+                    ],
+                )
+
             state.workflow = "probid"
             _assistant_reset_immunoid_state(state)
             state.module_id = chosen_module_id
@@ -8197,7 +10006,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         return AssistantTurnResponse(
             assistantMessage=(
-                "Hi, I'm your infectious diseases assistant. What question do you have, or how can I help?"
+                "Hi! I'm your IDAssistant. Ask me an infectious diseases question, or upload an AST image so I can help with your ID question."
             ),
             state=state,
             options=_assistant_module_options(),
@@ -8208,7 +10017,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "select_syndrome_module":
         chosen_module_id = _select_module_from_turn(req)
-        if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, DOSEID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID}:
+        if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, DOSEID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID, ALLERGYID_ASSISTANT_ID}:
             state.workflow = "probid"
             _assistant_reset_immunoid_state(state)
             state.module_id = chosen_module_id
@@ -8360,6 +10169,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             ],
         )
 
+    if req.message and req.message.strip() and state.workflow != "allergyid":
+        direct_allergy_response = _assistant_start_allergyid_from_text(req.message.strip(), state)
+        if direct_allergy_response is not None:
+            return direct_allergy_response
+
     if state.stage == "mechid_describe":
         message_text = (req.message or "").strip()
         if not message_text:
@@ -8458,14 +10272,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
                 done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
-            if _assistant_mechid_doseid_candidate_ids(mechid_result):
-                done_options.insert(
-                    1 if done_options and done_options[0].value == "continue_to_syndrome" else 0,
-                    AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
-                )
+            doseid_options = _assistant_mechid_doseid_options(mechid_result)
+            if doseid_options:
+                narrated_message = _assistant_append_dosing_invitation(narrated_message)
+                insert_at = 1 if done_options and done_options[0].value == "continue_to_syndrome" else 0
+                for option in reversed(doseid_options):
+                    done_options.insert(insert_at, option)
                 done_tips.insert(
                     1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
-                    "If you want, I can keep going into dosing for the therapy options suggested by this isolate consult.",
+                    "If you want, pick one of the suggested antibiotics and I can carry it into DoseID using the same case context.",
                 )
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
@@ -8793,7 +10608,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_pretest_factor_options(module, state.pretest_factor_ids, state),
             tips=[
                 "Click any factor or score component that applies, then continue.",
-                "Click Next when you’re ready to move on.",
+                "Tap Continue consult when you’re ready to move on.",
             ],
         )
 
@@ -8804,6 +10619,24 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         selection = (req.selection or "").strip()
         message_text = (req.message or "").strip()
+        inserted_item = _assistant_append_case_item_from_selection(module, state, selection)
+        if inserted_item[0] is not None:
+            text_result = _assistant_parse_case_text(module, state)
+            current_label = _assistant_case_section_label(module, state.case_section)
+            return AssistantTurnResponse(
+                assistantMessage=(
+                    f"Added {inserted_item[1]} to {current_label}. "
+                    "Keep going in this section, or tap Continue consult when you’re ready to move on."
+                ),
+                assistantNarrationRefined=False,
+                state=state,
+                options=_assistant_case_prompt_options(module, state, section_override=state.case_section),
+                analysis=text_result,
+                tips=[
+                    "You can keep tapping findings or type the detail in your own words.",
+                    "When this section is done, continue to the next part of the case.",
+                ],
+            )
         if not message_text and not (state.case_section and selection == "continue_case_draft"):
             if state.case_section:
                 prompt, tips = _assistant_case_section_prompt(module, state.case_section)
@@ -8922,6 +10755,25 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             raise HTTPException(status_code=400, detail=f"Module '{state.module_id}' not found")
 
         selection = (req.selection or "").strip()
+        inserted_item = _assistant_append_case_item_from_selection(module, state, selection)
+        if inserted_item[0] is not None:
+            text_result = _assistant_parse_case_text(module, state)
+            return AssistantTurnResponse(
+                assistantMessage=_assistant_concise_probid_follow_up(
+                    module,
+                    text_result,
+                    state,
+                    lead=f"Okay, I added {inserted_item[1]}.",
+                ),
+                assistantNarrationRefined=False,
+                state=state,
+                options=_assistant_review_options_for_case(module, text_result, state),
+                analysis=text_result,
+                tips=[
+                    "Keep replying in normal words and I will keep the case moving one question at a time.",
+                    "If the extraction looks right already, ask for my consultant impression.",
+                ],
+            )
         if selection.startswith("add_missing:"):
             item_id = selection.split(":", 1)[1]
             item = _assistant_case_item_by_id(module, item_id)
@@ -9030,12 +10882,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 text_result.analysis,
                 missing_suggestions=missing_suggestions,
                 include_panel_note=True,
+                case_text=state.case_text,
             )
             narrated_message, narration_refined = narrate_probid_assistant_message(
                 text_result=text_result,
                 fallback_message=final_message,
                 module_label=_assistant_module_label(module),
             )
+            mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, text_result, state)
+            if mechid_followup_text:
+                state.pending_followup_workflow = "mechid"
+                state.pending_followup_text = mechid_followup_text
+            elif state.pending_followup_workflow == "mechid":
+                state.pending_followup_workflow = None
+                state.pending_followup_text = None
             done_options = [
                 AssistantOption(value="add_more_details", label="Update this case"),
                 AssistantOption(value="restart", label="Start new consult"),
@@ -9048,6 +10908,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                 done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
             if _assistant_probid_doseid_candidate_ids(module, text_result, state):
+                narrated_message = _assistant_append_dosing_invitation(narrated_message)
                 done_options.insert(
                     1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
                     AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
@@ -9067,6 +10928,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         if req.message and req.message.strip():
             state.case_text = _append_case_text(state.case_text, req.message)
+            _assistant_merge_pretest_factor_ids(
+                state,
+                _assistant_infer_pretest_factor_ids_from_text(module, req.message, state),
+            )
+            _sync_pretest_factor_labels(state, module)
             if module.id == "endo":
                 _assistant_merge_endo_score_factor_ids(state, _assistant_infer_endo_score_factor_ids_from_text(state, req.message))
             text_result = _assistant_parse_case_text(module, state)
@@ -9098,6 +10964,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
     if state.stage == "done":
         selection = (req.selection or "").strip()
+        if req.message and req.message.strip() and state.workflow != "allergyid":
+            direct_allergy_response = _assistant_start_allergyid_from_text(req.message.strip(), state)
+            if direct_allergy_response is not None:
+                return direct_allergy_response
         if state.workflow == "immunoid" and selection and _assistant_apply_immunoid_selection(state, selection):
             if not state.immunoid_selected_agent_ids:
                 state.stage = "immunoid_select_agents"
@@ -9112,6 +10982,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             followup_response = _assistant_start_pending_followup(state)
             if followup_response is not None:
                 return followup_response
+        if state.workflow == "mechid" and selection.startswith("doseid_pick:"):
+            medication_id = selection.split(":", 1)[1].strip()
+            if medication_id:
+                followup_response = _assistant_start_selected_doseid_from_mechid_state(
+                    state,
+                    medication_id=medication_id,
+                )
+                if followup_response is not None:
+                    return followup_response
         if selection == "continue_to_dosing":
             if state.workflow == "probid":
                 followup_response = _assistant_start_doseid_from_probid_state(state)
@@ -9154,6 +11033,17 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         "For example: 'anti-HBc positive', 'IGRA negative', 'lived in Arizona', or 'prednisone for 6 weeks'.",
                     ],
                 )
+            if state.workflow == "allergyid":
+                return AssistantTurnResponse(
+                    assistantMessage=(
+                        "Add the new allergy detail or candidate antibiotic in plain language, and I will update the same allergy consult."
+                    ),
+                    state=state,
+                    options=[AssistantOption(value="restart", label="Start new consult")],
+                    tips=[
+                        "For example: 'the reaction was only GI upset', 'it was ceftriaxone not amoxicillin', or 'can I use cefepime instead?'",
+                    ],
+                )
             return AssistantTurnResponse(
                 assistantMessage=(
                     "Add the new test result or case detail in plain language, and I will update the same consult."
@@ -9194,14 +11084,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 if state.pending_followup_workflow == "probid" and (state.pending_followup_text or "").strip():
                     done_options.insert(0, AssistantOption(value="continue_to_syndrome", label="Continue to syndrome"))
                     done_tips.insert(0, "If you want, I can carry the same case into the syndrome workup next.")
-                if _assistant_mechid_doseid_candidate_ids(updated_result):
-                    done_options.insert(
-                        1 if done_options and done_options[0].value == "continue_to_syndrome" else 0,
-                        AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
-                    )
+                doseid_options = _assistant_mechid_doseid_options(updated_result)
+                if doseid_options:
+                    updated_message = _assistant_append_dosing_invitation(updated_message)
+                    insert_at = 1 if done_options and done_options[0].value == "continue_to_syndrome" else 0
+                    for option in reversed(doseid_options):
+                        done_options.insert(insert_at, option)
                     done_tips.insert(
                         1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
-                        "If you want, I can keep going into dosing for the therapy options suggested by this isolate consult.",
+                        "If you want, pick one of the suggested antibiotics and I can carry it into DoseID using the same case context.",
                     )
                 return AssistantTurnResponse(
                     assistantMessage=f"{prefix} {updated_message}",
@@ -9217,6 +11108,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     previous_result = _assistant_parse_case_text(module, state)
                     _assistant_populate_case_review_analysis(module, previous_result)
                     state.case_text = _append_case_text(state.case_text, req.message)
+                    _assistant_merge_pretest_factor_ids(
+                        state,
+                        _assistant_infer_pretest_factor_ids_from_text(module, req.message, state),
+                    )
+                    _sync_pretest_factor_labels(state, module)
                     updated_result = _assistant_parse_case_text(module, state)
                     _assistant_populate_case_review_analysis(module, updated_result)
                     if updated_result.analysis is None:
@@ -9244,12 +11140,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         updated_result.analysis,
                         missing_suggestions=missing_suggestions,
                         include_panel_note=True,
+                        case_text=state.case_text,
                     )
                     narrated_message, narration_refined = narrate_probid_assistant_message(
                         text_result=updated_result,
                         fallback_message=final_message,
                         module_label=_assistant_module_label(module),
                     )
+                    mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, updated_result, state)
+                    if mechid_followup_text:
+                        state.pending_followup_workflow = "mechid"
+                        state.pending_followup_text = mechid_followup_text
+                    elif state.pending_followup_workflow == "mechid":
+                        state.pending_followup_workflow = None
+                        state.pending_followup_text = None
                     probability_change = _assistant_probability_change_sentence(
                         previous_result.analysis,
                         updated_result.analysis,
@@ -9269,6 +11173,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                         done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
                     if _assistant_probid_doseid_candidate_ids(module, updated_result, state):
+                        narrated_message = _assistant_append_dosing_invitation(narrated_message)
                         done_options.insert(
                             1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
                             AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
@@ -9291,6 +11196,13 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     state,
                     prefix="I updated the immunosuppression checklist with the new information. ",
                 )
+            if state.workflow == "allergyid":
+                state.allergyid_text = _assistant_merge_allergyid_followup_text(state.allergyid_text, req.message)
+                return _assistant_allergyid_response(
+                    state,
+                    message_text=state.allergyid_text or req.message,
+                    prefix="I updated the allergy consult with the new information. ",
+                )
 
     # done / fallback
     if restart_requested:
@@ -9298,6 +11210,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             workflow="probid",
             caseText=None,
             mechidText=None,
+            allergyidText=None,
             pendingIntakeText=None,
             pendingFollowupWorkflow=None,
             pendingFollowupText=None,
@@ -9321,6 +11234,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         state.case_text = None
         state.mechid_text = None
         state.doseid_text = None
+        state.allergyid_text = None
         _assistant_reset_immunoid_state(state)
         state.pretest_factor_ids = []
         state.pretest_factor_labels = []

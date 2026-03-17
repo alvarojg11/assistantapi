@@ -178,6 +178,61 @@
     ]
   },
   {
+    "text": "Outpatient with a chronic diabetic foot ulcer, local warmth and erythema, purulent drainage, probe-to-bone positive, ESR above 70, and plain films concerning for osteomyelitis.",
+    "moduleId": "diabetic_foot_infection",
+    "presetId": "dfi_outpatient_ulcer",
+    "findings": {
+      "dfi_host_longstanding_or_recurrent_ulcer": "present",
+      "dfi_local_inflammation_2plus": "present",
+      "dfi_purulence": "present",
+      "dfi_probe_to_bone_positive": "present",
+      "dfi_esr_high": "present",
+      "dfi_xray_osteomyelitis": "present"
+    },
+    "orderedFindingIds": [
+      "dfi_host_longstanding_or_recurrent_ulcer",
+      "dfi_local_inflammation_2plus",
+      "dfi_purulence",
+      "dfi_probe_to_bone_positive",
+      "dfi_esr_high",
+      "dfi_xray_osteomyelitis"
+    ]
+  },
+  {
+    "text": "Hospital patient with diabetic foot wound, hemodynamic instability, gangrene, deep abscess, leukocytosis, and clear local signs of infection.",
+    "moduleId": "diabetic_foot_infection",
+    "presetId": "dfi_consult_high",
+    "findings": {
+      "dfi_local_inflammation_2plus": "present",
+      "dfi_systemic_toxicity": "present",
+      "dfi_deep_abscess_or_gangrene": "present",
+      "dfi_wbc_high": "present"
+    },
+    "orderedFindingIds": [
+      "dfi_local_inflammation_2plus",
+      "dfi_systemic_toxicity",
+      "dfi_deep_abscess_or_gangrene",
+      "dfi_wbc_high"
+    ]
+  },
+  {
+    "text": "Stable diabetic foot ulcer with probe-to-bone positive, MRI compatible with osteomyelitis, forefoot only, and bone biopsy culture positive.",
+    "moduleId": "diabetic_foot_infection",
+    "presetId": "dfi_ed_possible",
+    "findings": {
+      "dfi_probe_to_bone_positive": "present",
+      "dfi_mri_osteomyelitis_or_abscess": "present",
+      "dfi_forefoot_only": "present",
+      "dfi_bone_biopsy_culture_pos": "present"
+    },
+    "orderedFindingIds": [
+      "dfi_probe_to_bone_positive",
+      "dfi_mri_osteomyelitis_or_abscess",
+      "dfi_forefoot_only",
+      "dfi_bone_biopsy_culture_pos"
+    ]
+  },
+  {
     "text": "Clinic patient with three weeks of cough, weight loss, positive QuantiFERON, sputum Xpert positive, and chest x-ray suggestive of pulmonary tuberculosis.",
     "moduleId": "active_tb",
     "presetId": "tb_low",

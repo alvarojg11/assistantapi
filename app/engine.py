@@ -31,6 +31,18 @@ ENDO_SCORE_ITEM_IDS = [
     "endo_handoc_na",
 ]
 
+ENDO_TYPICAL_MAJOR_MICRO_IDS = {
+    "endo_bcx_major_typical",
+    "endo_bcx_saureus_multi",
+    "endo_bcx_cons_prosthetic_multi",
+    "endo_bcx_efaecalis_multi",
+    "endo_bcx_enterococcus_prosthetic_multi",
+    "endo_bcx_nbhs_multi",
+    "endo_coxiella_major",
+}
+
+ENDO_PERSISTENT_BACTEREMIA_INCREMENTAL_LR = 2.5
+
 HANDOC_SPECIES_POINTS: Dict[str, int] = {
     "unspecified_other": 0,
     "s_anginosus_group": -1,
@@ -144,6 +156,11 @@ BASE_HARM_BY_MODULE: Dict[str, dict] = {
         "missedDx": 26,
         "unnecessaryTx": 8,
         "evidence": {"short": "IDSA SSTI Guideline", "url": None},
+    },
+    "diabetic_foot_infection": {
+        "missedDx": 14,
+        "unnecessaryTx": 6,
+        "evidence": {"short": "IWGDF/IDSA DFI Guideline", "url": "https://doi.org/10.1093/cid/ciad527"},
     },
     "inv_mold": {
         "missedDx": 18,
@@ -431,6 +448,15 @@ def prepare_probid_inputs(module: SyndromeModule, req: AnalyzeRequest) -> ProbID
     if direct_pretest_multiplier != 1.0:
         notes.append(f"Baseline pretest modifiers adjusted the pretest odds by x{direct_pretest_multiplier:.2f}.")
 
+    if module.id == "endo" and analysis_findings.get("endo_bcx_major_persistent") == "present":
+        if any(analysis_findings.get(item_id) == "present" for item_id in ENDO_TYPICAL_MAJOR_MICRO_IDS):
+            persistent_item = next((item for item in module.items if item.id == "endo_bcx_major_persistent"), None)
+            if persistent_item is not None:
+                persistent_item.lr_pos = ENDO_PERSISTENT_BACTEREMIA_INCREMENTAL_LR
+                notes.append(
+                    "Persistent bacteremia was counted as an incremental modifier (LR 2.50) on top of the concurrent major typical-organism blood-culture signal, rather than as a second full independent Duke-major microbiology LR, to limit double counting of correlated endocarditis evidence."
+                )
+
     return ProbIDPreparation(
         analysis_findings=analysis_findings,
         harm_findings=harm_findings,
@@ -503,7 +529,7 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 "Prosthetic/device host risk selected.",
                 _evidence("Delgado et al. ESC Endocarditis", "https://doi.org/10.1093/eurheartj/ehad193"),
             )
-        if has("endo_bcx_major_typical") or has("endo_bcx_major_persistent"):
+        if any(has(item_id) for item_id in (ENDO_TYPICAL_MAJOR_MICRO_IDS | {"endo_bcx_major_persistent"})):
             add_missed_dx_driver(
                 4,
                 "Major microbiology criterion selected.",
@@ -710,6 +736,26 @@ def estimate_harms(module_id: str, states: Dict[str, FindingState]) -> HarmEstim
                 5,
                 "Strong systemic toxicity, operative, or imaging evidence selected.",
                 _evidence("Fernando et al. Ann Surg"),
+            )
+
+    if module_id == "diabetic_foot_infection":
+        if has("dfi_systemic_toxicity") or has("dfi_deep_abscess_or_gangrene"):
+            add_missed_dx_driver(
+                8,
+                "Systemic toxicity, gangrene, or other destructive diabetic foot feature selected.",
+                _evidence("IWGDF/IDSA DFI Guideline", "https://doi.org/10.1093/cid/ciad527"),
+            )
+        if has("dfi_host_pad_or_ischemia"):
+            add_missed_dx_driver(
+                3,
+                "PAD or ischemia selected, which raises limb risk if infection is undertreated.",
+                _evidence("IWGDF/IDSA DFI Guideline", "https://doi.org/10.1093/cid/ciad527"),
+            )
+        if has("dfi_bone_biopsy_culture_pos") or has("dfi_bone_histology_pos"):
+            add_missed_dx_driver(
+                4,
+                "Bone-sampling evidence selected, which raises the consequence of undertreating diabetic foot osteomyelitis.",
+                _evidence("IWGDF/IDSA DFI Guideline", "https://doi.org/10.1093/cid/ciad527"),
             )
 
     if module_id == "inv_mold":
