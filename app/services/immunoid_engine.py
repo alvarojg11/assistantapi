@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, List
 
 from .immunoid_regimens import IMMUNOID_REGIMENS
@@ -22,6 +24,67 @@ class AgentDef:
     groups: tuple[str, ...]
 
 
+def _split_source_aliases(source_name: str, canonical_name: str) -> tuple[str, ...]:
+    aliases: set[str] = set()
+    base_name = re.sub(r"\s*\([^)]*\)", "", source_name).strip()
+    if base_name and base_name.casefold() == canonical_name.strip().casefold():
+        aliases.add(base_name)
+    for block in re.findall(r"\(([^)]+)\)", source_name):
+        for part in re.split(r"/|,|;", block):
+            alias = part.strip()
+            if alias:
+                aliases.add(alias)
+    return tuple(sorted(aliases))
+
+
+IMMUNOID_MANUAL_AGENT_ALIASES: Dict[str, tuple[str, ...]] = {
+    "rituximab": ("rituxan", "rituxan hycela"),
+    "obinutuzumab": ("gazyva", "gazyvaro"),
+    "ocrelizumab": ("ocrevus",),
+    "ofatumumab": ("arzerra",),
+    "ofatumumab_kesimpta": ("kesimpta",),
+    "ublituximab": ("briumvi",),
+    "daratumumab": ("darzalex", "darzalex faspro", "faspro"),
+    "abatacept": ("orencia",),
+    "belatacept": ("nulojix",),
+    "tocilizumab": ("actemra",),
+    "sarilumab": ("kevzara",),
+    "ustekinumab": ("stelara",),
+    "secukinumab": ("cosentyx",),
+    "ixekizumab": ("taltz",),
+    "guselkumab": ("tremfya",),
+    "risankizumab": ("skyrizi",),
+    "tildrakizumab": ("ilumya", "ilumetri"),
+    "infliximab": ("remicade", "inflectra", "renflexis", "avsola", "ixifi"),
+    "adalimumab": ("humira", "hyrimoz", "hadlima", "amjevita", "abrilada", "cyltezo", "simlandi", "yusimry"),
+    "etanercept": ("enbrel", "eticovo", "erelzi"),
+    "golimumab": ("simponi", "simponi aria"),
+    "certolizumab": ("cimzia",),
+    "vedolizumab": ("entyvio",),
+    "natalizumab": ("tysabri",),
+    "belimumab": ("benlysta",),
+    "anifrolumab": ("saphnelo",),
+    "eculizumab": ("soliris",),
+    "ravulizumab": ("ultomiris",),
+    "inebilizumab": ("uplizna",),
+    "satralizumab": ("enspryng",),
+    "bortezomib": ("velcade",),
+    "carfilzomib": ("kyprolis",),
+    "ixazomib": ("ninlaro",),
+    "lenalidomide": ("revlimid",),
+    "pomalidomide": ("pomalyst",),
+    "thalidomide": ("thalomid",),
+    "cyclophosphamide": ("cytoxan",),
+    "hydroxychloroquine": ("plaquenil",),
+    "azathioprine": ("imuran",),
+    "mycophenolate_mofetil": ("mmf", "cellcept"),
+    "tacrolimus": ("prograf", "envarsus", "astagraf"),
+    "cyclosporine": ("neoral", "gengraf", "sandimmune"),
+    "sirolimus": ("rapamune",),
+    "everolimus": ("afinitor", "zortress"),
+}
+
+
 def _agent(
     agent_id: str,
     name: str,
@@ -36,6 +99,22 @@ def _agent(
         risk_tags=risk_tags,
         groups=groups,
     )
+
+
+@lru_cache
+def immunoid_agent_alias_map() -> Dict[str, tuple[str, ...]]:
+    alias_map: Dict[str, tuple[str, ...]] = {}
+    for agent_id, agent in AGENTS.items():
+        source_name = str(IMMUNOID_SOURCE_AGENTS.get(agent_id, {}).get("name") or agent.name)
+        aliases = {
+            agent.name,
+            source_name,
+            agent_id.replace("_", " "),
+        }
+        aliases.update(_split_source_aliases(source_name, agent.name))
+        aliases.update(IMMUNOID_MANUAL_AGENT_ALIASES.get(agent_id, ()))
+        alias_map[agent_id] = tuple(sorted(alias for alias in aliases if alias))
+    return alias_map
 
 
 SOURCES: Dict[str, SourceDef] = {
@@ -495,12 +574,14 @@ def _exposure_value(value: Any) -> str:
 
 
 def list_immunoid_agents() -> List[Dict[str, Any]]:
+    alias_map = immunoid_agent_alias_map()
     agents = [
         {
             "id": agent.id,
             "name": agent.name,
             "drugClass": agent.drug_class,
             "riskTags": list(agent.risk_tags),
+            "aliases": list(alias_map.get(agent.id, ())),
         }
         for agent in AGENTS.values()
     ]

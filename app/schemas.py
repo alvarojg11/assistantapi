@@ -280,6 +280,7 @@ class ImmunoAgentSummary(BaseModel):
     name: str
     drug_class: str = Field(alias="drugClass")
     risk_tags: List[str] = Field(default_factory=list, alias="riskTags")
+    aliases: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
 

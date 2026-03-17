@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -5995,6 +5996,10 @@ def _assistant_set_immunoid_signal_source(state: AssistantState, signal_id: str,
     state.immunoid_signal_sources[signal_id] = source
 
 
+IMMUNOID_AGENT_FUZZY_MIN_RATIO = 0.9
+IMMUNOID_AGENT_FUZZY_MAX_ALIAS_TOKENS = 4
+
+
 def _assistant_detect_immunoid_regimen_ids(message_text: str) -> List[str]:
     normalized = f" {_assistant_immunoid_normalize(message_text)} "
     matches: List[tuple[int, int, str]] = []
@@ -6049,6 +6054,7 @@ def _assistant_detect_immunoid_agent_ids(message_text: str) -> List[str]:
         aliases = {
             _assistant_immunoid_normalize(entry["name"]),
             _assistant_immunoid_normalize(entry["id"].replace("_", " ")),
+            *(_assistant_immunoid_normalize(alias) for alias in entry.get("aliases", ())),
         }
         for alias in aliases:
             if not alias:
@@ -6066,6 +6072,35 @@ def _assistant_detect_immunoid_agent_ids(message_text: str) -> List[str]:
             continue
         seen.add(agent_id)
         ordered.append(agent_id)
+    if ordered:
+        return ordered
+
+    tokens = _assistant_immunoid_normalize(message_text).split()
+    if not tokens:
+        return []
+    fuzzy_matches: List[tuple[float, int, str]] = []
+    for entry in list_immunoid_agents():
+        aliases = {
+            _assistant_immunoid_normalize(entry["name"]),
+            _assistant_immunoid_normalize(entry["id"].replace("_", " ")),
+            *(_assistant_immunoid_normalize(alias) for alias in entry.get("aliases", ())),
+        }
+        for alias in aliases:
+            alias_tokens = alias.split()
+            if not alias_tokens or len(alias_tokens) > IMMUNOID_AGENT_FUZZY_MAX_ALIAS_TOKENS:
+                continue
+            for start in range(0, len(tokens) - len(alias_tokens) + 1):
+                phrase = " ".join(tokens[start : start + len(alias_tokens)])
+                score = SequenceMatcher(None, phrase, alias).ratio()
+                if score >= IMMUNOID_AGENT_FUZZY_MIN_RATIO:
+                    fuzzy_matches.append((score, start, entry["id"]))
+                    break
+    fuzzy_matches.sort(key=lambda item: (-item[0], item[1]))
+    for _, _, agent_id in fuzzy_matches:
+        if agent_id in seen:
+            continue
+        seen.add(agent_id)
+        ordered.append(agent_id)
     return ordered
 
 
@@ -6078,10 +6113,8 @@ def _assistant_is_immunoid_intent(message_text: str) -> bool:
     if _assistant_detect_immunoid_regimen_ids(message_text):
         return True
     detected_agents = _assistant_detect_immunoid_agent_ids(message_text)
-    if len(detected_agents) >= 2:
+    if detected_agents:
         return True
-    if not detected_agents:
-        return False
     keywords = ("prophyl", "screen", "immunosupp", "chemotherapy", "steroid", "biologic", "reactivation")
     return any(keyword in normalized for keyword in keywords)
 
