@@ -160,6 +160,60 @@ REFERENCE_LIST = [
 ]
 
 
+def _context_requests_alternative_help(text: str | None) -> bool:
+    normalized = _normalize_text(text or "")
+    if not normalized:
+        return False
+    phrases = (
+        "what can i use",
+        "what should i use",
+        "what antibiotic can i use",
+        "best alternative",
+        "alternative antibiotic",
+        "alternative to",
+        "can i use",
+        "can i still use",
+        "what can they use",
+    )
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _infer_contextual_candidate_ids(text: str | None) -> List[str]:
+    normalized = _normalize_text(text or "")
+    if not normalized:
+        return []
+
+    suggestions: List[str] = []
+
+    def add(*agent_ids: str) -> None:
+        for agent_id in agent_ids:
+            if agent_id in AGENT_INFO and agent_id not in suggestions:
+                suggestions.append(agent_id)
+
+    if "mssa" in normalized or "methicillin susceptible staphylococcus aureus" in normalized:
+        add("cefazolin", "nafcillin", "oxacillin", "vancomycin", "daptomycin")
+    if "mrsa" in normalized or "methicillin resistant staphylococcus aureus" in normalized:
+        add("vancomycin", "daptomycin", "linezolid", "ceftaroline")
+    if "vre" in normalized or "vancomycin resistant enterococcus" in normalized or "enterococcus faecium" in normalized:
+        add("linezolid", "daptomycin")
+    if "enterococcus faecalis" in normalized:
+        add("ampicillin", "amoxicillin", "vancomycin", "linezolid", "daptomycin")
+    if "streptococc" in normalized:
+        add("penicillin_g", "amoxicillin", "ceftriaxone", "vancomycin")
+    if "pseudomonas" in normalized:
+        add("cefepime", "ceftazidime", "aztreonam", "meropenem", "ciprofloxacin", "levofloxacin")
+    if "esbl" in normalized:
+        add("ertapenem", "meropenem")
+    if "cystitis" in normalized or "uti" in normalized or "urinary tract infection" in normalized:
+        add("nitrofurantoin", "tmp_smx", "fosfomycin", "ciprofloxacin", "levofloxacin")
+    if "anaerob" in normalized or "aspiration" in normalized:
+        add("amoxicillin_clavulanate", "ampicillin_sulbactam", "metronidazole", "clindamycin")
+    if "nocardia" in normalized:
+        add("tmp_smx", "linezolid")
+
+    return suggestions
+
+
 def _normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9/+\-.,;: ]+", " ", text.lower())).strip()
 
@@ -427,6 +481,12 @@ def analyze_antibiotic_allergy(req: AntibioticAllergyAnalyzeRequest) -> Antibiot
     candidates = _dedupe_candidates(req.candidate_agents)
     tolerated = _dedupe_candidates(req.tolerated_agents)
     entries = req.allergy_entries
+    inferred_candidates = False
+    if not candidates and _context_requests_alternative_help(req.infection_context):
+        inferred = _infer_contextual_candidate_ids(req.infection_context)
+        if inferred:
+            candidates = inferred
+            inferred_candidates = True
     recommendations = [_collapse_recommendations(candidate_id, entries) for candidate_id in candidates]
     recommendations.sort(key=lambda item: {"avoid": 2, "caution": 1, "preferred": 0}[item.recommendation], reverse=True)
 
@@ -474,6 +534,14 @@ def analyze_antibiotic_allergy(req: AntibioticAllergyAnalyzeRequest) -> Antibiot
         )
         if overall_risk == "intermediate" and all(bucket in {"unknown", "nonallergic"} for bucket in buckets) and _tolerance_supports_lower_risk(tolerated, entries):
             overall_risk = "low"
+
+    if inferred_candidates:
+        general_advice.append(
+            f"Because you asked for an alternative, I inferred a shortlist of common options from the infection context: {', '.join(_display_name(agent_id) for agent_id in candidates[:5])}."
+        )
+        warnings.append(
+            "These inferred alternatives are a practical shortlist to evaluate against the allergy history; final antibiotic selection should still follow syndrome, organism, susceptibilities, and severity."
+        )
 
     if any(entry.reaction_type == "unknown" for entry in entries):
         follow_up.append(

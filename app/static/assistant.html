@@ -49,9 +49,65 @@
       }
 
       .shell {
-        max-width: 1320px;
+        max-width: 1380px;
         margin: 0 auto;
         padding: 20px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+      .brand-block {
+        display: grid;
+        gap: 6px;
+      }
+      .brand-title {
+        margin: 0;
+        font-family: "Fraunces", Georgia, serif;
+        font-size: clamp(1.6rem, 2.5vw, 2.2rem);
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+      }
+      .brand-copy {
+        color: var(--muted);
+        max-width: 70ch;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .desktop-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+      }
+      .nav-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(200, 190, 169, 0.9);
+        background: rgba(255, 252, 245, 0.88);
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: var(--shadow);
+        transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+      }
+      .nav-link:hover {
+        transform: translateY(-1px);
+        border-color: rgba(14, 107, 91, 0.32);
+      }
+      .nav-link.current {
+        background: linear-gradient(180deg, #0f7664, #0b6555);
+        color: #effff8;
+        border-color: rgba(14, 107, 91, 0.7);
       }
 
       .mast {
@@ -201,19 +257,20 @@
 
       .workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+        grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.72fr);
         gap: 16px;
+        align-items: start;
       }
 
       .chat-card {
-        padding: 14px;
+        padding: 16px;
         display: grid;
-        grid-template-rows: auto auto minmax(280px, 1fr) auto auto;
-        min-height: 68vh;
+        grid-template-rows: auto auto minmax(420px, 1fr) auto auto;
+        min-height: 74vh;
       }
       .progress-strip {
         margin-bottom: 12px;
-        padding: 12px;
+        padding: 12px 14px;
         border-radius: 14px;
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 245, 236, 0.92));
         border: 1px solid rgba(200, 190, 169, 0.85);
@@ -339,14 +396,14 @@
         padding-right: 4px;
         padding-bottom: 8px;
         display: grid;
-        gap: 10px;
+        gap: 12px;
         align-content: start;
       }
 
       .msg {
-        max-width: 90%;
-        border-radius: 14px;
-        padding: 12px 13px;
+        max-width: min(92%, 860px);
+        border-radius: 18px;
+        padding: 13px 14px;
         border: 1px solid transparent;
         animation: fadeUp 180ms ease-out both;
       }
@@ -370,7 +427,8 @@
       }
       .msg .text {
         white-space: pre-wrap;
-        line-height: 1.35;
+        line-height: 1.5;
+        font-size: 14px;
       }
 
       .options {
@@ -426,7 +484,7 @@
       }
 
       .composer {
-        margin-top: 12px;
+        margin-top: 14px;
         display: grid;
         gap: 10px;
         position: sticky;
@@ -509,9 +567,11 @@
       .side-card {
         padding: 14px;
         display: grid;
-        grid-template-rows: auto auto auto 1fr;
+        grid-template-rows: auto auto 1fr;
         gap: 12px;
-        min-height: 68vh;
+        min-height: 74vh;
+        position: sticky;
+        top: 20px;
       }
       .side-head {
         display: flex;
@@ -523,6 +583,37 @@
         font-family: "Fraunces", Georgia, serif;
         font-size: 1.1rem;
         font-weight: 700;
+      }
+      .panel-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .panel-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(200, 190, 169, 0.9);
+        background: rgba(255,255,255,0.72);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 7px 11px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .panel-tab.active {
+        background: rgba(14, 107, 91, 0.1);
+        color: #0d5f51;
+        border-color: rgba(14, 107, 91, 0.25);
+      }
+      .side-panels {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+      }
+      .side-panel.hidden-panel {
+        display: none;
       }
       .badge {
         display: inline-flex;
@@ -634,12 +725,20 @@
       }
 
       @media (max-width: 1024px) {
+        .topbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .desktop-nav {
+          justify-content: flex-start;
+        }
         .mast { grid-template-columns: 1fr; }
         .launchpad { grid-template-columns: 1fr; }
         .workspace { grid-template-columns: 1fr; }
         .chat-card, .side-card { min-height: auto; }
         .progress-head { flex-direction: column; }
         .progress-meta { max-width: none; text-align: left; }
+        .side-card { position: static; }
       }
       @media (max-width: 640px) {
         .btn-row { width: 100%; }
@@ -653,13 +752,27 @@
   </head>
   <body>
     <div class="shell">
+      <section class="topbar" aria-label="Application navigation">
+        <div class="brand-block">
+          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> IDHub desktop workspace</div>
+          <h1 class="brand-title">ID Assistant</h1>
+          <div class="brand-copy">A cleaner desktop consult experience that mirrors the mobile app: chat first, quick pathway jumps when helpful, and structured reasoning available without crowding the thread.</div>
+        </div>
+        <nav class="desktop-nav" aria-label="Desktop navigation">
+          <a class="nav-link current" href="/assistant">Chat</a>
+          <a class="nav-link" href="/doseid">DoseID</a>
+          <a class="nav-link" href="/trainer">Trainer</a>
+          <a class="nav-link" href="https://infectiousdiseasehub.com/" target="_blank" rel="noreferrer">IDHub</a>
+        </nav>
+      </section>
+
       <section class="mast" aria-label="Application introduction and status">
         <div class="hero">
-          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> ID Consult Interface</div>
-          <h1>ID Consultant Assistant</h1>
+          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Chat-first desktop assistant</div>
+          <h1>Ask naturally or jump into a lane</h1>
           <p>
-            A conversational infectious diseases workbench for syndrome diagnosis, resistance interpretation, antimicrobial dosing, and immunosuppression planning.
-            Paste the consult question in plain language, or start in one of the focused lanes below.
+            The assistant can still route syndrome, resistance, dosing, allergy, and immunosuppression questions from plain language.
+            If you already know the task, use one of the focused starting points below.
           </p>
         </div>
         <div class="launchpad" id="launchpad" aria-label="Quick start workflows">
@@ -736,14 +849,21 @@
 
         <aside class="side-card">
           <div class="side-head">
-            <div class="side-title">What I Understood</div>
+            <div class="side-title">Consult details</div>
             <div style="display:flex; gap:8px; align-items:center;">
               <span id="narrationBadge" class="badge">narrative: deterministic</span>
               <span id="parserBadge" class="badge">parser: —</span>
             </div>
           </div>
-
-          <section class="panel-block">
+          <div class="panel-tabs" id="panelTabs" aria-label="Detail panels">
+            <button type="button" class="panel-tab active" data-panel="summary">Summary</button>
+            <button type="button" class="panel-tab" data-panel="analysis">Analysis</button>
+            <button type="button" class="panel-tab" data-panel="parsed">Parsed</button>
+            <button type="button" class="panel-tab" data-panel="warnings">Warnings</button>
+            <button type="button" class="panel-tab" data-panel="raw">Raw</button>
+          </div>
+          <div class="side-panels">
+          <section class="panel-block side-panel" data-panel-name="summary">
             <h3>Conversation State</h3>
             <div class="kv">
               <div class="k">Stage</div><div class="v" id="summaryStage">—</div>
@@ -754,27 +874,28 @@
             </div>
           </section>
 
-          <section class="panel-block big-result" id="analysisSummary">
+          <section class="panel-block big-result side-panel hidden-panel" id="analysisSummary" data-panel-name="analysis">
             <h3>Analysis</h3>
             <div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>
           </section>
 
-          <section class="panel-block" id="parsedPanel">
+          <section class="panel-block side-panel hidden-panel" id="parsedPanel" data-panel-name="parsed">
             <h3>Parsed Request</h3>
             <div class="muted">Waiting for parsed output.</div>
           </section>
 
-          <section class="panel-block" id="warningsPanel">
+          <section class="panel-block side-panel hidden-panel" id="warningsPanel" data-panel-name="warnings">
             <h3>Warnings</h3>
             <div class="muted">No warnings.</div>
           </section>
 
-          <section class="panel-block">
+          <section class="panel-block side-panel hidden-panel" data-panel-name="raw">
             <details>
               <summary>Raw response</summary>
               <pre id="rawResponse">No response yet.</pre>
             </details>
           </section>
+          </div>
         </aside>
       </section>
     </div>
@@ -817,6 +938,8 @@
         parsedPanel: document.getElementById("parsedPanel"),
         warningsPanel: document.getElementById("warningsPanel"),
         rawResponse: document.getElementById("rawResponse"),
+        panelTabs: Array.from(document.querySelectorAll(".panel-tab")),
+        sidePanels: Array.from(document.querySelectorAll(".side-panel")),
       };
 
       const WORKFLOW_LABELS = {
@@ -1004,6 +1127,15 @@
         els.userInput.style.height = `${nextHeight}px`;
       }
 
+      function setActiveSidePanel(panelName = "summary") {
+        els.panelTabs.forEach((tab) => {
+          tab.classList.toggle("active", tab.dataset.panel === panelName);
+        });
+        els.sidePanels.forEach((panel) => {
+          panel.classList.toggle("hidden-panel", panel.dataset.panelName !== panelName);
+        });
+      }
+
       function syncLaunchpad(activeWorkflow = null) {
         const buttons = Array.from(els.launchpad?.querySelectorAll(".start-card") || []);
         buttons.forEach((button) => {
@@ -1061,6 +1193,7 @@
         syncComposerContext(emptyState);
         syncLaunchpad(null);
         setTopStatus({ state: emptyState });
+        setActiveSidePanel("summary");
       }
 
       function setBusy(next) {
@@ -1092,7 +1225,7 @@
         const node = document.createElement("div");
         node.className = `msg ${role}`;
         node.innerHTML = `
-          <div class="role">${role === "assistant" ? "ID Consultant Assistant" : "You"}</div>
+          <div class="role">${role === "assistant" ? "Assistant" : "You"}</div>
           <div class="text"></div>
         `;
         node.querySelector(".text").textContent = text;
@@ -2022,6 +2155,12 @@
 
       els.consultBtn.addEventListener("click", () => {
         sendTurn({ selection: "run_assessment", userVisibleText: "Give consultant impression" });
+      });
+
+      els.panelTabs.forEach((button) => {
+        button.addEventListener("click", () => {
+          setActiveSidePanel(button.dataset.panel || "summary");
+        });
       });
 
       function exampleTextForCurrentState() {

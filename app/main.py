@@ -2054,6 +2054,12 @@ def _build_mechid_response_from_parsed(
                     susceptibility_results=parsed["susceptibilityResults"],
                     tx_context=parsed["txContext"],
                 )
+                if parsed_request.tx_context.syndrome == "Uncomplicated cystitis":
+                    susceptible_results = parsed.get("susceptibilityResults") or analyzed["final_results"]
+                    analyzed["therapy_notes"] = _prioritize_cystitis_therapy_notes(
+                        analyzed.get("therapy_notes", []),
+                        susceptible_results,
+                    )
                 treatment_duration_guidance, monitoring_recommendations = _build_mechid_duration_monitoring_guidance(
                     organism=analyzed["organism"],
                     final_results=analyzed["final_results"],
@@ -2091,6 +2097,57 @@ def _build_mechid_response_from_parsed(
         analysis=analysis,
         provisionalAdvice=provisional_advice,
     )
+
+
+def _prioritize_cystitis_therapy_notes(
+    therapy_notes: List[str],
+    susceptibility_results: Dict[str, str | None],
+) -> List[str]:
+    susceptible_agents = {
+        antibiotic
+        for antibiotic, call in (susceptibility_results or {}).items()
+        if call == "Susceptible"
+    }
+    oral_choices = [
+        agent
+        for agent in (
+            "Nitrofurantoin",
+            "Trimethoprim/Sulfamethoxazole",
+            "Fosfomycin",
+            "Ciprofloxacin",
+            "Levofloxacin",
+        )
+        if agent in susceptible_agents
+    ]
+    prioritized_note = (
+        "**Lower-tract cystitis pattern** → for uncomplicated cystitis I would prefer a susceptible oral option such as "
+        f"{_join_readable(oral_choices)} rather than an IV regimen or carbapenem."
+        if oral_choices
+        else "**Lower-tract cystitis pattern** → for uncomplicated cystitis I would look first for a susceptible oral lower-tract option rather than an IV regimen or carbapenem."
+    )
+
+    filtered_notes: List[str] = []
+    suppress_tokens = (
+        "ceftriaxone",
+        "cefepime",
+        "piperacillin/tazobactam",
+        "pip/tazo",
+        "meropenem",
+        "imipenem",
+        "ertapenem",
+        "doripenem",
+        "carbapenem",
+        "iv ",
+        "intravenous",
+    )
+    for note in therapy_notes:
+        note_lower = note.lower()
+        if any(token in note_lower for token in suppress_tokens):
+            continue
+        if note not in filtered_notes:
+            filtered_notes.append(note)
+
+    return [prioritized_note, *filtered_notes]
 
 
 def _doseid_catalog_response() -> DoseIDCatalogResponse:
@@ -7446,6 +7503,35 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
     normalized = _normalize_choice(message_text)
     if not normalized:
         return False
+    if any(
+        token in normalized
+        for token in (
+            "bacteremia",
+            "bloodstream infection",
+            "endocarditis",
+            "persistent bacteremia",
+            "positive blood cultures",
+            "osteomyelitis",
+            "septic arthritis",
+            "cystitis",
+            "pneumonia",
+        )
+    ) and not any(
+        token in normalized
+        for token in (
+            "allergy",
+            "allergic",
+            "anaphylaxis",
+            "hives",
+            "rash",
+            "reaction",
+            "angioedema",
+            "sjs",
+            "ten",
+            "dress",
+        )
+    ):
+        return False
     if any(token in normalized for token in ALLERGYID_INTENT_TOKENS):
         return True
     return any(
@@ -7474,7 +7560,8 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
             "nausea",
             "vomiting",
             "diarrhea",
-            "gi",
+            "gi upset",
+            "gastrointestinal",
             "sjs",
             "ten",
             "dress",
