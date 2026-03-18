@@ -869,7 +869,7 @@
       .workspace {
         display: grid;
         grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.55fr);
-        grid-template-rows: 1fr;
+        grid-template-rows: minmax(0, 1fr);
         gap: 0;
         height: calc(100vh - 52px);
         margin-top: 52px;
@@ -880,6 +880,7 @@
         display: flex;
         flex-direction: column;
         height: 100%;
+        min-height: 0;
         padding: 14px 18px;
         border-radius: 0;
         border: none;
@@ -887,10 +888,9 @@
         box-shadow: none;
         background: transparent;
         backdrop-filter: none;
-        min-height: unset;
       }
       .messages {
-        flex: 1;
+        flex: 1 1 0;
         min-height: 0;
         overflow-y: auto;
       }
@@ -1031,6 +1031,27 @@
         overflow: hidden; visibility: hidden; pointer-events: none;
       }
       .side-card { transition: visibility 0s; }
+      /* Floating reopen tab — visible only when panel is collapsed */
+      .panel-reopen-tab {
+        display: none;
+        position: fixed; right: 0; top: 50%;
+        transform: translateY(-50%);
+        writing-mode: vertical-rl; text-orientation: mixed;
+        padding: 12px 6px; gap: 5px;
+        background: var(--panel-strong);
+        border: 1px solid rgba(200, 190, 169, 0.7);
+        border-right: none;
+        border-radius: 8px 0 0 8px;
+        font-size: 12px; font-weight: 500; color: var(--muted);
+        cursor: pointer; z-index: 15;
+        box-shadow: -2px 2px 8px rgba(28, 24, 19, 0.08);
+        transition: color 130ms, background 130ms;
+      }
+      .panel-reopen-tab:hover { color: var(--ink); background: #fff; }
+      .workspace.panel-collapsed ~ .panel-reopen-tab,
+      .workspace.panel-collapsed + * .panel-reopen-tab { display: flex; }
+      /* simpler: toggle visibility via JS class on the tab itself */
+      .panel-reopen-tab.visible { display: flex; }
 
     </style>
   </head>
@@ -1038,21 +1059,7 @@
     <!-- Compact app header -->
     <header class="appbar">
       <div class="appbar-brand">
-        <svg class="appbar-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none" role="img" aria-label="ID Assistant">
-          <defs>
-            <linearGradient id="abg" x1="156" y1="112" x2="858" y2="918" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#0F6A59"/><stop offset="1" stop-color="#0B4F43"/>
-            </linearGradient>
-            <linearGradient id="aorb" x1="660" y1="214" x2="840" y2="404" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#F2B36C"/><stop offset="1" stop-color="#C56E2B"/>
-            </linearGradient>
-          </defs>
-          <rect x="64" y="64" width="896" height="896" rx="240" fill="url(#abg)"/>
-          <circle cx="742" cy="286" r="92" fill="url(#aorb)" opacity="0.95"/>
-          <path d="M466 286H602C706 286 774 348 774 512C774 676 706 738 602 738H466V286ZM582 648C651 648 688 607 688 512C688 417 651 376 582 376H558V648H582Z" fill="#FFF9F0"/>
-          <path d="M278 286H370V738H278V286Z" fill="#FFF9F0"/>
-          <rect x="260" y="224" width="128" height="26" rx="13" fill="#FFF9F0" opacity="0.88"/>
-        </svg>
+        <img src="/static/app-icon.svg" class="appbar-logo" alt="ID Assistant logo">
         ID Assistant
       </div>
       <div class="appbar-actions">
@@ -1203,6 +1210,8 @@
         </aside>
       </section>
     </div><!-- /.shell -->
+    <!-- Floating reopen tab for collapsed side panel -->
+    <button type="button" class="panel-reopen-tab" id="panelReopenTab" aria-label="Show details panel">Analysis ›</button>
 
     <script>
       const state = {
@@ -2603,12 +2612,16 @@
 
       // Side panel collapse
       let panelCollapsed = false;
-      els.sidePanelToggle.addEventListener("click", () => {
-        panelCollapsed = !panelCollapsed;
-        els.workspace.classList.toggle("panel-collapsed", panelCollapsed);
-        els.sidePanelToggle.textContent = panelCollapsed ? "‹" : "›";
-        els.sidePanelToggle.title = panelCollapsed ? "Expand panel" : "Collapse panel";
-      });
+      const panelReopenTab = document.getElementById("panelReopenTab");
+      function setPanelCollapsed(collapsed) {
+        panelCollapsed = collapsed;
+        els.workspace.classList.toggle("panel-collapsed", collapsed);
+        els.sidePanelToggle.textContent = collapsed ? "›" : "‹";
+        els.sidePanelToggle.title = collapsed ? "Show analysis panel" : "Hide analysis panel";
+        panelReopenTab.classList.toggle("visible", collapsed);
+      }
+      els.sidePanelToggle.addEventListener("click", () => setPanelCollapsed(!panelCollapsed));
+      panelReopenTab.addEventListener("click", () => setPanelCollapsed(false));
 
       // Update timestamps every minute
       setInterval(() => {
