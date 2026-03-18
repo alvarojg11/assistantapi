@@ -833,11 +833,20 @@
         backdrop-filter: blur(10px);
       }
       .appbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
         font-family: "Fraunces", Georgia, serif;
         font-size: 1.2rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--ink);
+      }
+      .appbar-logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        flex-shrink: 0;
       }
       .appbar-actions { display: flex; gap: 6px; align-items: center; }
       .btn-ghost {
@@ -961,16 +970,169 @@
 
       /* Hide old layout elements */
       .topbar, .mast, .progress-strip { display: none !important; }
+
+      /* ── Keyboard shortcut badge ── */
+      kbd {
+        font-size: 10px; font-family: inherit;
+        padding: 1px 4px; border-radius: 3px;
+        border: 1px solid currentColor;
+        opacity: 0.55; vertical-align: middle; margin-left: 3px;
+      }
+
+      /* ── Message timestamps ── */
+      .msg-time {
+        font-size: 11px; color: var(--muted);
+        opacity: 0; transition: opacity 150ms;
+        white-space: nowrap; margin-left: auto; padding-left: 8px;
+        flex-shrink: 0;
+      }
+      .msg:hover .msg-time { opacity: 0.65; }
+
+      /* ── Markdown in message text ── */
+      .msg .text { line-height: 1.58; }
+      .msg .text p { margin: 0 0 6px; }
+      .msg .text p:last-child { margin-bottom: 0; }
+      .msg .text ul, .msg .text ol {
+        margin: 4px 0 6px 18px; padding: 0;
+      }
+      .msg .text li { margin-bottom: 2px; line-height: 1.5; }
+      .msg .text strong { font-weight: 600; }
+
+      /* ── Scroll-to-bottom button ── */
+      .chat-card { position: relative; }
+      .scroll-btn {
+        position: absolute;
+        bottom: 140px; right: 20px; z-index: 10;
+        width: 34px; height: 34px; border-radius: 50%;
+        border: 1px solid rgba(200, 190, 169, 0.7);
+        background: var(--panel-strong); color: var(--muted);
+        font-size: 16px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 2px 10px rgba(28, 24, 19, 0.15);
+        transition: opacity 150ms, transform 150ms;
+      }
+      .scroll-btn:hover { opacity: 1 !important; transform: translateY(-1px); }
+      .scroll-btn.hidden { display: none; }
+
+      /* ── Collapsible side panel ── */
+      .side-card { position: relative; }
+      .side-toggle {
+        position: absolute; top: 50%; left: -13px;
+        transform: translateY(-50%); z-index: 6;
+        width: 22px; height: 44px; border-radius: 6px;
+        border: 1px solid rgba(200, 190, 169, 0.65);
+        background: var(--panel-strong); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; color: var(--muted);
+        box-shadow: 0 2px 6px rgba(28, 24, 19, 0.08);
+        transition: background 130ms;
+      }
+      .side-toggle:hover { background: #fff; color: var(--ink); }
+      .workspace.panel-collapsed {
+        grid-template-columns: minmax(0, 1fr) 0px;
+      }
+      .workspace.panel-collapsed .side-card {
+        overflow: hidden; opacity: 0; pointer-events: none;
+      }
+      .workspace.panel-collapsed .side-toggle { left: -13px; }
+      .side-card { transition: opacity 200ms; }
+
+      /* ── Dark mode ── */
+      .theme-btn {
+        background: none; border: none; cursor: pointer;
+        font-size: 15px; padding: 5px 7px; border-radius: 7px;
+        color: var(--muted); transition: background 130ms;
+        line-height: 1;
+      }
+      .theme-btn:hover { background: rgba(102, 94, 82, 0.12); }
+
+      [data-theme="dark"] {
+        --bg: #141210; --bg-alt: #1c1a17;
+        --ink: #ede8dc; --muted: #9a9082;
+        --line: #38332c;
+        --panel: rgba(28, 26, 22, 0.96);
+        --panel-strong: #1e1b17;
+        --shadow: 0 14px 38px rgba(0, 0, 0, 0.55);
+      }
+      [data-theme="dark"] body {
+        background:
+          radial-gradient(1100px 500px at 10% -10%, rgba(35, 74, 138, 0.14), transparent 65%),
+          radial-gradient(900px 500px at 95% 5%, rgba(14, 107, 91, 0.12), transparent 60%),
+          linear-gradient(180deg, var(--bg) 0%, #0d0c0a 100%);
+      }
+      [data-theme="dark"] .appbar {
+        background: rgba(16, 14, 12, 0.96);
+        border-bottom-color: rgba(56, 51, 44, 0.9);
+      }
+      [data-theme="dark"] .btn-ghost {
+        background: rgba(30, 27, 23, 0.85);
+        border-color: rgba(56, 51, 44, 0.9);
+        color: var(--ink);
+      }
+      [data-theme="dark"] .btn-ghost:hover {
+        background: rgba(44, 40, 34, 0.95);
+        border-color: rgba(14, 107, 91, 0.4);
+      }
+      [data-theme="dark"] .side-card {
+        background: rgba(18, 16, 14, 0.92);
+      }
+      [data-theme="dark"] .msg.assistant {
+        background: rgba(30, 27, 23, 0.9);
+        border-color: rgba(56, 51, 44, 0.8);
+        color: var(--ink);
+      }
+      [data-theme="dark"] .msg.user {
+        background: linear-gradient(180deg, rgba(14, 107, 91, 0.85), rgba(10, 82, 68, 0.85));
+      }
+      [data-theme="dark"] select,
+      [data-theme="dark"] input[type="text"],
+      [data-theme="dark"] textarea {
+        background: rgba(28, 26, 22, 0.9);
+        border-color: var(--line); color: var(--ink);
+      }
+      [data-theme="dark"] .btn {
+        background: rgba(28, 26, 22, 0.85);
+        border-color: var(--line); color: var(--ink);
+      }
+      [data-theme="dark"] .btn.primary {
+        background: linear-gradient(180deg, #0e7a66, #0b5f50);
+      }
+      [data-theme="dark"] .panel-tab {
+        background: rgba(28, 26, 22, 0.85);
+        border-color: var(--line);
+      }
+      [data-theme="dark"] .panel-tab.active {
+        background: rgba(14, 107, 91, 0.18);
+        color: #4fbfa8; border-color: rgba(14, 107, 91, 0.35);
+      }
+      [data-theme="dark"] .qs-panel { background: var(--panel-strong); }
+      [data-theme="dark"] .start-card {
+        background: rgba(28, 26, 22, 0.85);
+        border-color: var(--line); color: var(--ink);
+      }
+      [data-theme="dark"] .status-line {
+        border-bottom-color: rgba(56, 51, 44, 0.5);
+      }
+      [data-theme="dark"] .scroll-btn,
+      [data-theme="dark"] .side-toggle {
+        background: var(--panel-strong);
+        border-color: var(--line);
+      }
     </style>
   </head>
   <body>
     <!-- Compact app header -->
     <header class="appbar">
-      <div class="appbar-brand">ID Assistant</div>
+      <div class="appbar-brand">
+        <img src="/static/app-icon.svg" alt="ID Assistant logo" class="appbar-logo" />
+        ID Assistant
+      </div>
       <div class="appbar-actions">
-        <button type="button" class="btn-ghost" id="quickstartBtn">Workflows</button>
+        <button type="button" class="btn-ghost" id="quickstartBtn">Workflows <kbd>⌘K</kbd></button>
+        <button type="button" class="btn-ghost" id="exportBtn" title="Download consult summary">Export</button>
         <button type="button" class="btn-ghost" id="newConsultBtnHeader">New consult</button>
         <a class="btn-ghost" href="https://infectiousdiseasehub.com/" target="_blank" rel="noreferrer">IDHub</a>
+        <button type="button" class="theme-btn" id="themeToggleBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
       </div>
     </header>
 
@@ -1034,6 +1196,7 @@
           <div id="helpBanner" class="hidden"></div>
 
           <div class="messages" id="messages" aria-live="polite"></div>
+          <button type="button" class="scroll-btn hidden" id="scrollBtn" aria-label="Scroll to bottom">↓</button>
 
           <div id="optionTray" class="options" aria-label="Suggested options"></div>
 
@@ -1061,6 +1224,7 @@
         </main>
 
         <aside class="side-card">
+          <button type="button" class="side-toggle" id="sidePanelToggle" title="Collapse panel">›</button>
           <div class="side-head">
             <div class="side-title">Details</div>
           </div>
@@ -1164,6 +1328,11 @@
         rawResponse: document.getElementById("rawResponse"),
         panelTabs: Array.from(document.querySelectorAll(".panel-tab")),
         sidePanels: Array.from(document.querySelectorAll(".side-panel")),
+        scrollBtn: document.getElementById("scrollBtn"),
+        sidePanelToggle: document.getElementById("sidePanelToggle"),
+        workspace: document.querySelector(".workspace"),
+        themeToggleBtn: document.getElementById("themeToggleBtn"),
+        exportBtn: document.getElementById("exportBtn"),
       };
 
       const WORKFLOW_LABELS = {
@@ -1447,19 +1616,59 @@
         els.consultBtn.disabled = state.busy;
       }
 
+      function renderMarkdown(text) {
+        const lines = text.split("\n");
+        let html = "";
+        let inList = false;
+        function inline(s) {
+          return s
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, "<em>$1</em>");
+        }
+        for (const raw of lines) {
+          const esc = raw
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+          if (/^[-•]\s/.test(esc) || /^\d+\.\s/.test(esc)) {
+            if (!inList) { html += "<ul>"; inList = true; }
+            html += `<li>${inline(esc.replace(/^[-•]|\d+\./, "").trimStart())}</li>`;
+          } else {
+            if (inList) { html += "</ul>"; inList = false; }
+            html += esc === "" ? "" : `<p>${inline(esc)}</p>`;
+          }
+        }
+        if (inList) html += "</ul>";
+        return html;
+      }
+
+      function relativeTime(date) {
+        const diff = Math.round((Date.now() - date) / 1000);
+        if (diff < 60) return "just now";
+        if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+        return `${Math.floor(diff / 3600)}h ago`;
+      }
+
       function appendMessage(role, text) {
         const node = document.createElement("div");
         node.className = `msg ${role}`;
+        const ts = Date.now();
         const copyBtnHtml = role === "assistant"
           ? `<button type="button" class="copy-btn" title="Copy message">Copy</button>`
           : "";
         node.innerHTML = `
-          <div class="role" style="display:flex; justify-content:space-between; align-items:center;">
-            <span>${role === "assistant" ? "Assistant" : "You"}</span>${copyBtnHtml}
+          <div class="role" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+            <span>${role === "assistant" ? "Assistant" : "You"}</span>
+            <span class="msg-time" data-ts="${ts}">just now</span>
+            ${copyBtnHtml}
           </div>
           <div class="text"></div>
         `;
-        node.querySelector(".text").textContent = text;
+        if (role === "assistant") {
+          node.querySelector(".text").innerHTML = renderMarkdown(text);
+        } else {
+          node.querySelector(".text").textContent = text;
+        }
         if (role === "assistant") {
           node.querySelector(".copy-btn").addEventListener("click", () => {
             navigator.clipboard.writeText(text).then(() => {
@@ -1470,7 +1679,13 @@
           });
         }
         els.messages.appendChild(node);
-        els.messages.scrollTop = els.messages.scrollHeight;
+        scrollToBottom();
+      }
+
+      function scrollToBottom() {
+        requestAnimationFrame(() => {
+          els.messages.scrollTop = els.messages.scrollHeight;
+        });
       }
 
       function appendTypingIndicator() {
@@ -1479,7 +1694,7 @@
         node.className = "typing-indicator";
         node.innerHTML = `<div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>`;
         els.messages.appendChild(node);
-        els.messages.scrollTop = els.messages.scrollHeight;
+        scrollToBottom();
       }
 
       function removeTypingIndicator() {
@@ -1664,6 +1879,7 @@
           });
           els.optionTray.appendChild(toggle);
         }
+        scrollToBottom();
       }
 
       function insertSuggestedText(text) {
@@ -2440,6 +2656,80 @@
       });
       els.quickstartOverlay.addEventListener("click", (e) => {
         if (e.target === els.quickstartOverlay) closeQuickstart();
+      });
+
+      // Keyboard shortcut: Cmd/Ctrl+K → open workflow overlay
+      document.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+          e.preventDefault();
+          if (els.quickstartOverlay.classList.contains("hidden")) openQuickstart();
+          else closeQuickstart();
+        }
+        if (e.key === "Escape") closeQuickstart();
+      });
+
+      // Scroll-to-bottom button
+      els.messages.addEventListener("scroll", () => {
+        const atBottom = els.messages.scrollTop >= els.messages.scrollHeight - els.messages.clientHeight - 80;
+        els.scrollBtn.classList.toggle("hidden", atBottom);
+      });
+      els.scrollBtn.addEventListener("click", scrollToBottom);
+
+      // Side panel collapse
+      let panelCollapsed = false;
+      els.sidePanelToggle.addEventListener("click", () => {
+        panelCollapsed = !panelCollapsed;
+        els.workspace.classList.toggle("panel-collapsed", panelCollapsed);
+        els.sidePanelToggle.textContent = panelCollapsed ? "‹" : "›";
+        els.sidePanelToggle.title = panelCollapsed ? "Expand panel" : "Collapse panel";
+      });
+
+      // Dark mode toggle
+      let darkMode = localStorage.getItem("idassistant-theme") === "dark";
+      function applyTheme() {
+        document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+        els.themeToggleBtn.textContent = darkMode ? "☀️" : "🌙";
+        els.themeToggleBtn.title = darkMode ? "Switch to light mode" : "Switch to dark mode";
+        localStorage.setItem("idassistant-theme", darkMode ? "dark" : "light");
+      }
+      applyTheme();
+      els.themeToggleBtn.addEventListener("click", () => {
+        darkMode = !darkMode;
+        applyTheme();
+      });
+
+      // Update timestamps every minute
+      setInterval(() => {
+        document.querySelectorAll(".msg-time[data-ts]").forEach((el) => {
+          const ts = parseInt(el.dataset.ts, 10);
+          if (!isNaN(ts)) el.textContent = relativeTime(ts);
+        });
+      }, 60000);
+
+      // Export consult
+      els.exportBtn.addEventListener("click", () => {
+        const msgs = Array.from(els.messages.querySelectorAll(".msg"));
+        if (!msgs.length) return;
+        const lines = ["ID Assistant — Consult Export", `Date: ${new Date().toLocaleString()}`, ""];
+        msgs.forEach((msg) => {
+          const isAssistant = msg.classList.contains("assistant");
+          const label = isAssistant ? "Assistant" : "Clinician";
+          const textEl = msg.querySelector(".text");
+          const text = textEl ? (textEl.innerText || textEl.textContent || "") : "";
+          lines.push(`[${label}]`);
+          lines.push(text.trim());
+          lines.push("");
+        });
+        const workflow = state.assistantState?.workflow || "";
+        const module = state.assistantState?.moduleId || "";
+        if (workflow || module) lines.unshift(`Workflow: ${workflow} ${module}`.trim(), "");
+        const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `id-consult-${new Date().toISOString().slice(0,10)}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
       });
 
       els.panelTabs.forEach((button) => {
