@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 FindingState = Literal["present", "absent", "unknown"]
@@ -505,6 +505,33 @@ class AssistantOption(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class SessionPatientContext(BaseModel):
+    """Patient-level demographics and allergy notes that persist across all workflows in a session."""
+
+    age_years: Optional[int] = Field(default=None, alias="ageYears")
+    sex: Optional[Literal["male", "female"]] = None
+    total_body_weight_kg: Optional[float] = Field(default=None, alias="totalBodyWeightKg")
+    height_cm: Optional[float] = Field(default=None, alias="heightCm")
+    serum_creatinine_mg_dl: Optional[float] = Field(default=None, alias="serumCreatinineMgDl")
+    crcl_ml_min: Optional[float] = Field(default=None, alias="crclMlMin")
+    renal_mode: Literal["standard", "ihd", "crrt"] = Field(default="standard", alias="renalMode")
+    allergy_text: Optional[str] = Field(default=None, alias="allergyText")
+
+    model_config = {"populate_by_name": True}
+
+    def is_empty(self) -> bool:
+        return (
+            self.age_years is None
+            and self.sex is None
+            and self.total_body_weight_kg is None
+            and self.height_cm is None
+            and self.serum_creatinine_mg_dl is None
+            and self.crcl_ml_min is None
+            and self.renal_mode == "standard"
+            and not self.allergy_text
+        )
+
+
 class AssistantState(BaseModel):
     stage: AssistantStage = "select_module"
     workflow: Literal["probid", "mechid", "immunoid", "doseid", "allergyid"] = "probid"
@@ -546,6 +573,7 @@ class AssistantState(BaseModel):
     parser_strategy: Literal["auto", "rule", "local", "openai"] = Field(default="auto", alias="parserStrategy")
     parser_model: Optional[str] = Field(default=None, alias="parserModel")
     allow_fallback: bool = Field(default=True, alias="allowFallback")
+    patient_context: Optional[SessionPatientContext] = Field(default=None, alias="patientContext")
 
     model_config = {"populate_by_name": True}
 
@@ -581,6 +609,33 @@ class DoseIDAssistantAnalysis(BaseModel):
     warnings: List[str] = Field(default_factory=list)
     missing_inputs: List[str] = Field(default_factory=list, alias="missingInputs")
     follow_up_questions: List["DoseIDFollowUpQuestion"] = Field(default_factory=list, alias="followUpQuestions")
+    provisional: bool = False
+    provisional_reasons: List[str] = Field(default_factory=list, alias="provisionalReasons")
+
+    model_config = {"populate_by_name": True}
+
+
+AssistantAuthoritativeField = Literal["analysis", "mechidAnalysis", "immunoidAnalysis", "doseidAnalysis", "allergyidAnalysis"]
+
+
+class AssistantInterfaceContract(BaseModel):
+    interaction_model_role: Literal["llm_interface"] = Field(default="llm_interface", alias="interactionModelRole")
+    deterministic_results_authoritative: bool = Field(default=True, alias="deterministicResultsAuthoritative")
+    llm_can_change_deterministic_results: bool = Field(default=False, alias="llmCanChangeDeterministicResults")
+    narration_source: Literal["deterministic_only", "llm_grounded_on_deterministic_payload"] = Field(
+        default="deterministic_only",
+        alias="narrationSource",
+    )
+    authoritative_workflow: Optional[Literal["probid", "mechid", "immunoid", "doseid", "allergyid"]] = Field(
+        default=None,
+        alias="authoritativeWorkflow",
+    )
+    authoritative_stage: Optional[str] = Field(default=None, alias="authoritativeStage")
+    authoritative_result_fields: List[AssistantAuthoritativeField] = Field(
+        default_factory=list,
+        alias="authoritativeResultFields",
+    )
+    notes: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
 
@@ -596,9 +651,49 @@ class AssistantTurnResponse(BaseModel):
     immunoid_analysis: Optional[ImmunoAnalyzeResponse] = Field(default=None, alias="immunoidAnalysis")
     doseid_analysis: Optional[DoseIDAssistantAnalysis] = Field(default=None, alias="doseidAnalysis")
     allergyid_analysis: Optional[AntibioticAllergyAnalyzeResponse] = Field(default=None, alias="allergyidAnalysis")
+    assistant_contract: Optional[AssistantInterfaceContract] = Field(default=None, alias="assistantContract")
     tips: List[str] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def _populate_assistant_contract(self) -> "AssistantTurnResponse":
+        if self.assistant_contract is not None:
+            return self
+
+        authoritative_result_fields: List[AssistantAuthoritativeField] = []
+        if self.analysis is not None:
+            authoritative_result_fields.append("analysis")
+        if self.mechid_analysis is not None:
+            authoritative_result_fields.append("mechidAnalysis")
+        if self.immunoid_analysis is not None:
+            authoritative_result_fields.append("immunoidAnalysis")
+        if self.doseid_analysis is not None:
+            authoritative_result_fields.append("doseidAnalysis")
+        if self.allergyid_analysis is not None:
+            authoritative_result_fields.append("allergyidAnalysis")
+
+        notes = [
+            "The language model may clarify, route, or rephrase, but it must not alter deterministic findings or recommendations.",
+            "When authoritativeResultFields is non-empty, those structured payloads are the source of truth for the consult state and results.",
+        ]
+        if self.assistant_narration_refined:
+            notes.append("assistantMessage was refined from deterministic payloads by the narration layer.")
+        else:
+            notes.append("assistantMessage is the direct deterministic or workflow-generated fallback message.")
+
+        self.assistant_contract = AssistantInterfaceContract(
+            narrationSource=(
+                "llm_grounded_on_deterministic_payload"
+                if self.assistant_narration_refined
+                else "deterministic_only"
+            ),
+            authoritativeWorkflow=self.state.workflow,
+            authoritativeStage=self.state.stage,
+            authoritativeResultFields=authoritative_result_fields,
+            notes=notes,
+        )
+        return self
 
 
 class DoseIDPatientInput(BaseModel):

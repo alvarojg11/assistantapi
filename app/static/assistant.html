@@ -872,6 +872,10 @@
               <div class="k">Current section</div><div class="v" id="summaryCaseSection">—</div>
               <div class="k">Pretest factors</div><div class="v" id="summaryFactors">—</div>
             </div>
+            <div id="patientContextBlock" style="display:none; margin-top:12px;">
+              <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:8px;">Patient context</div>
+              <div class="kv" id="patientContextKV"></div>
+            </div>
           </section>
 
           <section class="panel-block big-result side-panel hidden-panel" id="analysisSummary" data-panel-name="analysis">
@@ -932,6 +936,8 @@
         summaryPreset: document.getElementById("summaryPreset"),
         summaryCaseSection: document.getElementById("summaryCaseSection"),
         summaryFactors: document.getElementById("summaryFactors"),
+        patientContextBlock: document.getElementById("patientContextBlock"),
+        patientContextKV: document.getElementById("patientContextKV"),
         narrationBadge: document.getElementById("narrationBadge"),
         parserBadge: document.getElementById("parserBadge"),
         analysisSummary: document.getElementById("analysisSummary"),
@@ -1490,6 +1496,28 @@
               : ((resp?.immunoidAnalysis?.selectedAgents || []).map((item) => item.name)))
           : (s.pretestFactorLabels || []);
         els.summaryFactors.textContent = factorLabels.length ? factorLabels.join(", ") : "—";
+
+        // Patient context summary
+        const pc = s.patientContext || null;
+        if (pc && (pc.ageYears != null || pc.sex != null || pc.totalBodyWeightKg != null || pc.heightCm != null || pc.serumCreatinineMgDl != null || pc.crclMlMin != null || pc.renalMode !== "standard" || pc.allergyText)) {
+          const rows = [];
+          if (pc.ageYears != null) rows.push({ k: "Age", v: `${pc.ageYears} yr` });
+          if (pc.sex != null) rows.push({ k: "Sex", v: pc.sex });
+          if (pc.totalBodyWeightKg != null) rows.push({ k: "Weight", v: `${pc.totalBodyWeightKg} kg` });
+          if (pc.heightCm != null) rows.push({ k: "Height", v: `${pc.heightCm} cm` });
+          if (pc.serumCreatinineMgDl != null) rows.push({ k: "SCr", v: `${pc.serumCreatinineMgDl} mg/dL` });
+          if (pc.crclMlMin != null) rows.push({ k: "CrCl", v: `${pc.crclMlMin} mL/min` });
+          if (pc.renalMode === "ihd") rows.push({ k: "Renal mode", v: "Hemodialysis" });
+          else if (pc.renalMode === "crrt") rows.push({ k: "Renal mode", v: "CRRT" });
+          if (pc.allergyText) rows.push({ k: "Allergy note", v: pc.allergyText });
+          els.patientContextKV.innerHTML = rows.map(r =>
+            `<div class="k">${escapeHtml(r.k)}</div><div class="v">${escapeHtml(r.v)}</div>`
+          ).join("");
+          els.patientContextBlock.style.display = "";
+        } else {
+          els.patientContextBlock.style.display = "none";
+        }
+
         renderProgress(s);
         syncComposerContext(s);
         syncLaunchpad(workflow === "probid" && s.stage === "select_module" ? null : workflow);

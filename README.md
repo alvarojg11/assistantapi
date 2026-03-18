@@ -52,7 +52,7 @@ The API math and harm-threshold logic are aligned to your uploaded:
 
 ```bash
 cd backend
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
@@ -69,14 +69,14 @@ Run the local evaluator against the holdout cases:
 
 ```bash
 cd backend
-.venv311/bin/python scripts/evaluate_local_parser.py --parsers local rule --show-failures
+.venv/bin/python scripts/evaluate_local_parser.py --parsers local rule --show-failures
 ```
 
 You can also point it at another labeled dataset:
 
 ```bash
 cd backend
-.venv311/bin/python scripts/evaluate_local_parser.py --dataset app/data/parser_eval_cases.json --parsers local
+.venv/bin/python scripts/evaluate_local_parser.py --dataset app/data/parser_eval_cases.json --parsers local
 ```
 
 ## Smoke test newly added syndromes
@@ -85,7 +85,7 @@ Run the regression smoke test for the recently added syndrome modules and guided
 
 ```bash
 cd backend
-.venv311/bin/python scripts/smoke_test_new_syndromes.py
+.venv/bin/python scripts/smoke_test_new_syndromes.py
 ```
 
 ## Evaluate MechID cases
@@ -94,7 +94,7 @@ Run the MechID evaluator against the seed labeled cases:
 
 ```bash
 cd backend
-.venv311/bin/python scripts/evaluate_mechid.py --show-failures
+.venv/bin/python scripts/evaluate_mechid.py --show-failures
 ```
 
 The starter dataset lives in:
@@ -113,7 +113,7 @@ You can also check assistant wording, but that is most stable when narration is 
 ```bash
 cd backend
 unset OPENAI_API_KEY
-.venv311/bin/python scripts/evaluate_mechid.py --check-assistant --show-failures
+.venv/bin/python scripts/evaluate_mechid.py --check-assistant --show-failures
 ```
 
 ## MechID trainer workflow

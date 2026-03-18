@@ -78,6 +78,7 @@ from .schemas import (
     ReferenceEntry,
     RegisterModulesRequest,
     RegisterModulesResponse,
+    SessionPatientContext,
     SyndromeModule,
     TextAnalyzeRequest,
     TextAnalyzeResponse,
@@ -87,6 +88,7 @@ from .services.antibiotic_allergy_service import AGENT_ALIASES, analyze_antibiot
 from .services.consult_narrator import (
     narrate_allergyid_assistant_message,
     narrate_doseid_assistant_message,
+    narrate_general_id_answer,
     narrate_immunoid_assistant_message,
     narrate_mechid_assistant_message,
     narrate_mechid_review_message,
@@ -114,7 +116,7 @@ from .services.mechid_text_parser import parse_mechid_text
 from .services.mechid_trainer_guidance import MechIDTrainerGuidanceError, generate_mechid_trainer_targets
 from .services.mechid_trainer_parser import MechIDTrainerParseError, parse_mechid_trainer_correction
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
-from .services.text_parser import COMMON_FINDING_ALIASES, parse_text_to_request
+from .services.text_parser import COMMON_FINDING_ALIASES, MODULE_ALIASES, parse_text_to_request
 from .services.tb_uveitis_cots import analyze_tb_uveitis
 
 
@@ -169,6 +171,183 @@ DOSEID_ASSISTANT_ID = "doseid"
 DOSEID_ASSISTANT_LABEL = "Antimicrobial dosing"
 DOSEID_ASSISTANT_DESCRIPTION = (
     "Estimate antimicrobial dosing from the drug, weight, renal function, and dialysis context."
+)
+EXPLICIT_SYNDROME_REQUEST_TOKENS = (
+    "assess",
+    "assessment",
+    "can you help with",
+    "concern for",
+    "diagnose",
+    "diagnosis",
+    "evaluate",
+    "evaluation",
+    "go into",
+    "go to",
+    "help me with",
+    "help with",
+    "likelihood",
+    "need help with",
+    "open",
+    "pathway",
+    "please help with",
+    "probability",
+    "question of",
+    "rule out",
+    "r/o",
+    "screen for",
+    "show me",
+    "start",
+    "suspicion for",
+    "suspect",
+    "suspected",
+    "take me to",
+    "think about",
+    "walk me through",
+    "work up",
+    "workup",
+)
+EXPLICIT_NON_SYNDROME_WORKFLOW_ALIASES: Dict[str, tuple[str, ...]] = {
+    "mechid": (
+        "mechid",
+        "resistance mechanism",
+        "resistance interpretation",
+        "susceptibility interpretation",
+        "ast interpretation",
+        "antibiogram interpretation",
+        "isolate interpretation",
+        "resistance pathway",
+    ),
+    "doseid": (
+        "doseid",
+        "antimicrobial dosing",
+        "antibiotic dosing",
+        "dosing help",
+        "dosing pathway",
+        "dose this antibiotic",
+        "dose this regimen",
+        "renal dosing",
+    ),
+    "immunoid": (
+        "immunoid",
+        "immunosuppression",
+        "immunosuppression prophylaxis",
+        "screening before immunosuppression",
+        "prophylaxis before immunosuppression",
+        "chemotherapy prophylaxis",
+        "biologic prophylaxis",
+        "reactivation screening",
+    ),
+    "allergyid": (
+        "allergyid",
+        "allergy compatibility",
+        "antibiotic allergy",
+        "beta lactam allergy",
+        "beta lactam compatibility",
+        "cross reactivity",
+        "cross reactivity check",
+        "cross reactivity review",
+    ),
+}
+CONSULT_INTENT_TREATMENT_START_TOKENS = (
+    "should i start",
+    "should we start",
+    "should id start",
+    "should i treat",
+    "should we treat",
+    "would you treat",
+    "treat now",
+    "start treatment",
+    "start therapy",
+    "start empiric",
+    "begin treatment",
+    "begin therapy",
+    "empiric treatment",
+    "empiric therapy",
+    "empiric coverage",
+    "need treatment",
+    "need therapy",
+    "need empiric",
+    "warrant treatment",
+    "warrant therapy",
+    "indicated treatment",
+    "indicated therapy",
+    "hold treatment",
+    "hold therapy",
+    "hold off on treatment",
+    "hold off on therapy",
+    "hold off on antifungal",
+    "hold off on antibiotics",
+    "defer treatment",
+    "defer therapy",
+    "wait on treatment",
+    "wait on therapy",
+    "can i hold off",
+    "can we hold off",
+    "can i hold",
+    "can we hold",
+    "can i wait",
+    "can we wait",
+)
+CONSULT_INTENT_THERAPY_SELECTION_TOKENS = (
+    "what would you use",
+    "what should i use",
+    "what should we use",
+    "what would you start",
+    "what should i start",
+    "what regimen would you use",
+    "which treatment would you use",
+    "which therapy would you use",
+    "which antifungal would you use",
+    "which antibiotic would you use",
+    "what antifungal would you use",
+    "what antibiotic would you use",
+    "what would id use",
+)
+CONSULT_INTENT_ANTIMICROBIAL_TOKENS = (
+    "treatment",
+    "therapy",
+    "cover",
+    "coverage",
+    "antibiotic",
+    "antibiotics",
+    "antimicrobial",
+    "antifungal",
+    "mold active",
+    "mold-active",
+)
+CONSULT_INTENT_FUNGAL_TOKENS = (
+    "fungal",
+    "fungus",
+    "antifungal",
+    "yeast",
+    "candida",
+    "candidemia",
+    "fungemia",
+    "mold",
+    "aspergillus",
+    "aspergillosis",
+)
+CONSULT_INTENT_CANDIDA_TOKENS = (
+    "candida",
+    "candidemia",
+    "fungemia",
+    "yeast",
+    "t2candida",
+)
+CONSULT_INTENT_MOLD_TOKENS = (
+    "mold",
+    "mold active",
+    "mold-active",
+    "aspergillus",
+    "aspergillosis",
+    "galactomannan",
+    "halo sign",
+    "reverse halo",
+    "air crescent",
+    "nodular lung lesion",
+    "nodular lung lesions",
+    "pulmonary nodules",
+    "pulmonary nodule",
 )
 IMMUNOID_ASSISTANT_ID = "immunoid"
 IMMUNOID_ASSISTANT_LABEL = "Immunosuppression screening + prophylaxis"
@@ -2304,13 +2483,7 @@ def analyze_antibiotic_allergy_text_endpoint(
 
 
 def _assistant_allergyid_message(result: AntibioticAllergyAnalyzeResponse) -> str:
-    parts: List[str] = [result.summary]
-    if result.general_advice:
-        parts.append(result.general_advice[0])
-    if result.follow_up_questions:
-        parts.append(result.follow_up_questions[0].prompt)
-    elif result.delabeling_opportunities:
-        parts.append(result.delabeling_opportunities[0])
+    parts: List[str] = []
     if result.recommendations:
         avoids = [item.agent for item in result.recommendations if item.recommendation == "avoid"]
         cautions = [item.agent for item in result.recommendations if item.recommendation == "caution"]
@@ -2324,6 +2497,13 @@ def _assistant_allergyid_message(result: AntibioticAllergyAnalyzeResponse) -> st
         top_recommendation = next((item for item in result.recommendations if item.rationale), None)
         if top_recommendation is not None:
             parts.append(top_recommendation.rationale)
+    parts.append(result.summary)
+    if result.general_advice:
+        parts.append(result.general_advice[0])
+    if result.follow_up_questions:
+        parts.append(result.follow_up_questions[0].prompt)
+    elif result.delabeling_opportunities:
+        parts.append(result.delabeling_opportunities[0])
     return " ".join(part.strip() for part in parts if part and part.strip())
 
 
@@ -2501,19 +2681,26 @@ def _assistant_allergyid_response(
         allergy_result=result,
         fallback_message=fallback_message,
     )
+    doseid_options = _allergyid_doseid_options(result)
+    options: List[AssistantOption] = [
+        *doseid_options,
+        AssistantOption(value="add_more_details", label="Update allergy details"),
+        AssistantOption(value="probid", label="Run syndrome workup"),
+        AssistantOption(value="restart", label="Start new consult"),
+    ]
+    tips = [
+        "A useful reply would be: 'the reaction was hives within 1 hour' or 'the culprit was ceftriaxone, not amoxicillin'.",
+        "If MechID already gave you candidate antibiotics, paste them here and I can sort out which ones stay preferred despite the allergy label.",
+    ]
+    if doseid_options:
+        tips.insert(0, "If you want, I can calculate the renal-adjusted dose for the preferred safe alternative.")
     return AssistantTurnResponse(
         assistantMessage=message,
         assistantNarrationRefined=narration_refined,
         state=state,
         allergyidAnalysis=result,
-        options=[
-            AssistantOption(value="add_more_details", label="Update allergy details"),
-            AssistantOption(value="restart", label="Start new consult"),
-        ],
-        tips=[
-            "A useful reply would be: 'the reaction was hives within 1 hour' or 'the culprit was ceftriaxone, not amoxicillin'.",
-            "If MechID already gave you candidate antibiotics, paste them here and I can sort out which ones stay preferred despite the allergy label.",
-        ],
+        options=options,
+        tips=tips,
     )
 
 
@@ -3920,11 +4107,15 @@ def _assistant_consult_focus_options() -> List[AssistantOption]:
 def _assistant_message_explicitly_mentions_module(message_text: str, module: SyndromeModule) -> bool:
     text = _normalize_choice(message_text)
     candidates = {
-        module.name.lower(),
-        module.id.replace("_", " ").lower(),
-        _assistant_module_label(module).lower(),
+        _normalize_choice(module.name),
+        _normalize_choice(module.id.replace("_", " ")),
+        _normalize_choice(_assistant_module_label(module)),
     }
-    return any(candidate and candidate in text for candidate in candidates)
+    candidates.update(_normalize_choice(alias) for alias in MODULE_ALIASES.get(module.id, []))
+    return any(
+        candidate and re.search(rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])", text) is not None
+        for candidate in candidates
+    )
 
 
 def _assistant_module_label(module: SyndromeModule) -> str:
@@ -4167,6 +4358,31 @@ def _assistant_ready_for_consult_message(
     return message
 
 
+def _assistant_case_can_run_provisional_consult(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> bool:
+    if _assistant_case_is_consult_ready(module, text_result, state):
+        return False
+    _assistant_populate_case_review_analysis(module, text_result)
+    return text_result.parsed_request is not None and text_result.analysis is not None
+
+
+def _assistant_provisional_consult_message(
+    module: SyndromeModule,
+    text_result: TextAnalyzeResponse,
+    state: AssistantState,
+) -> str:
+    next_items = _top_missing_item_specs(module, text_result.parsed_request, limit=1, state=state)
+    message = (
+        "I can still run a best-effort consult with the data you already gave me, but it will be more provisional because some high-yield details are still missing."
+    )
+    if next_items:
+        message += f" The next detail most likely to change the estimate would be {next_items[0][1]}."
+    return message
+
+
 def _assistant_probability_change_sentence(
     previous_analysis: AnalyzeResponse | None,
     updated_analysis: AnalyzeResponse | None,
@@ -4194,6 +4410,8 @@ def _assistant_concise_probid_follow_up(
     pieces = [lead]
     if _assistant_case_is_consult_ready(module, text_result, state):
         pieces.append(_assistant_ready_for_consult_message(module, text_result, state))
+    elif _assistant_case_can_run_provisional_consult(module, text_result, state):
+        pieces.append(_assistant_provisional_consult_message(module, text_result, state))
     else:
         follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
         if follow_up:
@@ -4384,8 +4602,7 @@ def _build_probid_consult_message(
     case_text: str | None = None,
 ) -> str:
     lines = [
-        "My impression:",
-        f"Bottom line: {_friendly_probid_bottom_line(module, analysis)}",
+        _friendly_probid_bottom_line(module, analysis),
         f"Probability and harm: {_friendly_probid_probability_and_harm(module, analysis)}",
         f"Why I think that: {_friendly_probid_drivers(analysis)}",
         f"What I would do next: {_friendly_probid_next_steps(analysis)}",
@@ -5582,7 +5799,18 @@ def _assistant_review_options_for_case(
                 absentText=absent_text,
             )
         )
-    options.extend(_assistant_review_options())
+    run_label = "Give consultant impression"
+    run_description = "Run the consult with the currently available data."
+    if _assistant_case_can_run_provisional_consult(module, text_result, state):
+        run_label = "Run provisional consult"
+        run_description = "Run a best-effort consult now and keep the missing details visible as provisional gaps."
+    options.extend(
+        [
+            AssistantOption(value="run_assessment", label=run_label, description=run_description),
+            AssistantOption(value="add_more_details", label="Add case detail"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ]
+    )
     return options
 
 
@@ -6728,30 +6956,86 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
         finding for finding in understood.findings_absent if finding and finding.strip().lower() not in placeholder_tokens
     ]
     present_summary = _join_readable(present_findings) if present_findings else "no clear supporting findings yet"
-    summary = f"What I extracted so far for {_assistant_module_label(module)}: {present_summary}."
+    extraction_summary = f"For {_assistant_module_label(module)}, I extracted {present_summary}."
     if absent_findings:
-        summary = (
-            f"What I extracted so far for {_assistant_module_label(module)}: {present_summary}. "
-            f"I also captured {_join_readable(absent_findings)} as absent or negative."
+        extraction_summary += f" I also captured {_join_readable(absent_findings)} as absent or negative."
+
+    next_items = _top_missing_item_specs(module, text_result.parsed_request, limit=1, state=state)
+    next_detail = next_items[0][1] if next_items else None
+    score_name = _assistant_selected_endo_score_id(state)
+    score_note = (
+        f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
+        if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state)
+        else ""
+    )
+    if _assistant_case_is_consult_ready(module, text_result, state):
+        return _assistant_consult_style_message(
+            bottom_line=extraction_summary,
+            why="I have enough structured information to run the consult now.",
+            what_i_still_need=(
+                (
+                    f"If you want to sharpen the estimate further, the next highest-yield detail would be {next_detail}.{score_note}"
+                    if next_detail
+                    else f"No single missing item is blocking the consult at this point.{score_note}"
+                )
+            ),
+            what_i_would_do_now="If this extraction matches the case, ask for my consultant impression now. Otherwise, add another case detail.",
+            what_could_change_management=(
+                f"The next detail most likely to shift the estimate is {next_detail}."
+                if next_detail
+                else "A strong new microbiology, imaging, or bedside finding could still move the estimate."
+            ),
+        )
+    if _assistant_case_can_run_provisional_consult(module, text_result, state):
+        return _assistant_consult_style_message(
+            bottom_line=extraction_summary,
+            why="I can already give a best-effort provisional answer, but some high-yield details are still missing.",
+            what_i_still_need=(
+                (
+                    f"The next detail most likely to change the estimate would be {next_detail}.{score_note}"
+                    if next_detail
+                    else f"A few high-yield details are still missing, but none prevents a provisional answer.{score_note}"
+                )
+            ),
+            what_i_would_do_now="If this looks right, you can still ask for my consultant impression now, or add more detail first.",
+            what_could_change_management=(
+                f"The provisional answer could change meaningfully if you add {next_detail}."
+                if next_detail
+                else "A discriminating microbiology, imaging, or bedside finding could still change management."
+            ),
+        )
+    single_follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
+    if single_follow_up:
+        return _assistant_consult_style_message(
+            bottom_line=extraction_summary,
+            why="I have the right syndrome lane, but I still need one more high-yield detail before the consult will feel solid.",
+            what_i_still_need=single_follow_up + score_note,
+            what_i_would_do_now="Reply with that one detail in plain language and I’ll keep the consult moving.",
+            what_could_change_management=(
+                f"The answer could move meaningfully depending on {next_detail}."
+                if next_detail
+                else "The next objective detail could still move the estimate."
+            ),
+        )
+    if text_result.requires_confirmation:
+        return _assistant_consult_style_message(
+            bottom_line=extraction_summary,
+            why="I may still have a few extraction gaps or ambiguities to clean up.",
+            what_i_still_need="Any correction or missing case detail that would make the parsed case more accurate." + score_note,
+            what_i_would_do_now="If anything looks off, correct it or add more case detail. If it looks right, ask for my consultant impression.",
+            what_could_change_management="A correction to the parsed findings, setting, or microbiology could change the direction of the consult.",
         )
 
-    if _assistant_case_is_consult_ready(module, text_result, state):
-        summary += " " + _assistant_ready_for_consult_message(module, text_result, state)
-    else:
-        single_follow_up = _assistant_single_case_follow_up(module, text_result.parsed_request, state=state)
-        if single_follow_up:
-            summary += " " + single_follow_up
-    score_name = _assistant_selected_endo_score_id(state)
-    if module.id == "endo" and score_name and _assistant_missing_endo_score_options(state):
-        summary += f" I also listed the remaining {score_name.upper()} components below so you can tighten that score before I run the assessment."
-
-    if _assistant_case_is_consult_ready(module, text_result, state):
-        return summary
+    summary = extraction_summary
     if text_result.requires_confirmation:
-        summary += " If anything looks off, correct it or add more case detail. If this extraction matches the case, ask for my consultant impression."
+        summary += " If anything looks off, correct it or add more case detail."
     else:
         summary += " If this extraction matches the case, ask for my consultant impression. Otherwise, add more case detail."
-    return summary
+    summary += score_note
+    return _assistant_consult_style_message(
+        bottom_line=summary,
+        what_i_would_do_now="Keep replying in plain language and I will keep the consult moving one question at a time.",
+    )
 
 
 def _assistant_probid_review_message(
@@ -6846,6 +7130,741 @@ def _assistant_intake_case_from_text(
         state,
         module_hint=module_hint,
         preset_hint=preset_hint,
+    )
+
+
+def _assistant_explicit_syndrome_module_request(message_text: str) -> str | None:
+    normalized = _normalize_choice(message_text)
+    if not normalized:
+        return None
+    if not any(token in normalized for token in EXPLICIT_SYNDROME_REQUEST_TOKENS):
+        return None
+
+    parsed = parse_text_to_request(
+        store=store,
+        text=message_text,
+        include_explanation=False,
+    )
+    module_id = parsed.understood.module_id
+    if not module_id or store.get(module_id) is None:
+        return None
+    return module_id
+
+
+def _assistant_text_has_phrase(normalized_text: str, phrase: str) -> bool:
+    normalized_phrase = _normalize_choice(phrase)
+    if not normalized_text or not normalized_phrase:
+        return False
+    return re.search(rf"(?<![a-z0-9]){re.escape(normalized_phrase)}(?![a-z0-9])", normalized_text) is not None
+
+
+def _assistant_consult_style_message(
+    *,
+    bottom_line: str,
+    why: str | None = None,
+    what_i_still_need: str | None = None,
+    what_i_would_do_now: str | None = None,
+    what_could_change_management: str | None = None,
+) -> str:
+    lines = [f"Bottom line: {bottom_line.strip()}"]
+    if why and why.strip():
+        lines.append(f"Why: {why.strip()}")
+    if what_i_still_need and what_i_still_need.strip():
+        lines.append(f"What I still need: {what_i_still_need.strip()}")
+    if what_i_would_do_now and what_i_would_do_now.strip():
+        lines.append(f"What I would do now: {what_i_would_do_now.strip()}")
+    if what_could_change_management and what_could_change_management.strip():
+        lines.append(f"What could change management: {what_could_change_management.strip()}")
+    return "\n".join(lines)
+
+
+def _assistant_detect_consult_intent(message_text: str) -> str | None:
+    normalized = _normalize_choice(message_text)
+    if not normalized:
+        return None
+    parsed = parse_text_to_request(
+        store=store,
+        text=message_text,
+        include_explanation=False,
+    )
+    has_syndrome_signal = bool(parsed.understood.module_id and store.get(parsed.understood.module_id or ""))
+    has_medication_signal = bool(_assistant_detect_doseid_medication_ids(message_text))
+    has_treatment_start_signal = any(token in normalized for token in CONSULT_INTENT_TREATMENT_START_TOKENS)
+    has_therapy_selection_signal = any(token in normalized for token in CONSULT_INTENT_THERAPY_SELECTION_TOKENS)
+    has_antimicrobial_signal = any(token in normalized for token in CONSULT_INTENT_ANTIMICROBIAL_TOKENS)
+    if has_therapy_selection_signal and (has_antimicrobial_signal or has_syndrome_signal or has_medication_signal):
+        return "therapy_selection"
+    if has_treatment_start_signal and (has_antimicrobial_signal or has_syndrome_signal or has_medication_signal):
+        return "treatment_decision"
+    return None
+
+
+def _assistant_consult_treatment_module_hint(message_text: str) -> str | None:
+    parsed = parse_text_to_request(
+        store=store,
+        text=message_text,
+        include_explanation=False,
+    )
+    module_id = parsed.understood.module_id
+    if module_id and store.get(module_id) is not None:
+        return module_id
+
+    normalized = _normalize_choice(message_text)
+    if not any(token in normalized for token in CONSULT_INTENT_FUNGAL_TOKENS):
+        return None
+    if any(token in normalized for token in CONSULT_INTENT_MOLD_TOKENS):
+        return "inv_mold"
+    if any(token in normalized for token in CONSULT_INTENT_CANDIDA_TOKENS):
+        return "inv_candida"
+    return None
+
+
+def _assistant_consult_treatment_intro(module: SyndromeModule) -> str:
+    if module.id == "inv_mold":
+        return (
+            "This reads like a treatment-start consult. "
+            "I’ll help decide whether empiric mold-active therapy is warranted, what data would most change that decision, "
+            "and whether it is reasonable to act before the workup is complete. "
+        )
+    if module.id == "inv_candida":
+        return (
+            "This reads like a treatment-start consult. "
+            "I’ll help decide whether empiric antifungal therapy is warranted for invasive candidiasis or candidemia, "
+            "what missing data matters most, and whether a best-effort answer is still reasonable now. "
+        )
+    return (
+        "This reads like a treatment-start consult. "
+        "I’ll help decide whether syndrome-directed therapy is warranted now, what I still need, and what could change management. "
+    )
+
+
+def _assistant_consult_therapy_selection_intro(module: SyndromeModule) -> str:
+    if module.id == "inv_mold":
+        return (
+            "This reads like a therapy-selection consult. "
+            "I’ll help decide whether mold-active treatment is warranted, which antifungal lane fits best, and what data would most change the recommendation. "
+        )
+    if module.id == "inv_candida":
+        return (
+            "This reads like a therapy-selection consult. "
+            "I’ll help decide whether empiric antifungal therapy is warranted for invasive candidiasis or candidemia and what treatment direction fits the current data best. "
+        )
+    return (
+        "This reads like a therapy-selection consult. "
+        "I’ll help decide whether treatment is warranted, what direction I would lean, and what data would most change that recommendation. "
+    )
+
+
+def _assistant_consult_fungal_clarification_response(state: AssistantState) -> AssistantTurnResponse:
+    response = _assistant_begin_selected_workflow(state, PROBID_ASSISTANT_ID)
+    response.assistant_message = _assistant_consult_style_message(
+        bottom_line=(
+            "This reads like a fungal treatment consult, but I need to know whether the question is mainly about invasive candidiasis or invasive mold disease before I can give the most useful ID-style answer."
+        ),
+        why=(
+            "Those two fungal pathways ask different host-risk, microbiology, and imaging questions and can lead to different empiric-treatment thresholds."
+        ),
+        what_i_still_need=(
+            "Whether this behaves more like candidemia / yeast infection or more like invasive mold disease."
+        ),
+        what_i_would_do_now=(
+            "Choose the fungal syndrome below or reply with a short clarification like 'candidemia from a central line' or 'neutropenic with pulmonary nodules'."
+        ),
+        what_could_change_management=(
+            "Blood-culture yeast, line-related candidemia clues, pulmonary nodules, galactomannan, sinus disease, or major neutropenia would immediately push the consult in different directions."
+        ),
+    )
+    response.options = [
+        AssistantOption(
+            value="inv_candida",
+            label="Possible candidemia / yeast",
+            description="Use the invasive candidiasis pathway for candidemia, yeast in blood, line-related yeast concern, or abdominal Candida syndromes.",
+        ),
+        AssistantOption(
+            value="inv_mold",
+            label="Possible mold infection",
+            description="Use the invasive mold pathway for pulmonary nodules, halo signs, galactomannan, sinus disease, or Aspergillus-style host-risk patterns.",
+        ),
+        AssistantOption(value="restart", label="Start new consult"),
+    ]
+    response.tips = [
+        "If you are not sure, a useful reply would be: 'neutropenic with pulmonary nodules' or 'candidemia from a central line'.",
+        "Once I know the fungal syndrome lane, I can still give a provisional best-effort opinion if some tests are missing.",
+    ]
+    return response
+
+
+def _assistant_consult_generic_antimicrobial_clarification_response(
+    state: AssistantState,
+    *,
+    message_text: str,
+    intent: str,
+) -> AssistantTurnResponse:
+    response = _assistant_begin_selected_workflow(state, PROBID_ASSISTANT_ID)
+    detected_medication_ids = _assistant_detect_doseid_medication_ids(message_text)
+    meds_by_id = _assistant_doseid_medications_by_id()
+    medication_names = [meds_by_id[item].name for item in detected_medication_ids if item in meds_by_id]
+    if medication_names:
+        medication_phrase = _join_readable(medication_names[:3])
+        response.assistant_message = _assistant_consult_style_message(
+            bottom_line=(
+                f"This reads like a treatment consult about {medication_phrase}, but I still need the main syndrome, source, or organism before I can give the most useful ID-style recommendation."
+            ),
+            why=(
+                f"The right answer for {medication_phrase} depends heavily on whether this is pneumonia, bacteremia, endocarditis, skin/soft tissue infection, meningitis, or something else."
+            ),
+            what_i_still_need="The main syndrome, source, or organism you are treating.",
+            what_i_would_do_now=(
+                "Reply with a short framing line such as 'possible MRSA pneumonia', 'staph bacteremia with endocarditis concern', or 'cellulitis without purulence'."
+            ),
+            what_could_change_management=(
+                "A different syndrome, source-control issue, organism, or illness severity could completely change whether I would start it, hold it, or choose something else."
+            ),
+        )
+        response.tips = [
+            "A useful reply would be: 'possible MRSA pneumonia', 'staph bacteremia with concern for endocarditis', or 'cellulitis without purulence'.",
+            "Once I know the syndrome lane, I can still give a provisional best-effort opinion if some tests are missing.",
+        ]
+        return response
+
+    response.assistant_message = _assistant_consult_style_message(
+        bottom_line="This reads like an antimicrobial treatment consult, but I still need the main syndrome, source, or organism to answer it well.",
+        why=(
+            "The threshold to start, hold, or choose therapy depends much more on the syndrome and source than on the drug name alone."
+        ),
+        what_i_still_need="The main syndrome, source, or organism you are worried about.",
+        what_i_would_do_now=(
+            "Reply with a short framing line such as 'possible pneumonia', 'endocarditis concern after Staph aureus bacteremia', or 'febrile neutropenia with pulmonary nodules'."
+        ),
+        what_could_change_management=(
+            "Once I know the syndrome lane, I can tell you whether I would start treatment now, hold it, or favor a different regimen."
+        ),
+    )
+    response.tips = [
+        "A useful reply would be: 'possible pneumonia', 'endocarditis concern after Staph aureus bacteremia', or 'febrile neutropenia with pulmonary nodules'.",
+        "If you already know the syndrome, you can also click it below and I’ll keep the question framed like an ID consult.",
+    ]
+    return response
+
+
+def _assistant_llm_triage_intent(message_text: str) -> str | None:
+    """
+    Use the LLM to classify a free-text message into one of the known workflow intents.
+    Returns one of: 'probid', 'mechid', 'doseid', 'immunoid', 'allergyid', 'general_id', 'unclear'.
+    Returns None if the LLM is unavailable or the call fails, so the caller can fall through.
+    """
+    from .services.consult_narrator import consult_narration_enabled
+    from .services.llm_text_parser import _try_import_openai
+
+    if not consult_narration_enabled():
+        return None
+
+    try:
+        OpenAI = _try_import_openai()
+        import json as _json
+        import os as _os
+
+        api_key = _os.getenv("OPENAI_API_KEY")
+        client_kwargs: dict = {"api_key": api_key}
+        base_url = _os.getenv("OPENAI_BASE_URL")
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = OpenAI(**client_kwargs)
+        model = _os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+
+        triage_prompt = (
+            "You are routing an infectious diseases clinical assistant query to the correct analysis module.\n"
+            "Read the clinician's message and classify it into exactly one of these intents:\n"
+            "- probid: Syndrome workup — describes patient findings (symptoms, vitals, labs, cultures, imaging) suggesting an infectious syndrome\n"
+            "- mechid: Resistance/AST interpretation — mentions an organism plus susceptibility results or asks about resistance mechanisms\n"
+            "- doseid: Antimicrobial dosing — asks about drug dose, renal adjustment, dialysis dosing, or regimen calculation\n"
+            "- immunoid: Prophylaxis or immunosuppression — mentions biologic therapy, chemotherapy, steroids, transplant, or asks about pre-treatment infection screening\n"
+            "- allergyid: Antibiotic allergy or cross-reactivity — describes an antibiotic allergy and asks what is safe to use\n"
+            "- general_id: General ID knowledge question — educational or conceptual ID question without specific patient findings for formal analysis\n"
+            "- unclear: Cannot be classified as an infectious diseases question\n"
+            "Reply with ONLY a JSON object on one line: {\"intent\": \"<one of the above>\"}\n"
+            "No explanation, no markdown, no extra keys."
+        )
+
+        response = client.responses.create(
+            model=model,
+            instructions=triage_prompt,
+            input=message_text,
+        )
+        output_text = getattr(response, "output_text", None) or ""
+        data = _json.loads(output_text.strip())
+        intent = data.get("intent", "unclear")
+        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "general_id", "unclear"}:
+            return "unclear"
+        return intent
+    except Exception:
+        return None
+
+
+def _assistant_general_id_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Return a grounded general ID answer for conceptual questions that don't map to a specific analysis workflow."""
+    fallback_message = (
+        "That's a general ID question. I can give the most precise answer when you provide patient-specific data — "
+        "for example, case findings for syndrome probability, an isolate plus susceptibilities for resistance interpretation, "
+        "or a drug plus renal context for dosing."
+    )
+    answer, narration_refined = narrate_general_id_answer(
+        question=message_text,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="probid", label="Syndrome workup"),
+            AssistantOption(value="mechid", label="Resistance interpretation"),
+            AssistantOption(value="doseid", label="Antimicrobial dosing"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "If you have a specific patient, I can run a formal analysis with probability estimates and guideline-backed recommendations.",
+            "Type the case details in plain language, or choose a module to start a structured workup.",
+        ],
+    )
+
+
+def _assistant_llm_triage(
+    req: AssistantTurnRequest,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    """
+    LLM-backed last-resort triage called when all deterministic routing has failed.
+    Classifies the message and routes to the appropriate module, answers general ID
+    questions directly, or asks a targeted clarifying question.
+    Returns None if the LLM is unavailable or the call fails, to allow fall-through.
+    """
+    message_text = (req.message or "").strip()
+    if not message_text:
+        return None
+
+    intent = _assistant_llm_triage_intent(message_text)
+    if intent is None:
+        return None
+
+    if intent == "probid":
+        routed = _assistant_intake_case_from_text(req, state)
+        if routed is not None:
+            return routed
+        return _assistant_begin_selected_workflow(
+            state, PROBID_ASSISTANT_ID,
+            lead_in="This looks like a syndrome workup question. ",
+        )
+
+    if intent == "mechid":
+        routed = _assistant_intake_mechid_from_text(req, state)
+        if routed is not None:
+            return routed
+        return _assistant_begin_selected_workflow(
+            state, MECHID_ASSISTANT_ID,
+            lead_in="This looks like a resistance or AST question. ",
+        )
+
+    if intent == "doseid":
+        routed = _assistant_start_doseid_from_text(message_text, state)
+        if routed is not None:
+            return routed
+        return _assistant_begin_selected_workflow(
+            state, DOSEID_ASSISTANT_ID,
+            lead_in="This looks like a dosing question. ",
+        )
+
+    if intent == "immunoid":
+        routed = _assistant_start_immunoid_from_text(message_text, state)
+        if routed is not None:
+            return routed
+        return _assistant_begin_selected_workflow(
+            state, IMMUNOID_ASSISTANT_ID,
+            lead_in="This looks like an immunosuppression or prophylaxis question. ",
+        )
+
+    if intent == "allergyid":
+        routed = _assistant_start_allergyid_from_text(message_text, state)
+        if routed is not None:
+            return routed
+        return _assistant_begin_selected_workflow(
+            state, ALLERGYID_ASSISTANT_ID,
+            lead_in="This looks like an antibiotic allergy or cross-reactivity question. ",
+        )
+
+    if intent == "general_id":
+        return _assistant_general_id_response(message_text, state)
+
+    # intent == "unclear" — return None to fall through to the original generic response
+    return None
+
+
+_ALLERGY_MENTION_PATTERNS = [
+    r"\ballerg(?:ic|y)\s+to\s+[\w\s\-]+",
+    r"[\w\s\-]+\s+allerg(?:y|ic)",
+    r"\bnkda\b",
+    r"\bno\s+known\s+(?:drug\s+)?allerg",
+    r"\bpcn\s+allerg",
+    r"\bpenicillin\s+allerg",
+]
+
+
+def _extract_allergy_mention(text: str) -> str | None:
+    """Extract a short allergy mention from free text, if present."""
+    import re as _re
+    normalized = text.lower()
+    for pattern in _ALLERGY_MENTION_PATTERNS:
+        match = _re.search(pattern, normalized)
+        if match:
+            span = text[match.start():match.end()].strip()
+            return span[:120]  # cap length
+    return None
+
+
+def _update_session_patient_context(state: AssistantState, text: str) -> None:
+    """
+    Extract patient demographics from any incoming message and merge into state.patient_context.
+    New values only fill gaps — already-set values are never overwritten.
+    """
+    if not text.strip():
+        return
+    extracted = _assistant_parse_doseid_patient_context(text)
+    if state.patient_context is None:
+        state.patient_context = SessionPatientContext()
+    pc = state.patient_context
+    if pc.age_years is None and extracted.age_years is not None:
+        pc.age_years = extracted.age_years
+    if pc.sex is None and extracted.sex is not None:
+        pc.sex = extracted.sex
+    if pc.total_body_weight_kg is None and extracted.total_body_weight_kg is not None:
+        pc.total_body_weight_kg = extracted.total_body_weight_kg
+    if pc.height_cm is None and extracted.height_cm is not None:
+        pc.height_cm = extracted.height_cm
+    if pc.serum_creatinine_mg_dl is None and extracted.serum_creatinine_mg_dl is not None:
+        pc.serum_creatinine_mg_dl = extracted.serum_creatinine_mg_dl
+    if pc.crcl_ml_min is None and extracted.crcl_ml_min is not None:
+        pc.crcl_ml_min = extracted.crcl_ml_min
+    if extracted.renal_mode != "standard":
+        pc.renal_mode = extracted.renal_mode
+    if not pc.allergy_text:
+        mention = _extract_allergy_mention(text)
+        if mention:
+            pc.allergy_text = mention
+
+
+def _session_context_to_doseid_patient_context(
+    pc: SessionPatientContext,
+) -> DoseIDAssistantPatientContext:
+    """Convert a SessionPatientContext into a DoseIDAssistantPatientContext for use as a fallback."""
+    return DoseIDAssistantPatientContext(
+        ageYears=pc.age_years,
+        sex=pc.sex,
+        totalBodyWeightKg=pc.total_body_weight_kg,
+        heightCm=pc.height_cm,
+        serumCreatinineMgDl=pc.serum_creatinine_mg_dl,
+        crclMlMin=pc.crcl_ml_min,
+        renalMode=pc.renal_mode,
+    )
+
+
+def _session_patient_context_as_doseid_text(pc: SessionPatientContext) -> str:
+    """Serialize a SessionPatientContext to a compact text string for DoseID analysis seeding."""
+    parts: List[str] = []
+    if pc.age_years is not None:
+        parts.append(f"{pc.age_years}yo")
+    if pc.sex is not None:
+        parts.append(pc.sex)
+    if pc.total_body_weight_kg is not None:
+        parts.append(f"{pc.total_body_weight_kg}kg")
+    if pc.height_cm is not None:
+        parts.append(f"{pc.height_cm}cm")
+    if pc.serum_creatinine_mg_dl is not None:
+        parts.append(f"SCr {pc.serum_creatinine_mg_dl}")
+    if pc.crcl_ml_min is not None:
+        parts.append(f"CrCl {pc.crcl_ml_min}")
+    if pc.renal_mode == "ihd":
+        parts.append("on hemodialysis")
+    elif pc.renal_mode == "crrt":
+        parts.append("on CRRT")
+    return ", ".join(parts)
+
+
+def _assistant_handle_consult_intent(
+    req: AssistantTurnRequest,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    message_text = (req.message or "").strip()
+    intent = _assistant_detect_consult_intent(message_text)
+    if intent not in {"treatment_decision", "therapy_selection"}:
+        return None
+    mechid_intent = _assistant_mechid_intent_profile(message_text)
+    if (
+        _assistant_is_doseid_intent(message_text)
+        or _assistant_is_immunoid_intent(message_text)
+        or _assistant_is_allergyid_intent(message_text)
+    ):
+        return None
+    if (
+        mechid_intent["has_ast"]
+        or mechid_intent["has_resistance_signal"]
+        or mechid_intent["has_isolate"]
+        or mechid_intent["has_explicit_mechid_words"]
+    ):
+        return None
+
+    module_hint = _assistant_consult_treatment_module_hint(message_text)
+    normalized = _normalize_choice(message_text)
+    if module_hint is None and any(token in normalized for token in CONSULT_INTENT_FUNGAL_TOKENS):
+        return _assistant_consult_fungal_clarification_response(state)
+
+    if module_hint is not None:
+        response = _assistant_intake_case_from_text(req, state, module_hint=module_hint)
+        module = store.get(module_hint)
+        if response is not None and module is not None:
+            intro = (
+                _assistant_consult_treatment_intro(module)
+                if intent == "treatment_decision"
+                else _assistant_consult_therapy_selection_intro(module)
+            )
+            response.assistant_message = intro + response.assistant_message
+            response.tips = [
+                (
+                    "I’ll keep this framed as a treatment decision and ask for the single detail most likely to change management next."
+                    if intent == "treatment_decision"
+                    else "I’ll keep this framed as a therapy-selection consult and ask for the single detail most likely to change management next."
+                ),
+                *(response.tips or []),
+            ][:3]
+            return response
+        if module is not None:
+            return _assistant_begin_selected_syndrome_module(
+                state,
+                module_hint,
+                lead_in=(
+                    _assistant_consult_treatment_intro(module)
+                    if intent == "treatment_decision"
+                    else _assistant_consult_therapy_selection_intro(module)
+                ),
+            )
+
+    response = _assistant_begin_selected_workflow(state, PROBID_ASSISTANT_ID)
+    return _assistant_consult_generic_antimicrobial_clarification_response(
+        state,
+        message_text=message_text,
+        intent=intent,
+    )
+
+
+def _assistant_explicit_non_syndrome_workflow_request(message_text: str) -> str | None:
+    normalized = _normalize_choice(message_text)
+    if not normalized:
+        return None
+    if not any(_assistant_text_has_phrase(normalized, token) for token in EXPLICIT_SYNDROME_REQUEST_TOKENS):
+        return None
+
+    for workflow_id in (ALLERGYID_ASSISTANT_ID, DOSEID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID, MECHID_ASSISTANT_ID):
+        aliases = EXPLICIT_NON_SYNDROME_WORKFLOW_ALIASES.get(workflow_id, ())
+        if any(_assistant_text_has_phrase(normalized, alias) for alias in aliases):
+            return workflow_id
+    return None
+
+
+def _assistant_begin_selected_workflow(
+    state: AssistantState,
+    workflow_id: str,
+    *,
+    lead_in: str | None = None,
+) -> AssistantTurnResponse:
+    if workflow_id == PROBID_ASSISTANT_ID:
+        state.workflow = "probid"
+        state.stage = "select_syndrome_module"
+        state.module_id = None
+        state.preset_id = None
+        state.case_section = None
+        state.case_text = None
+        state.mechid_text = None
+        state.doseid_text = None
+        state.allergyid_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        _assistant_reset_immunoid_state(state)
+        intro = lead_in or ""
+        return AssistantTurnResponse(
+            assistantMessage=(intro + "Which clinical syndrome would you like to assess?"),
+            state=state,
+            options=_assistant_syndrome_module_options(),
+            tips=[
+                "Choose the syndrome first, then I’ll ask for the setting and case details.",
+                "You can also type the syndrome name in plain language.",
+            ],
+        )
+
+    if workflow_id == MECHID_ASSISTANT_ID:
+        _assistant_reset_immunoid_state(state)
+        state.workflow = "mechid"
+        state.stage = "mechid_describe"
+        state.module_id = None
+        state.preset_id = None
+        state.case_section = None
+        state.case_text = None
+        state.mechid_text = None
+        state.doseid_text = None
+        state.allergyid_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        intro = lead_in or ""
+        return AssistantTurnResponse(
+            assistantMessage=(
+                intro
+                + "Paste the organism and susceptibility pattern in plain language. "
+                + "For example: 'E. coli resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem, bloodstream infection in septic shock.'"
+            ),
+            state=state,
+            options=[AssistantOption(value="restart", label="Start new consult")],
+            tips=[
+                "I can extract the organism, AST pattern, and basic treatment context from free text.",
+                "Ask for likely resistance mechanism, therapy, or both.",
+            ],
+        )
+
+    if workflow_id == DOSEID_ASSISTANT_ID:
+        _assistant_reset_immunoid_state(state)
+        state.workflow = "doseid"
+        state.stage = "doseid_describe"
+        state.module_id = None
+        state.preset_id = None
+        state.case_section = None
+        state.case_text = None
+        state.mechid_text = None
+        state.doseid_text = None
+        state.allergyid_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        intro = lead_in or ""
+        return AssistantTurnResponse(
+            assistantMessage=(
+                intro
+                + "Tell me the antimicrobial or regimen plus the renal context. "
+                + "For example: 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35, female, 165 cm'."
+            ),
+            state=state,
+            options=[AssistantOption(value="restart", label="Start new consult")],
+            tips=[
+                "I can handle common antibacterial, TB, antifungal, and antiviral regimens.",
+                "The most useful details are weight, serum creatinine or CrCl, dialysis status, age, sex, and height.",
+            ],
+        )
+
+    if workflow_id == IMMUNOID_ASSISTANT_ID:
+        state.workflow = "immunoid"
+        state.stage = "immunoid_select_agents"
+        state.module_id = None
+        state.preset_id = None
+        state.case_section = None
+        state.case_text = None
+        state.mechid_text = None
+        state.doseid_text = None
+        state.allergyid_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        _assistant_reset_immunoid_state(state)
+        intro = lead_in or ""
+        return AssistantTurnResponse(
+            assistantMessage=(
+                intro
+                + "Tell me which chemotherapy, steroids, biologics, or transplant agents are planned. "
+                + "You can type them in plain language, for example: 'rituximab and prednisone 20 mg daily', "
+                + "or click a few common agents to get started."
+            ),
+            state=state,
+            options=_assistant_immunoid_agent_options(state),
+            tips=[
+                "I will build a deterministic screening and prophylaxis checklist from the selected exposures.",
+                "You can keep adding agents before continuing.",
+            ],
+        )
+
+    if workflow_id == ALLERGYID_ASSISTANT_ID:
+        state.workflow = "allergyid"
+        state.stage = "done"
+        state.module_id = None
+        state.preset_id = None
+        state.case_section = None
+        state.case_text = None
+        state.mechid_text = None
+        state.doseid_text = None
+        state.allergyid_text = None
+        state.pretest_factor_ids = []
+        state.pretest_factor_labels = []
+        state.endo_blood_culture_context = None
+        state.endo_score_factor_ids = []
+        _assistant_reset_immunoid_state(state)
+        intro = lead_in or ""
+        return AssistantTurnResponse(
+            assistantMessage=(
+                intro
+                + "Describe the allergy history and the antibiotics you are considering. "
+                + "For example: 'amoxicillin anaphylaxis, can I use cefazolin for MSSA bacteremia?'"
+            ),
+            state=state,
+            options=[AssistantOption(value="restart", label="Start new consult")],
+            tips=[
+                "The most useful details are the culprit antibiotic, what happened, and the candidate drug you want to use.",
+                "If the reaction was severe, say so explicitly, for example SJS/TEN, DRESS, organ injury, or hemolysis.",
+            ],
+        )
+
+    return _assistant_begin_selected_syndrome_module(state, workflow_id, lead_in=lead_in)
+
+
+def _assistant_begin_selected_syndrome_module(
+    state: AssistantState,
+    module_id: str,
+    *,
+    lead_in: str | None = None,
+) -> AssistantTurnResponse:
+    state.workflow = "probid"
+    _assistant_reset_immunoid_state(state)
+    state.module_id = module_id
+    state.preset_id = None
+    state.pending_intake_text = None
+    state.pending_followup_workflow = None
+    state.pending_followup_text = None
+    state.case_section = None
+    state.case_text = None
+    state.mechid_text = None
+    state.doseid_text = None
+    state.allergyid_text = None
+    state.pretest_factor_ids = []
+    state.pretest_factor_labels = []
+    state.endo_blood_culture_context = None
+    state.endo_score_factor_ids = []
+
+    module = store.get(module_id)
+    if module is None:
+        raise HTTPException(status_code=400, detail=f"Selected module '{module_id}' not found")
+
+    state.stage = "select_preset"
+    intro = lead_in or f"Great, we’ll work on {_assistant_module_label(module)}. "
+    return AssistantTurnResponse(
+        assistantMessage=(intro + "Which setting/pretest context fits this case best?"),
+        state=state,
+        options=_assistant_preset_options(module),
+        tips=[
+            "You can click an option or type something like 'ED', 'ICU', or the preset name.",
+            "Type 'restart' anytime to begin a new consult.",
+        ],
     )
 
 
@@ -8045,10 +9064,10 @@ def _assistant_immunoid_final_message(result: ImmunoAnalyzeResponse) -> str:
     prophylaxis = [rec.summary for rec in result.recommendations if rec.category == "prophylaxis"]
     context_items = [rec.summary for rec in result.recommendations if rec.category in {"referral", "context", "monitoring"}]
     parts: List[str] = []
-    if tests:
-        parts.append("Before therapy, check: " + " ".join(tests[:3]))
     if prophylaxis:
         parts.append("Prophylaxis or protocol review: " + " ".join(prophylaxis[:3]))
+    if tests:
+        parts.append("Before therapy, check: " + " ".join(tests[:3]))
     if context_items:
         parts.append("Additional context: " + " ".join(context_items[:3]))
     if not parts:
@@ -8086,7 +9105,9 @@ def _assistant_immunoid_response(
         )
 
     state.stage = "done"
-    options = [
+    doseid_options = _immunoid_doseid_options(result)
+    options: List[AssistantOption] = [
+        *doseid_options,
         AssistantOption(value="add_more_details", label="Update this case"),
         AssistantOption(value="restart", label="Start new consult"),
     ]
@@ -8097,16 +9118,19 @@ def _assistant_immunoid_response(
         fallback_message=fallback_message,
         follow_up_stage=False,
     )
+    tips = [
+        "Add another serology result, exposure history point, or regimen detail if you want me to refine the same checklist.",
+        "Every recommendation shown here comes from the deterministic rule set and its attached citations.",
+    ]
+    if doseid_options:
+        tips.insert(0, "If you want, I can calculate the renal-adjusted dose for the recommended prophylaxis agent.")
     return AssistantTurnResponse(
         assistantMessage=narrated_message,
         assistantNarrationRefined=narration_refined,
         state=state,
         options=options,
         immunoidAnalysis=result,
-        tips=[
-            "Add another serology result, exposure history point, or regimen detail if you want me to refine the same checklist.",
-            "Every recommendation shown here comes from the deterministic rule set and its attached citations.",
-        ],
+        tips=tips,
     )
 
 
@@ -8177,7 +9201,7 @@ def _assistant_text_mentions_doseid_crcl(normalized: str) -> bool:
 
 
 def _assistant_text_mentions_doseid_scr(normalized: str) -> bool:
-    return bool(re.search(r"\b(?:scr|serum creatinine|creatinine)\b", normalized))
+    return bool(re.search(r"\b(?:scr|s\s*cr|serum creatinine|creatinine|cr)\b", normalized))
 
 
 def _assistant_text_mentions_doseid_ihd(normalized: str) -> bool:
@@ -8328,7 +9352,14 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
         age_years = int(age_match.group(1) or age_match.group(2))
 
     sex = None
-    if re.search(r"\bmale\b|\bman\b", normalized):
+    sex_match = re.search(
+        r"\b(?:sex|gender)\s*(?:is|=|:)?\s*(male|female|man|woman|m|f)\b",
+        normalized,
+    )
+    if sex_match:
+        sex_token = str(sex_match.group(1) or "").strip()
+        sex = "male" if sex_token in {"male", "man", "m"} else "female"
+    elif re.search(r"\bmale\b|\bman\b", normalized):
         sex = "male"
     elif re.search(r"\bfemale\b|\bwoman\b", normalized):
         sex = "female"
@@ -8352,9 +9383,18 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
             feet = int(feet_inches_match.group(1))
             inches = int(feet_inches_match.group(2) or 0)
             height_cm = round(((feet * 12) + inches) * 2.54, 1)
+        else:
+            feet_inches_quote_match = re.search(r"\b(\d)\s*'\s*(\d{1,2})\s*(?:\"|in|inch|inches)?\b", message_text)
+            if feet_inches_quote_match:
+                feet = int(feet_inches_quote_match.group(1))
+                inches = int(feet_inches_quote_match.group(2))
+                height_cm = round(((feet * 12) + inches) * 2.54, 1)
 
     scr = None
-    scr_match = re.search(r"\b(?:scr|serum creatinine|creatinine)\s*(?:is|=|:)?\s*(\d+(?:\.\d+)?)\b", normalized)
+    scr_match = re.search(
+        r"\b(?:scr|s\s*cr|serum creatinine|creatinine|cr)\s*(?:is|=|:)?\s*(\d+(?:\.\d+)?)\b",
+        normalized,
+    )
     if scr_match:
         scr = float(scr_match.group(1))
 
@@ -8832,13 +9872,14 @@ def _doseid_recommendations_ready(
 ) -> tuple[List[DoseIDDoseRecommendation], List[str], List[str]]:
     warnings: List[str] = []
     recommendations: List[DoseIDDoseRecommendation] = []
+    assumptions: List[str] = []
     needs_standard_renal_inputs = patient_context.renal_mode == "standard" and any(
         medication_id == "foscarnet"
         or _doseid_standard_renal_inputs_required(medication_id, indication_ids.get(medication_id))
         for medication_id in medication_ids
     )
     if needs_standard_renal_inputs or patient_context.crcl_ml_min is not None or patient_context.serum_creatinine_mg_dl is not None:
-        patient, _ = normalize_patient_from_available_inputs(
+        patient, assumptions = normalize_patient_from_available_inputs(
             total_body_weight_kg=patient_context.total_body_weight_kg,
             age_years=patient_context.age_years,
             sex=patient_context.sex,
@@ -8848,7 +9889,7 @@ def _doseid_recommendations_ready(
             renal_mode=patient_context.renal_mode,
         )
     else:
-        patient, _ = normalize_patient_from_available_inputs(
+        patient, assumptions = normalize_patient_from_available_inputs(
             total_body_weight_kg=patient_context.total_body_weight_kg or 70.0,
             age_years=patient_context.age_years or 50,
             sex=patient_context.sex or "male",
@@ -8866,7 +9907,7 @@ def _doseid_recommendations_ready(
             indication_id=indication_ids.get(medication_id),
         )
         recommendations.append(_doseid_recommendation_model(payload))
-    return recommendations, [], warnings
+    return recommendations, assumptions, warnings
 
 
 def _doseid_merge_patient_context(
@@ -9073,19 +10114,211 @@ def _assistant_doseid_simple_numeric_reply(reply: str) -> str | None:
         return None
     number = match.group(1)
     unit = match.group(2) or ""
-    if unit == "mg/dl":
+    if unit in {"mg/dl", "mg dl"}:
         unit = "mg/dl"
+    elif unit in {"ml/min", "ml min"}:
+        unit = "ml/min"
     return f"{number} {unit}".strip()
+
+
+def _assistant_doseid_followup_field_ids(existing_text: str | None) -> List[str]:
+    prior_analysis = _assistant_build_doseid_analysis(existing_text or "", parser_strategy="rule")
+    return [question.id for question in prior_analysis.follow_up_questions]
+
+
+def _assistant_doseid_multi_field_reply_fragments(
+    reply: str,
+    missing_field_ids: List[str],
+) -> tuple[List[str], set[str]]:
+    normalized = _assistant_doseid_normalize(reply)
+    fragments: Dict[str, str] = {}
+    explicit_fields: set[str] = set()
+
+    def remember(field_id: str, fragment: str | None, *, explicit: bool = False) -> None:
+        if field_id in missing_field_ids and fragment and field_id not in fragments:
+            fragments[field_id] = fragment.strip()
+            if explicit:
+                explicit_fields.add(field_id)
+
+    age_match = re.search(
+        r"\bage\s*(?:is|=|:)?\s*(\d{1,3})\b|\b(\d{1,3})\s*(?:yo|y o|y/o|yr old|yrs old|year old|years old)\b",
+        normalized,
+    )
+    if age_match:
+        remember("age", f"age {age_match.group(1) or age_match.group(2)}", explicit=True)
+
+    sex_match = re.search(
+        r"\b(?:sex|gender)\s*(?:is|=|:)?\s*(male|female|man|woman|m|f)\b",
+        normalized,
+    )
+    if sex_match:
+        sex_token = str(sex_match.group(1) or "").strip()
+        remember("sex", "male" if sex_token in {"male", "man", "m"} else "female", explicit=True)
+    elif re.search(r"\bmale\b|\bman\b", normalized):
+        remember("sex", "male", explicit=True)
+    elif re.search(r"\bfemale\b|\bwoman\b", normalized):
+        remember("sex", "female", explicit=True)
+
+    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?)\b", normalized)
+    if weight_match:
+        remember("weight", f"{weight_match.group(1)} kg", explicit=True)
+    else:
+        pounds_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(lb|lbs|pounds?)\b", normalized)
+        if pounds_match:
+            remember("weight", f"{pounds_match.group(1)} lb", explicit=True)
+
+    height_match = re.search(r"\b(\d+(?:\.\d+)?)\s*cm\b", normalized)
+    if height_match:
+        remember("height", f"{height_match.group(1)} cm", explicit=True)
+    else:
+        feet_inches_match = re.search(r"\b(\d)\s*ft\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
+        if feet_inches_match:
+            feet = feet_inches_match.group(1)
+            inches = feet_inches_match.group(2) or "0"
+            remember("height", f"{feet} ft {inches} in", explicit=True)
+        else:
+            feet_inches_quote_match = re.search(r"\b(\d)\s*'\s*(\d{1,2})\s*(?:\"|in|inch|inches)?\b", reply)
+            if feet_inches_quote_match:
+                remember(
+                    "height",
+                    f"{feet_inches_quote_match.group(1)} ft {feet_inches_quote_match.group(2)} in",
+                    explicit=True,
+                )
+
+    crcl_match = re.search(
+        r"\b(?:crcl|creatinine clearance)\s*(?:is|=|:|of)?\s*(\d+(?:\.\d+)?)\b",
+        normalized,
+    )
+    if crcl_match:
+        remember("renal_function", f"crcl {crcl_match.group(1)}", explicit=True)
+
+    scr_match = re.search(
+        r"\b(?:scr|s\s*cr|serum creatinine|creatinine|cr)\s*(?:is|=|:)?\s*(\d+(?:\.\d+)?)\b",
+        normalized,
+    )
+    if scr_match:
+        scr_fragment = f"serum creatinine {scr_match.group(1)}"
+        remember("serum_creatinine", scr_fragment, explicit=True)
+        remember("renal_function", scr_fragment, explicit=True)
+
+    chunks = [chunk.strip() for chunk in re.split(r"[,;\n]+", reply) if chunk.strip()]
+    bare_numeric_chunks: List[tuple[str, str, float, bool]] = []
+    for chunk in chunks:
+        chunk_norm = _assistant_doseid_normalize(chunk)
+        if not chunk_norm:
+            continue
+        if chunk_norm in {"male", "man", "m"}:
+            remember("sex", "male", explicit=True)
+            continue
+        if chunk_norm in {"female", "woman", "f"}:
+            remember("sex", "female", explicit=True)
+            continue
+        simple = _assistant_doseid_simple_numeric_reply(chunk)
+        if simple is None:
+            continue
+        simple_parts = simple.split()
+        value = simple_parts[0]
+        unit = simple_parts[1] if len(simple_parts) > 1 else ""
+        if unit in {"kg", "lb", "lbs"}:
+            remember("weight", f"{value} {unit}", explicit=True)
+            continue
+        if unit == "cm":
+            remember("height", f"{value} cm", explicit=True)
+            continue
+        if unit in {"mg/dl", "mg", "dl"}:
+            fragment = f"serum creatinine {value}"
+            remember("serum_creatinine", fragment, explicit=True)
+            remember("renal_function", fragment, explicit=True)
+            continue
+        if unit in {"ml/min", "ml", "min"}:
+            remember("renal_function", f"crcl {value}", explicit=True)
+            continue
+        bare_numeric_chunks.append((chunk, value, float(value), "." in value))
+
+    used_numeric_indexes: set[int] = set()
+
+    def remember_bare_numeric(index: int, field_id: str, fragment: str) -> None:
+        used_numeric_indexes.add(index)
+        remember(field_id, fragment)
+
+    remaining_field_ids = [field_id for field_id in missing_field_ids if field_id not in fragments]
+    if bare_numeric_chunks and remaining_field_ids:
+        if "age" in remaining_field_ids:
+            for index, (_chunk, value, numeric_value, is_decimal) in enumerate(bare_numeric_chunks):
+                if index in used_numeric_indexes or is_decimal:
+                    continue
+                if numeric_value.is_integer() and 0 < numeric_value <= 120:
+                    remember_bare_numeric(index, "age", f"age {value}")
+                    break
+
+        remaining_field_ids = [field_id for field_id in missing_field_ids if field_id not in fragments]
+        if "height" in remaining_field_ids:
+            for index, (_chunk, value, numeric_value, _is_decimal) in enumerate(bare_numeric_chunks):
+                if index in used_numeric_indexes:
+                    continue
+                if 100 <= numeric_value <= 250:
+                    remember_bare_numeric(index, "height", f"{value} cm")
+                    break
+
+        remaining_field_ids = [field_id for field_id in missing_field_ids if field_id not in fragments]
+        if "weight" in remaining_field_ids:
+            for index, (_chunk, value, numeric_value, _is_decimal) in enumerate(bare_numeric_chunks):
+                if index in used_numeric_indexes:
+                    continue
+                if 20 <= numeric_value <= 350:
+                    remember_bare_numeric(index, "weight", f"{value} kg")
+                    break
+
+        remaining_field_ids = [field_id for field_id in missing_field_ids if field_id not in fragments]
+        renal_field_id = "serum_creatinine" if "serum_creatinine" in remaining_field_ids else None
+        if renal_field_id is None and "renal_function" in remaining_field_ids:
+            renal_field_id = "renal_function"
+        if renal_field_id is not None:
+            chosen_index: int | None = None
+            renal_fragment: str | None = None
+            for index, (_chunk, value, numeric_value, is_decimal) in enumerate(bare_numeric_chunks):
+                if index in used_numeric_indexes:
+                    continue
+                if is_decimal and numeric_value < 20:
+                    chosen_index = index
+                    renal_fragment = f"serum creatinine {value}"
+                    break
+            if chosen_index is None:
+                for index, (_chunk, value, numeric_value, _is_decimal) in enumerate(bare_numeric_chunks):
+                    if index in used_numeric_indexes:
+                        continue
+                    if numeric_value >= 20:
+                        chosen_index = index
+                        renal_fragment = f"crcl {value}"
+                        break
+            if chosen_index is not None and renal_fragment is not None:
+                used_numeric_indexes.add(chosen_index)
+                remember(renal_field_id, renal_fragment)
+                if renal_field_id == "renal_function" and renal_fragment.startswith("serum creatinine"):
+                    remember("serum_creatinine", renal_fragment)
+
+    ordered_fragments = []
+    for field_id in missing_field_ids:
+        fragment = fragments.get(field_id)
+        if fragment and fragment not in ordered_fragments:
+            ordered_fragments.append(fragment)
+    return ordered_fragments, explicit_fields
 
 
 def _assistant_rewrite_doseid_followup_reply(existing_text: str | None, reply: str) -> str:
     extra = (reply or "").strip()
     if not extra:
         return extra
-    prior_analysis = _assistant_build_doseid_analysis(existing_text or "", parser_strategy="rule")
-    if not prior_analysis.follow_up_questions:
+    missing_field_ids = _assistant_doseid_followup_field_ids(existing_text)
+    if not missing_field_ids:
         return extra
-    question_id = prior_analysis.follow_up_questions[0].id
+    multi_field_fragments, explicit_fields = _assistant_doseid_multi_field_reply_fragments(extra, missing_field_ids)
+    if len(multi_field_fragments) >= 2:
+        return ". ".join(multi_field_fragments)
+    if len(multi_field_fragments) == 1 and explicit_fields:
+        return multi_field_fragments[0]
+
+    question_id = missing_field_ids[0]
     normalized = _assistant_doseid_normalize(extra)
     numeric_value = _assistant_doseid_simple_numeric_reply(extra)
     if question_id == "serum_creatinine" and numeric_value is not None:
@@ -9116,6 +10349,8 @@ def _assistant_build_doseid_analysis(
     parser_strategy: str = "auto",
     parser_model: str | None = None,
     allow_fallback: bool = True,
+    force_best_effort: bool = False,
+    session_patient_context: SessionPatientContext | None = None,
 ) -> DoseIDAssistantAnalysis:
     medication_ids = _assistant_detect_doseid_medication_ids(message_text)
     patient_context = _assistant_parse_doseid_patient_context(message_text)
@@ -9151,6 +10386,23 @@ def _assistant_build_doseid_analysis(
                 warnings.append(f"OpenAI DoseID parser failed: {exc}")
             else:
                 warnings.append(f"OpenAI DoseID parser unavailable/failed, used rule parser fallback: {exc}")
+    # Lowest-priority fallback: fill any remaining gaps from the session patient context
+    if session_patient_context is not None:
+        sc = session_patient_context
+        if patient_context.age_years is None and sc.age_years is not None:
+            patient_context = patient_context.model_copy(update={"age_years": sc.age_years})
+        if patient_context.sex is None and sc.sex is not None:
+            patient_context = patient_context.model_copy(update={"sex": sc.sex})
+        if patient_context.total_body_weight_kg is None and sc.total_body_weight_kg is not None:
+            patient_context = patient_context.model_copy(update={"total_body_weight_kg": sc.total_body_weight_kg})
+        if patient_context.height_cm is None and sc.height_cm is not None:
+            patient_context = patient_context.model_copy(update={"height_cm": sc.height_cm})
+        if patient_context.serum_creatinine_mg_dl is None and sc.serum_creatinine_mg_dl is not None:
+            patient_context = patient_context.model_copy(update={"serum_creatinine_mg_dl": sc.serum_creatinine_mg_dl})
+        if patient_context.crcl_ml_min is None and sc.crcl_ml_min is not None:
+            patient_context = patient_context.model_copy(update={"crcl_ml_min": sc.crcl_ml_min})
+        if patient_context.renal_mode == "standard" and sc.renal_mode != "standard":
+            patient_context = patient_context.model_copy(update={"renal_mode": sc.renal_mode})
     follow_up_questions = _doseid_missing_input_questions(
         medication_ids=medication_ids,
         indication_ids=indication_ids,
@@ -9160,11 +10412,37 @@ def _assistant_build_doseid_analysis(
 
     recommendations: List[DoseIDDoseRecommendation] = []
     assumptions: List[str] = []
+    provisional = False
+    provisional_reasons: List[str] = []
     if medication_ids and not follow_up_questions:
         recommendations, assumptions, warnings = _doseid_recommendations_ready(
             medication_ids=medication_ids,
             indication_ids=indication_ids,
             patient_context=patient_context,
+        )
+    elif medication_ids and force_best_effort:
+        best_effort_context = patient_context.model_copy(deep=True)
+        if (
+            best_effort_context.renal_mode == "standard"
+            and best_effort_context.crcl_ml_min is None
+            and best_effort_context.serum_creatinine_mg_dl is None
+        ):
+            best_effort_context.serum_creatinine_mg_dl = 1.0
+            assumptions.append(
+                "Renal function was not provided, so serum creatinine 1.0 mg/dL was used only to generate a provisional dosing estimate."
+            )
+        recommendations, extra_assumptions, extra_warnings = _doseid_recommendations_ready(
+            medication_ids=medication_ids,
+            indication_ids=indication_ids,
+            patient_context=best_effort_context,
+        )
+        assumptions.extend(extra_assumptions)
+        warnings.extend(extra_warnings)
+        provisional = True
+        provisional_reasons = [question.prompt for question in follow_up_questions[:3]]
+        assumptions.insert(
+            0,
+            "This is a provisional dosing estimate generated with missing inputs still outstanding. Confirm the final regimen before use.",
         )
 
     medication_names = [
@@ -9180,6 +10458,8 @@ def _assistant_build_doseid_analysis(
         warnings=warnings,
         missingInputs=missing_inputs,
         followUpQuestions=follow_up_questions,
+        provisional=provisional,
+        provisionalReasons=provisional_reasons,
     )
 
 
@@ -9189,22 +10469,40 @@ def _assistant_doseid_message(result: DoseIDAssistantAnalysis) -> str:
             "I can help with antimicrobial dosing here. Tell me the medication or regimen plus the renal context, "
             "for example 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35'."
         )
+    if result.provisional and result.recommendations:
+        recommendation_summary = "; ".join(
+            f"{item.medication_name}: {item.regimen}" for item in result.recommendations[:4]
+        )
+        missing_reason = (
+            f" I am still missing {', '.join(result.missing_inputs[:3])}."
+            if result.missing_inputs
+            else ""
+        )
+        return (
+            "I generated a provisional dosing estimate using placeholder assumptions because key inputs are still missing. "
+            + recommendation_summary
+            + missing_reason
+        )
     if result.follow_up_questions:
         meds = ", ".join(result.medications)
         primary_question = result.follow_up_questions[0].prompt
         if len(result.follow_up_questions) == 1:
-            return f"I picked up {meds}. {primary_question}"
+            return (
+                f"I picked up {meds}. {primary_question} "
+                "If you do not have that yet, I can still give you a provisional estimate with explicit assumptions."
+            )
         remaining = ", ".join(DOSEID_FIELD_LABELS[item.id] for item in result.follow_up_questions[1:])
-        return f"I picked up {meds}. {primary_question} After that, I’ll also need {remaining}."
+        return (
+            f"I picked up {meds}. {primary_question} After that, I’ll also need {remaining}. "
+            "If you do not have those yet, I can still give you a provisional estimate with explicit assumptions."
+        )
     if not result.recommendations:
         return "I picked up the dosing question, but I still need a little more clinical detail before I can calculate a regimen."
     recommendation_summary = "; ".join(
         f"{item.medication_name}: {item.regimen}" for item in result.recommendations[:4]
     )
-    lead = "I calculated dosing from the details you gave me."
-    if result.assumptions:
-        lead += " A few missing values were scaffolded, so please review the assumptions panel."
-    return f"{lead} {recommendation_summary}"
+    caveats = " A few missing values were scaffolded, so please review the assumptions panel." if result.assumptions else ""
+    return f"{recommendation_summary}.{caveats}"
 
 
 def _assistant_doseid_response(
@@ -9212,6 +10510,7 @@ def _assistant_doseid_response(
     *,
     message_text: str,
     prefix: str = "",
+    force_best_effort: bool = False,
 ) -> AssistantTurnResponse:
     state.workflow = "doseid"
     state.stage = "doseid_describe"
@@ -9231,6 +10530,8 @@ def _assistant_doseid_response(
         parser_strategy=state.parser_strategy,
         parser_model=state.parser_model,
         allow_fallback=state.allow_fallback,
+        force_best_effort=force_best_effort,
+        session_patient_context=state.patient_context,
     )
     fallback_message = ((prefix or "") + _assistant_doseid_message(result)).strip()
     message, narration_refined = narrate_doseid_assistant_message(
@@ -9243,10 +10544,20 @@ def _assistant_doseid_response(
         state=state,
         doseidAnalysis=result,
         options=[
+            *(
+                [AssistantOption(value="run_assessment", label="Run provisional dosing")]
+                if result.follow_up_questions and result.medications
+                else []
+            ),
             AssistantOption(value="add_more_details", label="Update dosing inputs"),
             AssistantOption(value="restart", label="Start new consult"),
         ],
         tips=[
+            *(
+                ["If you do not have the next missing value yet, use Run provisional dosing and I will keep the missing inputs visible."]
+                if result.follow_up_questions and result.medications
+                else []
+            ),
             "A useful reply would be: 'cefepime on HD' or 'RIPE for 62 kg, CrCl 35, female, 165 cm'.",
             "You can add age, sex, height, weight, serum creatinine, or direct CrCl to refine the regimen.",
         ],
@@ -9305,6 +10616,92 @@ def _assistant_append_dosing_invitation(message: str) -> str:
     if text.endswith(("?", "!", ".")):
         return text + suffix
     return text + "." + suffix
+
+
+# ── Cross-module suggestion helpers ─────────────────────────────────────────
+
+# Map ImmunoID recommendation IDs to DoseID medication IDs for prophylaxis dosing suggestions.
+_IMMUNOID_REC_TO_DOSEID: Dict[str, str] = {
+    "pjp_prophylaxis_high_risk_agents": "tmp_smx",
+    "pjp_prophylaxis_combination_review": "tmp_smx",
+    "pjp_prophylaxis_steroids": "tmp_smx",
+    "tb_positive_manage_before_immunosuppression": "isoniazid",
+}
+
+
+def _immunoid_doseid_options(result: ImmunoAnalyzeResponse) -> List[AssistantOption]:
+    """Build DoseID suggestion options from ImmunoID prophylaxis recommendations."""
+    meds_by_id = _assistant_doseid_medications_by_id()
+    seen: set[str] = set()
+    options: List[AssistantOption] = []
+    for rec in result.recommendations:
+        med_id = _IMMUNOID_REC_TO_DOSEID.get(rec.id)
+        if med_id and med_id not in seen and med_id in meds_by_id:
+            seen.add(med_id)
+            med_name = meds_by_id[med_id].name
+            options.append(AssistantOption(
+                value=f"immunoid_doseid:{med_id}",
+                label=f"Dose {med_name}",
+                description=f"Calculate the renal-adjusted dose for {med_name} based on this patient's context.",
+            ))
+    return options
+
+
+def _allergyid_doseid_options(result: AntibioticAllergyAnalyzeResponse) -> List[AssistantOption]:
+    """Build DoseID suggestion options for preferred alternatives from AllergyID analysis."""
+    meds_by_id = _assistant_doseid_medications_by_id()
+    seen: set[str] = set()
+    options: List[AssistantOption] = []
+    for rec in result.recommendations:
+        if rec.recommendation != "preferred":
+            continue
+        agent_text = rec.normalized_agent or rec.agent
+        medication_ids = _assistant_detect_doseid_medication_ids(agent_text)
+        for med_id in medication_ids[:1]:
+            if med_id in seen or med_id not in meds_by_id:
+                continue
+            seen.add(med_id)
+            med_name = meds_by_id[med_id].name
+            options.append(AssistantOption(
+                value=f"doseid_pick:{med_id}",
+                label=f"Dose {med_name}",
+                description=f"Calculate the renal-adjusted dose for {med_name}, preferred given the allergy history.",
+            ))
+    return options[:3]
+
+
+def _assistant_allergy_check_option(
+    state: AssistantState,
+    *,
+    candidate_drug_names: List[str],
+) -> AssistantOption | None:
+    """
+    Return an allergy-check option when the session has an allergy note and candidate drugs are known.
+    """
+    if not (state.patient_context and state.patient_context.allergy_text):
+        return None
+    if not candidate_drug_names:
+        return None
+    drug_label = _join_readable(candidate_drug_names[:2])
+    return AssistantOption(
+        value="allergyid_check",
+        label=f"Check allergy vs. {drug_label}",
+        description=f"Run an allergy compatibility check for {drug_label} given the noted allergy history.",
+    )
+
+
+def _assistant_handle_allergyid_check(
+    state: AssistantState,
+    *,
+    candidate_drug_names: List[str],
+) -> AssistantTurnResponse | None:
+    """Build and return an AllergyID response using the session allergy note and candidate drugs."""
+    if not (state.patient_context and state.patient_context.allergy_text):
+        return None
+    allergy_text = state.patient_context.allergy_text
+    drug_phrase = ", ".join(candidate_drug_names[:3])
+    query = f"Allergy history: {allergy_text}. Evaluating: {drug_phrase}."
+    return _assistant_allergyid_response(state, message_text=query)
 
 
 def _assistant_probid_doseid_candidate_ids(
@@ -9678,6 +11075,12 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     msg = (req.message or "").strip()
     if not msg:
         return None
+    explicit_syndrome_module_id = _assistant_explicit_syndrome_module_request(msg)
+    if explicit_syndrome_module_id is not None:
+        return explicit_syndrome_module_id
+    explicit_workflow_id = _assistant_explicit_non_syndrome_workflow_request(msg)
+    if explicit_workflow_id is not None:
+        return explicit_workflow_id
     if _assistant_is_allergyid_intent(msg):
         return ALLERGYID_ASSISTANT_ID
     if _assistant_is_mechid_intent(msg):
@@ -9807,6 +11210,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     restart_requested = user_text in {"restart", "start over", "reset", "new case"}
 
     if restart_requested:
+        saved_patient_context = state.patient_context  # preserve across restarts — same patient, new question
         state = AssistantState(
             workflow="probid",
             caseText=None,
@@ -9822,11 +11226,61 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             parserStrategy=state.parser_strategy,
             parserModel=state.parser_model,
             allowFallback=state.allow_fallback,
+            patientContext=saved_patient_context,
         )
+
+    # Extract patient demographics from every incoming message and accumulate into session context
+    if (req.message or "").strip():
+        _update_session_patient_context(state, req.message or "")
 
     if state.stage == "select_module":
         message_text = (req.message or "").strip()
         if message_text:
+            explicit_syndrome_module_id = _assistant_explicit_syndrome_module_request(message_text)
+            if explicit_syndrome_module_id is not None:
+                explicit_module = store.get(explicit_syndrome_module_id)
+                explicit_case_response = _assistant_intake_case_from_text(
+                    req,
+                    state,
+                    module_hint=explicit_syndrome_module_id,
+                )
+                if explicit_case_response is not None:
+                    if explicit_module is not None:
+                        explicit_case_response.assistant_message = (
+                            f"This reads like an explicit request to assess {_assistant_module_label(explicit_module)}, so I’ll start in that syndrome pathway. "
+                            + explicit_case_response.assistant_message
+                        )
+                    explicit_case_response.tips = [
+                        "If you also want dosing, resistance, or allergy help afterward, we can carry the same case forward.",
+                        *(explicit_case_response.tips or []),
+                    ][:3]
+                    return explicit_case_response
+                if explicit_module is not None:
+                    return _assistant_begin_selected_syndrome_module(
+                        state,
+                        explicit_syndrome_module_id,
+                        lead_in=(
+                            f"This reads like an explicit request to assess {_assistant_module_label(explicit_module)}, so I’ll start in that syndrome pathway. "
+                        ),
+                    )
+            explicit_workflow_id = _assistant_explicit_non_syndrome_workflow_request(message_text)
+            if explicit_workflow_id is not None:
+                workflow_label = next(
+                    (
+                        option.label
+                        for option in _assistant_module_options()
+                        if option.value == explicit_workflow_id
+                    ),
+                    explicit_workflow_id,
+                )
+                return _assistant_begin_selected_workflow(
+                    state,
+                    explicit_workflow_id,
+                    lead_in=f"This reads like an explicit request for {workflow_label}, so I’ll start in that pathway. ",
+                )
+            consult_intent_response = _assistant_handle_consult_intent(req, state)
+            if consult_intent_response is not None:
+                return consult_intent_response
             direct_doseid_response = _assistant_start_doseid_from_text(message_text, state)
             if direct_doseid_response is not None:
                 return direct_doseid_response
@@ -9931,165 +11385,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id:
-            if chosen_module_id == MECHID_ASSISTANT_ID:
-                _assistant_reset_immunoid_state(state)
-                state.workflow = "mechid"
-                state.stage = "mechid_describe"
-                state.module_id = None
-                state.preset_id = None
-                state.case_section = None
-                state.case_text = None
-                state.mechid_text = None
-                state.doseid_text = None
-                state.pretest_factor_ids = []
-                state.pretest_factor_labels = []
-                state.endo_blood_culture_context = None
-                state.endo_score_factor_ids = []
-                return AssistantTurnResponse(
-                    assistantMessage=(
-                        "Paste the organism and susceptibility pattern in plain language. "
-                        "For example: 'E. coli resistant to ceftriaxone and ciprofloxacin, susceptible to meropenem, bloodstream infection in septic shock.'"
-                    ),
-                    state=state,
-                    options=[AssistantOption(value="restart", label="Start new consult")],
-                    tips=[
-                        "I can extract the organism, AST pattern, and basic treatment context from free text.",
-                        "Ask for likely resistance mechanism, therapy, or both.",
-                    ],
-                )
+            return _assistant_begin_selected_workflow(state, chosen_module_id)
 
-            if chosen_module_id == DOSEID_ASSISTANT_ID:
-                _assistant_reset_immunoid_state(state)
-                state.workflow = "doseid"
-                state.stage = "doseid_describe"
-                state.module_id = None
-                state.preset_id = None
-                state.case_section = None
-                state.case_text = None
-                state.mechid_text = None
-                state.doseid_text = None
-                state.pretest_factor_ids = []
-                state.pretest_factor_labels = []
-                state.endo_blood_culture_context = None
-                state.endo_score_factor_ids = []
-                return AssistantTurnResponse(
-                    assistantMessage=(
-                        "Tell me the antimicrobial or regimen plus the renal context. "
-                        "For example: 'cefepime dosing on hemodialysis' or 'RIPE dosing for 62 kg, CrCl 35, female, 165 cm'."
-                    ),
-                    state=state,
-                    options=[AssistantOption(value="restart", label="Start new consult")],
-                    tips=[
-                        "I can handle common antibacterial, TB, antifungal, and antiviral regimens.",
-                        "The most useful details are weight, serum creatinine or CrCl, dialysis status, age, sex, and height.",
-                    ],
-                )
-
-            if chosen_module_id == PROBID_ASSISTANT_ID:
-                state.workflow = "probid"
-                state.stage = "select_syndrome_module"
-                state.module_id = None
-                state.preset_id = None
-                state.case_section = None
-                state.case_text = None
-                state.mechid_text = None
-                state.doseid_text = None
-                state.pretest_factor_ids = []
-                state.pretest_factor_labels = []
-                state.endo_blood_culture_context = None
-                state.endo_score_factor_ids = []
-                return AssistantTurnResponse(
-                    assistantMessage=(
-                        "Which clinical syndrome would you like to assess?"
-                    ),
-                    state=state,
-                    options=_assistant_syndrome_module_options(),
-                    tips=[
-                        "Choose the syndrome first, then I’ll ask for the setting and case details.",
-                        "You can also type the syndrome name in plain language.",
-                    ],
-                )
-
-            if chosen_module_id == IMMUNOID_ASSISTANT_ID:
-                state.workflow = "immunoid"
-                state.stage = "immunoid_select_agents"
-                state.module_id = None
-                state.preset_id = None
-                state.case_section = None
-                state.case_text = None
-                state.mechid_text = None
-                state.doseid_text = None
-                state.pretest_factor_ids = []
-                state.pretest_factor_labels = []
-                state.endo_blood_culture_context = None
-                state.endo_score_factor_ids = []
-                _assistant_reset_immunoid_state(state)
-                return AssistantTurnResponse(
-                    assistantMessage=(
-                        "Tell me which chemotherapy, steroids, biologics, or transplant agents are planned. "
-                        "You can type them in plain language, for example: 'rituximab and prednisone 20 mg daily', "
-                        "or click a few common agents to get started."
-                    ),
-                    state=state,
-                    options=_assistant_immunoid_agent_options(state),
-                    tips=[
-                        "I will build a deterministic screening and prophylaxis checklist from the selected exposures.",
-                        "You can keep adding agents before continuing.",
-                    ],
-                )
-
-            if chosen_module_id == ALLERGYID_ASSISTANT_ID:
-                state.workflow = "allergyid"
-                state.stage = "done"
-                state.module_id = None
-                state.preset_id = None
-                state.case_section = None
-                state.case_text = None
-                state.mechid_text = None
-                state.doseid_text = None
-                state.allergyid_text = None
-                state.pretest_factor_ids = []
-                state.pretest_factor_labels = []
-                state.endo_blood_culture_context = None
-                state.endo_score_factor_ids = []
-                _assistant_reset_immunoid_state(state)
-                return AssistantTurnResponse(
-                    assistantMessage=(
-                        "Describe the allergy history and the antibiotics you are considering. "
-                        "For example: 'amoxicillin anaphylaxis, can I use cefazolin for MSSA bacteremia?'"
-                    ),
-                    state=state,
-                    options=[AssistantOption(value="restart", label="Start new consult")],
-                    tips=[
-                        "The most useful details are the culprit antibiotic, what happened, and the candidate drug you want to use.",
-                        "If the reaction was severe, say so explicitly, for example SJS/TEN, DRESS, organ injury, or hemolysis.",
-                    ],
-                )
-
-            state.workflow = "probid"
-            _assistant_reset_immunoid_state(state)
-            state.module_id = chosen_module_id
-            state.mechid_text = None
-            state.doseid_text = None
-            state.endo_blood_culture_context = None
-            state.endo_score_factor_ids = []
-            state.case_section = None
-            module = store.get(chosen_module_id)
-            if module is None:
-                raise HTTPException(status_code=400, detail=f"Selected module '{chosen_module_id}' not found")
-            state.stage = "select_preset"
-            return AssistantTurnResponse(
-                assistantMessage=(
-                    f"Great, we’ll work on {_assistant_module_label(module)}. "
-                    "Which setting/pretest context fits this case best?"
-                ),
-                state=state,
-                options=_assistant_preset_options(module),
-                tips=[
-                    "You can click an option or type something like 'ED', 'ICU', or the preset name.",
-                    "Type 'restart' anytime to begin a new consult.",
-                ],
-            )
+        llm_triage_response = _assistant_llm_triage(req, state)
+        if llm_triage_response is not None:
+            return llm_triage_response
 
         return AssistantTurnResponse(
             assistantMessage=(
@@ -10099,36 +11399,14 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             options=_assistant_module_options(),
             tips=[
                 "Choose resistance mechanism and therapy, antimicrobial dosing, clinical syndrome probability, or immunosuppression screening and prophylaxis.",
+                "You can also ask consult-style questions such as 'should I start antifungal treatment?' or 'does this look like endocarditis?'.",
             ],
         )
 
     if state.stage == "select_syndrome_module":
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id and chosen_module_id not in {PROBID_ASSISTANT_ID, MECHID_ASSISTANT_ID, DOSEID_ASSISTANT_ID, IMMUNOID_ASSISTANT_ID, ALLERGYID_ASSISTANT_ID}:
-            state.workflow = "probid"
-            _assistant_reset_immunoid_state(state)
-            state.module_id = chosen_module_id
-            state.mechid_text = None
-            state.doseid_text = None
-            state.endo_blood_culture_context = None
-            state.endo_score_factor_ids = []
-            state.case_section = None
-            module = store.get(chosen_module_id)
-            if module is None:
-                raise HTTPException(status_code=400, detail=f"Selected module '{chosen_module_id}' not found")
-            state.stage = "select_preset"
-            return AssistantTurnResponse(
-                assistantMessage=(
-                    f"Great, we’ll work on {_assistant_module_label(module)}. "
-                    "Which setting/pretest context fits this case best?"
-                ),
-                state=state,
-                options=_assistant_preset_options(module),
-                tips=[
-                    "You can click an option or type something like 'ED', 'ICU', or the preset name.",
-                    "Type 'restart' anytime to begin a new consult.",
-                ],
-            )
+            return _assistant_begin_selected_syndrome_module(state, chosen_module_id)
 
         return AssistantTurnResponse(
             assistantMessage="Which clinical syndrome would you like to assess?",
@@ -10141,6 +11419,13 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         )
 
     if state.stage == "doseid_describe":
+        if _is_ready_to_assess(req) and (state.doseid_text or "").strip():
+            return _assistant_doseid_response(
+                state,
+                message_text=state.doseid_text or "",
+                prefix="I ran the dosing lane with the current information. ",
+                force_best_effort=True,
+            )
         if req.message and req.message.strip():
             rewritten_message = _assistant_rewrite_doseid_followup_reply(state.doseid_text, req.message)
             state.doseid_text = _append_case_text(state.doseid_text, rewritten_message)
@@ -10369,6 +11654,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
                     "If you want, pick one of the suggested antibiotics and I can carry it into DoseID using the same case context.",
                 )
+                _mechid_meds = _assistant_doseid_medications_by_id()
+                _mechid_candidate_names = [
+                    _mechid_meds[opt.value.split(":", 1)[1]].name
+                    for opt in doseid_options
+                    if opt.value.startswith("doseid_pick:") and opt.value.split(":", 1)[1] in _mechid_meds
+                ]
+                allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_mechid_candidate_names)
+                if allergy_opt:
+                    done_options.append(allergy_opt)
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -10971,6 +12265,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 include_panel_note=True,
                 case_text=state.case_text,
             )
+            if _assistant_case_can_run_provisional_consult(module, text_result, state):
+                final_message = (
+                    "This is a best-effort consult using the currently available data, so treat it as provisional until the missing high-yield details are clarified. "
+                    + final_message
+                )
             narrated_message, narration_refined = narrate_probid_assistant_message(
                 text_result=text_result,
                 fallback_message=final_message,
@@ -10994,7 +12293,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                 done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
-            if _assistant_probid_doseid_candidate_ids(module, text_result, state):
+            probid_doseid_ids = _assistant_probid_doseid_candidate_ids(module, text_result, state)
+            if probid_doseid_ids:
                 narrated_message = _assistant_append_dosing_invitation(narrated_message)
                 done_options.insert(
                     1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
@@ -11004,6 +12304,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     1 if done_tips and "resistance" in done_tips[0].lower() else 0,
                     "If you want, I can keep going into antimicrobial dosing for the treatment options suggested by this consult.",
                 )
+                _probid_meds_by_id = _assistant_doseid_medications_by_id()
+                _probid_candidate_names = [_probid_meds_by_id[m].name for m in probid_doseid_ids if m in _probid_meds_by_id]
+                allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_probid_candidate_names)
+                if allergy_opt:
+                    done_options.append(allergy_opt)
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -11078,6 +12383,47 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
                 if followup_response is not None:
                     return followup_response
+        if selection.startswith("immunoid_doseid:"):
+            medication_id = selection.split(":", 1)[1].strip()
+            if medication_id:
+                meds_by_id = _assistant_doseid_medications_by_id()
+                med = meds_by_id.get(medication_id)
+                doseid_text = f"{med.name} dosing" if med else medication_id
+                if state.patient_context:
+                    pc_text = _session_patient_context_as_doseid_text(state.patient_context)
+                    if pc_text:
+                        doseid_text = f"{doseid_text}. {pc_text}"
+                return _assistant_doseid_response(
+                    state,
+                    message_text=doseid_text,
+                    prefix="I carried the prophylaxis agent into the dosing lane. ",
+                )
+        if selection == "allergyid_check":
+            candidate_names: List[str] = []
+            if state.workflow == "probid" and state.module_id:
+                module = store.get(state.module_id or "")
+                if module is not None:
+                    _check_result = _assistant_parse_case_text(module, state)
+                    _check_ids = _assistant_probid_doseid_candidate_ids(module, _check_result, state)
+                    _check_meds = _assistant_doseid_medications_by_id()
+                    candidate_names = [_check_meds[m].name for m in _check_ids if m in _check_meds]
+            elif state.workflow == "mechid" and state.mechid_text:
+                _mechid_check_result = _build_mechid_text_response(
+                    state.mechid_text,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                _mechid_dose_opts = _assistant_mechid_doseid_options(_mechid_check_result)
+                _mechid_check_meds = _assistant_doseid_medications_by_id()
+                candidate_names = [
+                    _mechid_check_meds[opt.value.split(":", 1)[1]].name
+                    for opt in _mechid_dose_opts
+                    if opt.value.startswith("doseid_pick:") and opt.value.split(":", 1)[1] in _mechid_check_meds
+                ]
+            allergy_response = _assistant_handle_allergyid_check(state, candidate_drug_names=candidate_names)
+            if allergy_response is not None:
+                return allergy_response
         if selection == "continue_to_dosing":
             if state.workflow == "probid":
                 followup_response = _assistant_start_doseid_from_probid_state(state)
@@ -11181,6 +12527,15 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         1 if done_tips and "syndrome" in done_tips[0].lower() else 0,
                         "If you want, pick one of the suggested antibiotics and I can carry it into DoseID using the same case context.",
                     )
+                    _upd_mechid_meds = _assistant_doseid_medications_by_id()
+                    _upd_mechid_names = [
+                        _upd_mechid_meds[opt.value.split(":", 1)[1]].name
+                        for opt in doseid_options
+                        if opt.value.startswith("doseid_pick:") and opt.value.split(":", 1)[1] in _upd_mechid_meds
+                    ]
+                    allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_upd_mechid_names)
+                    if allergy_opt:
+                        done_options.append(allergy_opt)
                 return AssistantTurnResponse(
                     assistantMessage=f"{prefix} {updated_message}",
                     assistantNarrationRefined=narration_refined,
@@ -11259,7 +12614,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                         done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                         done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
-                    if _assistant_probid_doseid_candidate_ids(module, updated_result, state):
+                    updated_doseid_ids = _assistant_probid_doseid_candidate_ids(module, updated_result, state)
+                    if updated_doseid_ids:
                         narrated_message = _assistant_append_dosing_invitation(narrated_message)
                         done_options.insert(
                             1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
@@ -11269,6 +12625,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                             1 if done_tips and "resistance" in done_tips[0].lower() else 0,
                             "If you want, I can keep going into antimicrobial dosing for the treatment options suggested by this consult.",
                         )
+                        _upd_meds_by_id = _assistant_doseid_medications_by_id()
+                        _upd_candidate_names = [_upd_meds_by_id[m].name for m in updated_doseid_ids if m in _upd_meds_by_id]
+                        allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_upd_candidate_names)
+                        if allergy_opt:
+                            done_options.append(allergy_opt)
                     return AssistantTurnResponse(
                         assistantMessage=f"{lead} {narrated_message}",
                         assistantNarrationRefined=narration_refined,
@@ -11290,6 +12651,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     message_text=state.allergyid_text or req.message,
                     prefix="I updated the allergy consult with the new information. ",
                 )
+
+    # LLM triage: attempt to route or answer before resetting to the generic fallback
+    if not restart_requested and (req.message or "").strip():
+        llm_triage_response = _assistant_llm_triage(req, state)
+        if llm_triage_response is not None:
+            return llm_triage_response
 
     # done / fallback
     if restart_requested:

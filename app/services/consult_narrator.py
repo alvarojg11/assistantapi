@@ -19,6 +19,12 @@ class ConsultNarrationError(RuntimeError):
     pass
 
 
+GROUNDING_CONTRACT_NOTES = [
+    "The language model is only the conversational interface layer.",
+    "The deterministic payload is the medical source of truth and must not be changed or extended.",
+]
+
+
 def consult_narration_enabled() -> bool:
     return bool((os.getenv("OPENAI_API_KEY") or "").strip())
 
@@ -63,6 +69,69 @@ def _call_consult_model(*, prompt: str, payload: Dict[str, Any], model: str | No
     return rendered
 
 
+def _build_grounding_envelope(
+    *,
+    workflow: str,
+    stage: str,
+    fallback_message: str,
+    deterministic_payload: Dict[str, Any],
+    examples: List[Dict[str, str]] | None = None,
+    extra_context: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    envelope: Dict[str, Any] = {
+        "assistantContract": {
+            "interactionModelRole": "llm_interface",
+            "deterministicResultsAuthoritative": True,
+            "llmCanChangeDeterministicResults": False,
+            "workflow": workflow,
+            "stage": stage,
+            "notes": list(GROUNDING_CONTRACT_NOTES),
+        },
+        "task": {
+            "workflow": workflow,
+            "stage": stage,
+            "fallbackMessage": fallback_message,
+        },
+        "deterministicPayload": deterministic_payload,
+    }
+    if examples:
+        envelope["styleExamples"] = examples[:3]
+    if extra_context:
+        envelope["context"] = extra_context
+    return envelope
+
+
+def _grounded_narration_prompt(base_prompt: str) -> str:
+    return (
+        base_prompt
+        + "\nThe JSON envelope contains assistantContract, task, deterministicPayload, and optional styleExamples/context.\n"
+        + "Treat deterministicPayload as the authoritative source of truth.\n"
+        + "Use fallbackMessage only as a wording backstop, not as permission to add new claims.\n"
+    )
+
+
+def _narrate_grounded_message(
+    *,
+    prompt: str,
+    workflow: str,
+    stage: str,
+    fallback_message: str,
+    deterministic_payload: Dict[str, Any],
+    examples: List[Dict[str, str]] | None = None,
+    extra_context: Dict[str, Any] | None = None,
+    model: str | None = None,
+) -> str:
+    payload = _build_grounding_envelope(
+        workflow=workflow,
+        stage=stage,
+        fallback_message=fallback_message,
+        deterministic_payload=deterministic_payload,
+        examples=examples,
+        extra_context=extra_context,
+    )
+    return _call_consult_model(prompt=_grounded_narration_prompt(prompt), payload=payload, model=model)
+
+
 def narrate_probid_assistant_message(
     *,
     text_result: TextAnalyzeResponse,
@@ -73,9 +142,8 @@ def narrate_probid_assistant_message(
         return fallback_message, False
 
     analysis = text_result.analysis
-    payload = {
+    deterministic_payload = {
         "moduleLabel": module_label,
-        "fallbackMessage": fallback_message,
         "understood": text_result.understood.model_dump(by_alias=True),
         "warnings": text_result.warnings,
         "analysis": analysis.model_dump(by_alias=True),
@@ -90,11 +158,18 @@ def narrate_probid_assistant_message(
         "If data are missing or uncertain, say that plainly and only based on the provided JSON.\n"
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a calculator.\n"
         "Preserve the exact post-test probability and the overall action recommendation.\n"
+        "Structure the answer as follows: open with the clinical action recommendation and your overall interpretation in one direct sentence, then explain the probability and key clinical drivers, then mention what would change your assessment.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="probid",
+            stage="final",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -108,9 +183,8 @@ def narrate_probid_review_message(
     if not consult_narration_enabled() or text_result.parsed_request is None:
         return fallback_message, False
 
-    payload = {
+    deterministic_payload = {
         "moduleLabel": module_label,
-        "fallbackMessage": fallback_message,
         "parsedRequest": text_result.parsed_request.model_dump(by_alias=True),
         "understood": text_result.understood.model_dump(by_alias=True),
         "warnings": text_result.warnings,
@@ -130,7 +204,13 @@ def narrate_probid_review_message(
         "Prefer 1 to 2 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="probid",
+            stage="review",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -149,13 +229,11 @@ def narrate_mechid_assistant_message(
     examples = select_mechid_consult_examples(result=mechid_result, kind="final")
     if transient_examples:
         examples = [*transient_examples, *examples]
-    payload = {
-        "fallbackMessage": fallback_message,
+    deterministic_payload = {
         "parsedRequest": mechid_result.parsed_request.model_dump(by_alias=True) if mechid_result.parsed_request else None,
         "analysis": mechid_result.analysis.model_dump(by_alias=True) if mechid_result.analysis else None,
         "provisionalAdvice": mechid_result.provisional_advice.model_dump(by_alias=True) if mechid_result.provisional_advice else None,
         "warnings": mechid_result.warnings,
-        "examples": examples[:3],
     }
     prompt = (
         "You are an infectious diseases consultant rewriting a deterministic MechID result into a concise clinician-facing answer.\n"
@@ -166,14 +244,20 @@ def narrate_mechid_assistant_message(
         "If the fallbackMessage already contains the needed uncertainty or next step, keep that meaning and do not expand it.\n"
         "If the deterministic output says more data are needed, state exactly what is needed and do not pretend certainty.\n"
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
-        "When treatment options are available, lead with practical syndrome-specific options first, then say which option you would lean toward based on the submitted susceptibilities.\n"
-        "If oral options are supported in the JSON, mention them in a clinically appropriate way. If the JSON implies IV-first treatment, keep that framing.\n"
+        "When treatment options are available, open with the specific recommended therapy or your top treatment choice in one direct sentence, then explain the mechanism, susceptibility context, and reasoning. If oral options are supported, mention them after establishing the primary recommendation.\n"
         "If example outputs are provided, use them as style references only when they fit the same type of case. Do not copy unsupported claims.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="mechid",
+            stage="final",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+            examples=examples,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -190,14 +274,12 @@ def narrate_mechid_review_message(
     examples = select_mechid_consult_examples(result=mechid_result, kind="review")
     if transient_examples:
         examples = [*transient_examples, *examples]
-    payload = {
-        "fallbackMessage": fallback_message,
+    deterministic_payload = {
         "parsedRequest": mechid_result.parsed_request.model_dump(by_alias=True),
         "analysis": mechid_result.analysis.model_dump(by_alias=True) if mechid_result.analysis else None,
         "provisionalAdvice": mechid_result.provisional_advice.model_dump(by_alias=True) if mechid_result.provisional_advice else None,
         "warnings": mechid_result.warnings,
         "requiresConfirmation": mechid_result.requires_confirmation,
-        "examples": examples[:3],
     }
     prompt = (
         "You are rewriting a deterministic MechID review-stage message before the user has asked for the final interpretation.\n"
@@ -214,7 +296,14 @@ def narrate_mechid_review_message(
         "Prefer 1 to 2 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="mechid",
+            stage="review",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+            examples=examples,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -228,8 +317,7 @@ def narrate_immunoid_assistant_message(
     if not consult_narration_enabled():
         return fallback_message, False
 
-    payload = {
-        "fallbackMessage": fallback_message,
+    deterministic_payload = {
         "followUpStage": follow_up_stage,
         "selectedRegimens": [item.model_dump(by_alias=True) for item in immunoid_result.selected_regimens],
         "selectedAgents": [item.model_dump(by_alias=True) for item in immunoid_result.selected_agents],
@@ -245,14 +333,20 @@ def narrate_immunoid_assistant_message(
         "Do not add recommendations that are not present in the JSON. Do not imply that any recommendation is universal if the JSON frames it as context-dependent or review-based.\n"
         "Do not ask for additional data unless that request already exists in the JSON input.\n"
         "If there are follow-up questions, your job is to briefly summarize what is already triggered and then ask only the next missing question that appears in the JSON.\n"
-        "If there are no follow-up questions, summarize the current rule-backed checklist in a practical consultant tone.\n"
+        "If there are no follow-up questions, open with the single most actionable finding — the top prophylaxis recommendation or the most urgent screening test — in the first sentence, then cover the remaining checklist items.\n"
         "Preserve uncertainty exactly. If serologies, geography, or neutropenia details are missing, say that plainly and only based on the JSON.\n"
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a rules engine.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="immunoid",
+            stage="follow_up" if follow_up_stage else "final",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -265,8 +359,7 @@ def narrate_doseid_assistant_message(
     if not consult_narration_enabled():
         return fallback_message, False
 
-    payload = {
-        "fallbackMessage": fallback_message,
+    deterministic_payload = {
         "doseidAnalysis": doseid_result.model_dump(by_alias=True),
     }
     prompt = (
@@ -274,13 +367,19 @@ def narrate_doseid_assistant_message(
         "The JSON input is the full source of truth. Do not change medications, indications, renal buckets, dose amounts, intervals, or monitoring notes.\n"
         "Do not invent any regimen or missing input.\n"
         "If followUpQuestions are present, ask only the next missing question already present in the JSON and keep the phrasing simple.\n"
-        "If recommendations are present, summarize them clearly without changing the numbers.\n"
+        "If recommendations are present, open with the specific dose and interval for the top medication in the first sentence, then cover renal adjustment rationale, assumptions, and any remaining agents.\n"
         "If warnings are present, preserve their meaning without adding new cautions.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 2 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="doseid",
+            stage="assistant",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
 
@@ -293,14 +392,14 @@ def narrate_allergyid_assistant_message(
     if not consult_narration_enabled():
         return fallback_message, False
 
-    payload = {
-        "fallbackMessage": fallback_message,
+    deterministic_payload = {
         "allergyAnalysis": allergy_result.model_dump(by_alias=True),
     }
     prompt = (
         "You are an infectious diseases consultant rewriting a deterministic antibiotic-allergy compatibility result into a concise clinician-facing answer.\n"
         "The JSON input is the full source of truth. Do not invent antibiotics, reaction phenotypes, cross-reactivity claims, or safety conclusions.\n"
         "Do not make a drug sound safe if the JSON says avoid or caution.\n"
+        "Open with a clear one-sentence verdict on whether the candidate antibiotic can be used safely, should be avoided, or requires caution — state this before explaining the allergy mechanism or cross-reactivity reasoning.\n"
         "If the JSON describes a severe delayed reaction such as SJS/TEN, DRESS, organ injury, immune hemolysis, or serum-sickness-like reaction, preserve that gravity clearly.\n"
         "If the JSON includes delabeling opportunities, explain them plainly without minimizing real severe reactions.\n"
         "Do not ask for additional data unless that request already exists in the JSON input.\n"
@@ -309,6 +408,40 @@ def narrate_allergyid_assistant_message(
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )
     try:
-        return _call_consult_model(prompt=prompt, payload=payload), True
+        return _narrate_grounded_message(
+            prompt=prompt,
+            workflow="allergyid",
+            stage="assistant",
+            fallback_message=fallback_message,
+            deterministic_payload=deterministic_payload,
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_general_id_answer(
+    *,
+    question: str,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Answer a general ID question that does not map to a specific workflow module."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    prompt = (
+        "You are an experienced infectious diseases consultant assistant answering a clinician's free-text ID question.\n"
+        "Answer concisely and accurately in the style of a knowledgeable ID colleague.\n"
+        "Stick to well-established, guideline-concordant knowledge. Do not invent specific drug doses, MIC breakpoints, or study statistics.\n"
+        "When dose-specific or patient-specific decisions are needed, briefly note that a formal dosing or syndrome workup would give a more precise answer.\n"
+        "If the question is outside infectious diseases, say so politely and redirect.\n"
+        "End with one short sentence offering to start a formal syndrome, dosing, resistance, or prophylaxis workup if useful.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 2 to 4 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
