@@ -873,6 +873,7 @@
         height: calc(100vh - 52px);
         margin-top: 52px;
         overflow: hidden;
+        align-items: stretch;
       }
       .chat-card {
         display: flex;
@@ -1015,116 +1016,42 @@
       .scroll-btn.hidden { display: none; }
 
       /* ── Collapsible side panel ── */
-      .side-card { position: relative; }
       .side-toggle {
-        position: absolute; top: 50%; left: -13px;
-        transform: translateY(-50%); z-index: 6;
-        width: 22px; height: 44px; border-radius: 6px;
-        border: 1px solid rgba(200, 190, 169, 0.65);
-        background: var(--panel-strong); cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 11px; color: var(--muted);
-        box-shadow: 0 2px 6px rgba(28, 24, 19, 0.08);
-        transition: background 130ms;
+        background: none; border: none; cursor: pointer;
+        font-size: 13px; color: var(--muted); padding: 2px 6px;
+        border-radius: 5px; line-height: 1; flex-shrink: 0;
+        transition: background 130ms, color 130ms;
       }
-      .side-toggle:hover { background: #fff; color: var(--ink); }
+      .side-toggle:hover { background: rgba(102, 94, 82, 0.1); color: var(--ink); }
       .workspace.panel-collapsed {
         grid-template-columns: minmax(0, 1fr) 0px;
       }
       .workspace.panel-collapsed .side-card {
-        overflow: hidden; opacity: 0; pointer-events: none;
+        overflow: hidden; visibility: hidden; pointer-events: none;
       }
-      .workspace.panel-collapsed .side-toggle { left: -13px; }
-      .side-card { transition: opacity 200ms; }
+      .side-card { transition: visibility 0s; }
 
-      /* ── Dark mode ── */
-      .theme-btn {
-        background: none; border: none; cursor: pointer;
-        font-size: 15px; padding: 5px 7px; border-radius: 7px;
-        color: var(--muted); transition: background 130ms;
-        line-height: 1;
-      }
-      .theme-btn:hover { background: rgba(102, 94, 82, 0.12); }
-
-      [data-theme="dark"] {
-        --bg: #141210; --bg-alt: #1c1a17;
-        --ink: #ede8dc; --muted: #9a9082;
-        --line: #38332c;
-        --panel: rgba(28, 26, 22, 0.96);
-        --panel-strong: #1e1b17;
-        --shadow: 0 14px 38px rgba(0, 0, 0, 0.55);
-      }
-      [data-theme="dark"] body {
-        background:
-          radial-gradient(1100px 500px at 10% -10%, rgba(35, 74, 138, 0.14), transparent 65%),
-          radial-gradient(900px 500px at 95% 5%, rgba(14, 107, 91, 0.12), transparent 60%),
-          linear-gradient(180deg, var(--bg) 0%, #0d0c0a 100%);
-      }
-      [data-theme="dark"] .appbar {
-        background: rgba(16, 14, 12, 0.96);
-        border-bottom-color: rgba(56, 51, 44, 0.9);
-      }
-      [data-theme="dark"] .btn-ghost {
-        background: rgba(30, 27, 23, 0.85);
-        border-color: rgba(56, 51, 44, 0.9);
-        color: var(--ink);
-      }
-      [data-theme="dark"] .btn-ghost:hover {
-        background: rgba(44, 40, 34, 0.95);
-        border-color: rgba(14, 107, 91, 0.4);
-      }
-      [data-theme="dark"] .side-card {
-        background: rgba(18, 16, 14, 0.92);
-      }
-      [data-theme="dark"] .msg.assistant {
-        background: rgba(30, 27, 23, 0.9);
-        border-color: rgba(56, 51, 44, 0.8);
-        color: var(--ink);
-      }
-      [data-theme="dark"] .msg.user {
-        background: linear-gradient(180deg, rgba(14, 107, 91, 0.85), rgba(10, 82, 68, 0.85));
-      }
-      [data-theme="dark"] select,
-      [data-theme="dark"] input[type="text"],
-      [data-theme="dark"] textarea {
-        background: rgba(28, 26, 22, 0.9);
-        border-color: var(--line); color: var(--ink);
-      }
-      [data-theme="dark"] .btn {
-        background: rgba(28, 26, 22, 0.85);
-        border-color: var(--line); color: var(--ink);
-      }
-      [data-theme="dark"] .btn.primary {
-        background: linear-gradient(180deg, #0e7a66, #0b5f50);
-      }
-      [data-theme="dark"] .panel-tab {
-        background: rgba(28, 26, 22, 0.85);
-        border-color: var(--line);
-      }
-      [data-theme="dark"] .panel-tab.active {
-        background: rgba(14, 107, 91, 0.18);
-        color: #4fbfa8; border-color: rgba(14, 107, 91, 0.35);
-      }
-      [data-theme="dark"] .qs-panel { background: var(--panel-strong); }
-      [data-theme="dark"] .start-card {
-        background: rgba(28, 26, 22, 0.85);
-        border-color: var(--line); color: var(--ink);
-      }
-      [data-theme="dark"] .status-line {
-        border-bottom-color: rgba(56, 51, 44, 0.5);
-      }
-      [data-theme="dark"] .scroll-btn,
-      [data-theme="dark"] .side-toggle {
-        background: var(--panel-strong);
-        border-color: var(--line);
-      }
     </style>
   </head>
   <body>
     <!-- Compact app header -->
     <header class="appbar">
       <div class="appbar-brand">
-        <img src="/static/app-icon.svg" alt="ID Assistant logo" class="appbar-logo" />
+        <svg class="appbar-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none" role="img" aria-label="ID Assistant">
+          <defs>
+            <linearGradient id="abg" x1="156" y1="112" x2="858" y2="918" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#0F6A59"/><stop offset="1" stop-color="#0B4F43"/>
+            </linearGradient>
+            <linearGradient id="aorb" x1="660" y1="214" x2="840" y2="404" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#F2B36C"/><stop offset="1" stop-color="#C56E2B"/>
+            </linearGradient>
+          </defs>
+          <rect x="64" y="64" width="896" height="896" rx="240" fill="url(#abg)"/>
+          <circle cx="742" cy="286" r="92" fill="url(#aorb)" opacity="0.95"/>
+          <path d="M466 286H602C706 286 774 348 774 512C774 676 706 738 602 738H466V286ZM582 648C651 648 688 607 688 512C688 417 651 376 582 376H558V648H582Z" fill="#FFF9F0"/>
+          <path d="M278 286H370V738H278V286Z" fill="#FFF9F0"/>
+          <rect x="260" y="224" width="128" height="26" rx="13" fill="#FFF9F0" opacity="0.88"/>
+        </svg>
         ID Assistant
       </div>
       <div class="appbar-actions">
@@ -1132,7 +1059,6 @@
         <button type="button" class="btn-ghost" id="exportBtn" title="Download consult summary">Export</button>
         <button type="button" class="btn-ghost" id="newConsultBtnHeader">New consult</button>
         <a class="btn-ghost" href="https://infectiousdiseasehub.com/" target="_blank" rel="noreferrer">IDHub</a>
-        <button type="button" class="theme-btn" id="themeToggleBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
       </div>
     </header>
 
@@ -1187,6 +1113,7 @@
               <span id="narrationBadge" class="badge">narrative: deterministic</span>
               <span id="parserBadge" class="badge">parser: —</span>
             </div>
+            <button type="button" class="side-toggle" id="sidePanelToggle" title="Collapse details panel">›</button>
           </div>
 
           <!-- Patient context bar (shows when demographics are known) -->
@@ -1224,7 +1151,6 @@
         </main>
 
         <aside class="side-card">
-          <button type="button" class="side-toggle" id="sidePanelToggle" title="Collapse panel">›</button>
           <div class="side-head">
             <div class="side-title">Details</div>
           </div>
@@ -1331,7 +1257,6 @@
         scrollBtn: document.getElementById("scrollBtn"),
         sidePanelToggle: document.getElementById("sidePanelToggle"),
         workspace: document.querySelector(".workspace"),
-        themeToggleBtn: document.getElementById("themeToggleBtn"),
         exportBtn: document.getElementById("exportBtn"),
       };
 
@@ -2682,20 +2607,6 @@
         els.workspace.classList.toggle("panel-collapsed", panelCollapsed);
         els.sidePanelToggle.textContent = panelCollapsed ? "‹" : "›";
         els.sidePanelToggle.title = panelCollapsed ? "Expand panel" : "Collapse panel";
-      });
-
-      // Dark mode toggle
-      let darkMode = localStorage.getItem("idassistant-theme") === "dark";
-      function applyTheme() {
-        document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
-        els.themeToggleBtn.textContent = darkMode ? "☀️" : "🌙";
-        els.themeToggleBtn.title = darkMode ? "Switch to light mode" : "Switch to dark mode";
-        localStorage.setItem("idassistant-theme", darkMode ? "dark" : "light");
-      }
-      applyTheme();
-      els.themeToggleBtn.addEventListener("click", () => {
-        darkMode = !darkMode;
-        applyTheme();
       });
 
       // Update timestamps every minute
