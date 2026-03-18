@@ -724,6 +724,73 @@
         to { opacity: 1; transform: translateY(0); }
       }
 
+      .typing-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid rgba(200, 190, 169, 0.9);
+        border-radius: 18px;
+        animation: fadeUp 180ms ease-out both;
+      }
+      .typing-indicator .tdot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+        animation: typingBounce 1.1s ease-in-out infinite;
+      }
+      .typing-indicator .tdot:nth-child(2) { animation-delay: 0.18s; }
+      .typing-indicator .tdot:nth-child(3) { animation-delay: 0.36s; }
+      @keyframes typingBounce {
+        0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+        30% { transform: translateY(-5px); opacity: 1; }
+      }
+
+      .copy-btn {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(200, 190, 169, 0.7);
+        background: rgba(255, 255, 255, 0.6);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 140ms ease, background 140ms ease;
+      }
+      .msg.assistant:hover .copy-btn { opacity: 1; }
+      .copy-btn:hover { background: rgba(255, 255, 255, 0.92); color: var(--ink); }
+
+      .patient-bar {
+        margin-bottom: 10px;
+        padding: 8px 12px;
+        border-radius: 12px;
+        background: linear-gradient(90deg, rgba(14, 107, 91, 0.06), rgba(14, 107, 91, 0.02));
+        border: 1px solid rgba(14, 107, 91, 0.18);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        align-items: center;
+        font-size: 12px;
+        color: #0c5d4f;
+      }
+      .patient-bar .pb-label {
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-size: 11px;
+        color: var(--muted);
+        flex-basis: 100%;
+        margin-bottom: 2px;
+      }
+      .patient-bar .pb-item { display: flex; gap: 4px; align-items: center; }
+      .patient-bar .pb-k { color: var(--muted); }
+      .patient-bar .pb-v { font-weight: 600; }
+
       @media (max-width: 1024px) {
         .topbar {
           flex-direction: column;
@@ -748,77 +815,223 @@
       @media (prefers-reduced-motion: reduce) {
         * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
       }
+
+      /* ── Compact app shell (replaces topbar + mast) ── */
+      html, body { height: 100%; overflow: hidden; }
+
+      .appbar {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 20;
+        height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        background: rgba(243, 239, 229, 0.95);
+        border-bottom: 1px solid rgba(200, 190, 169, 0.55);
+        backdrop-filter: blur(10px);
+      }
+      .appbar-brand {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .appbar-actions { display: flex; gap: 6px; align-items: center; }
+      .btn-ghost {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 13px;
+        border: 1px solid rgba(200, 190, 169, 0.85);
+        background: rgba(255, 252, 245, 0.75);
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink);
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 130ms ease, border-color 130ms ease;
+      }
+      .btn-ghost:hover { background: #fff; border-color: rgba(14, 107, 91, 0.28); }
+
+      /* Override workspace and chat-card to fill remaining viewport */
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.55fr);
+        gap: 0;
+        height: calc(100vh - 52px);
+        margin-top: 52px;
+        overflow: hidden;
+      }
+      .chat-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 14px 18px;
+        border-radius: 0;
+        border: none;
+        border-right: 1px solid rgba(200, 190, 169, 0.45);
+        box-shadow: none;
+        background: transparent;
+        backdrop-filter: none;
+        min-height: unset;
+      }
+      .messages {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+      }
+      .composer { flex-shrink: 0; }
+      #optionTray { flex-shrink: 0; }
+      .side-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow-y: auto;
+        padding: 14px;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        background: rgba(255, 252, 245, 0.9);
+        position: static;
+        min-height: unset;
+      }
+
+      /* ── Status line (replaces progress-strip) ── */
+      .status-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 10px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid rgba(200, 190, 169, 0.38);
+        font-size: 13px;
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      .sl-title { font-weight: 600; color: var(--ink); font-size: 13px; }
+      .sl-sep { color: rgba(102, 94, 82, 0.35); }
+      .sl-step { font-size: 12px; }
+      .sl-badges { margin-left: auto; display: flex; gap: 6px; }
+
+      /* ── Quickstart overlay ── */
+      .qs-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgba(31, 28, 24, 0.36);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 68px;
+      }
+      .qs-overlay.hidden { display: none; }
+      .qs-panel {
+        width: min(560px, calc(100vw - 32px));
+        background: var(--panel-strong);
+        border: 1px solid rgba(200, 190, 169, 0.9);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 16px;
+        animation: fadeUp 160ms ease-out both;
+      }
+      .qs-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .qs-close {
+        background: none; border: none; cursor: pointer;
+        color: var(--muted); font-size: 18px; line-height: 1;
+        padding: 2px 6px; border-radius: 8px;
+      }
+      .qs-close:hover { background: rgba(0, 0, 0, 0.06); }
+      .qs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .qs-panel .start-card { padding: 11px; }
+      .qs-panel .start-card p { margin-bottom: 4px; font-size: 12px; }
+      .qs-panel .start-card .example { display: none; }
+      .qs-panel .start-card strong { font-size: 14px; }
+
+      /* Hide old layout elements */
+      .topbar, .mast, .progress-strip { display: none !important; }
     </style>
   </head>
   <body>
-    <div class="shell">
-      <section class="topbar" aria-label="Application navigation">
-        <div class="brand-block">
-          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> IDHub desktop workspace</div>
-          <h1 class="brand-title">ID Assistant</h1>
-          <div class="brand-copy">A cleaner desktop consult experience that mirrors the mobile app: chat first, quick pathway jumps when helpful, and structured reasoning available without crowding the thread.</div>
-        </div>
-        <nav class="desktop-nav" aria-label="Desktop navigation">
-          <a class="nav-link current" href="/assistant">Chat</a>
-          <a class="nav-link" href="/doseid">DoseID</a>
-          <a class="nav-link" href="/trainer">Trainer</a>
-          <a class="nav-link" href="https://infectiousdiseasehub.com/" target="_blank" rel="noreferrer">IDHub</a>
-        </nav>
-      </section>
+    <!-- Compact app header -->
+    <header class="appbar">
+      <div class="appbar-brand">ID Assistant</div>
+      <div class="appbar-actions">
+        <button type="button" class="btn-ghost" id="quickstartBtn">Workflows</button>
+        <button type="button" class="btn-ghost" id="newConsultBtnHeader">New consult</button>
+        <a class="btn-ghost" href="https://infectiousdiseasehub.com/" target="_blank" rel="noreferrer">IDHub</a>
+      </div>
+    </header>
 
-      <section class="mast" aria-label="Application introduction and status">
-        <div class="hero">
-          <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Chat-first desktop assistant</div>
-          <h1>Ask naturally or jump into a lane</h1>
-          <p>
-            The assistant can still route syndrome, resistance, dosing, allergy, and immunosuppression questions from plain language.
-            If you already know the task, use one of the focused starting points below.
-          </p>
+    <!-- Quickstart workflow overlay -->
+    <div class="qs-overlay hidden" id="quickstartOverlay" role="dialog" aria-label="Choose a workflow">
+      <div class="qs-panel">
+        <div class="qs-head">
+          <span>Jump to a workflow</span>
+          <button type="button" class="qs-close" id="closeQuickstartBtn" aria-label="Close">✕</button>
         </div>
-        <div class="launchpad" id="launchpad" aria-label="Quick start workflows">
+        <div class="qs-grid launchpad" id="launchpad">
           <button type="button" class="start-card" data-workflow="probid">
-            <span class="kicker">Diagnostic lane</span>
+            <span class="kicker">Diagnostic</span>
             <strong>Work up a syndrome</strong>
-            <p>Estimate post-test probability from symptoms, microbiology, imaging, and high-yield findings.</p>
-            <span class="example">Example: fever, hypoxemia, lobar infiltrate, positive sputum culture.</span>
+            <p>Post-test probability from symptoms, microbiology, and imaging.</p>
           </button>
           <button type="button" class="start-card" data-workflow="mechid">
-            <span class="kicker">Resistance lane</span>
+            <span class="kicker">Resistance</span>
             <strong>Interpret organism + AST</strong>
-            <p>Turn a susceptibility pattern into likely mechanisms, cautions, and therapy guidance.</p>
-            <span class="example">Example: E. coli resistant to ceftriaxone, susceptible to meropenem, bacteremia.</span>
+            <p>Turn a susceptibility pattern into mechanisms and therapy guidance.</p>
           </button>
           <button type="button" class="start-card" data-workflow="doseid">
-            <span class="kicker">Dosing lane</span>
+            <span class="kicker">Dosing</span>
             <strong>Calculate antimicrobial dosing</strong>
-            <p>Estimate dosing from the drug, weight, creatinine clearance, and dialysis context.</p>
-            <span class="example">Example: cefepime on hemodialysis, or RIPE dosing for 62 kg and CrCl 35.</span>
+            <p>Drug plus weight, CrCl, and dialysis context.</p>
           </button>
           <button type="button" class="start-card" data-workflow="immunoid">
-            <span class="kicker">Prevention lane</span>
-            <strong>Screen immunosuppression risk</strong>
-            <p>Build a screening and prophylaxis checklist before steroids, biologics, chemotherapy, or transplant therapy.</p>
-            <span class="example">Example: rituximab plus prednisone 20 mg daily, anti-HBc positive.</span>
+            <span class="kicker">Prevention</span>
+            <strong>Screen immunosuppression</strong>
+            <p>Screening and prophylaxis checklist before biologics or transplant.</p>
           </button>
         </div>
-      </section>
+      </div>
+    </div>
 
+    <!-- Hidden legacy progress elements (JS still references these) -->
+    <div style="display:none">
+      <div id="progressTitle"></div>
+      <div id="progressMeta"></div>
+      <div id="progressSteps"></div>
+    </div>
+
+    <div class="shell" style="padding:0; max-width:none;">
       <section class="workspace" aria-label="Assistant workspace">
         <main class="chat-card">
-          <section class="progress-strip" aria-label="Consult progress">
-            <div class="progress-head">
-              <div>
-                <div class="eyebrow"><span class="dot" aria-hidden="true"></span> Consult journey</div>
-                <div class="progress-title" id="progressTitle">Choose a workflow or paste a consult question</div>
-              </div>
-              <div class="progress-meta" id="progressMeta">The assistant can route syndrome, resistance, dosing, and immunosuppression questions from plain language.</div>
+          <!-- Status line -->
+          <div class="status-line">
+            <span class="sl-title" id="statusTitle">ID Assistant</span>
+            <span class="sl-sep" id="statusSep" style="display:none">·</span>
+            <span class="sl-step" id="statusStep"></span>
+            <div class="sl-badges">
+              <span id="narrationBadge" class="badge">narrative: deterministic</span>
+              <span id="parserBadge" class="badge">parser: —</span>
             </div>
-            <div class="progress-steps" id="progressSteps"></div>
-          </section>
-
-          <div class="system-note" id="helpBanner">
-            I’m your ID Consultant Assistant. Describe a syndrome case, a dosing question, or an isolate plus AST pattern in plain language.
           </div>
+
+          <!-- Patient context bar (shows when demographics are known) -->
+          <div class="patient-bar hidden" id="patientBar" aria-label="Active patient context"></div>
+
+          <!-- Help banner (updated by JS, hidden when empty) -->
+          <div id="helpBanner" class="hidden"></div>
 
           <div class="messages" id="messages" aria-live="polite"></div>
 
@@ -828,19 +1041,19 @@
             <label for="userInput" class="hidden">Your message</label>
             <textarea
               id="userInput"
-              placeholder="Paste the consult question in plain language, or choose a workflow above..."
+              placeholder="Ask an ID question or describe the case..."
             ></textarea>
             <div class="composer-actions">
               <div class="composer-meta">
-                <div class="composer-hint" id="composerHint">Tip: You can click options or type naturally.</div>
-                <div class="composer-shortcut">Enter sends. Shift+Enter adds a line.</div>
+                <div class="composer-hint" id="composerHint">Type naturally or use the options above.</div>
+                <div class="composer-shortcut">Enter sends · Shift+Enter new line</div>
               </div>
               <div class="btn-row">
-                <button type="button" class="btn" id="restartBtn">Restart</button>
-                <button type="button" class="btn accent" id="exampleBtn">Insert example</button>
-                <button type="button" class="btn" id="imageBtn">Upload antimicrobial susceptibility test</button>
+                <button type="button" class="btn" id="restartBtn">New consult</button>
+                <button type="button" class="btn accent" id="exampleBtn">Example</button>
+                <button type="button" class="btn" id="imageBtn">Upload AST image</button>
                 <input type="file" id="imageInput" class="hidden" accept="image/*" />
-                <button type="button" class="btn consult hidden" id="consultBtn">Give consultant impression</button>
+                <button type="button" class="btn consult hidden" id="consultBtn">Consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
               </div>
             </div>
@@ -849,38 +1062,34 @@
 
         <aside class="side-card">
           <div class="side-head">
-            <div class="side-title">Consult details</div>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <span id="narrationBadge" class="badge">narrative: deterministic</span>
-              <span id="parserBadge" class="badge">parser: —</span>
-            </div>
+            <div class="side-title">Details</div>
           </div>
           <div class="panel-tabs" id="panelTabs" aria-label="Detail panels">
-            <button type="button" class="panel-tab active" data-panel="summary">Summary</button>
-            <button type="button" class="panel-tab" data-panel="analysis">Analysis</button>
+            <button type="button" class="panel-tab active" data-panel="analysis">Analysis</button>
+            <button type="button" class="panel-tab" data-panel="summary">State</button>
             <button type="button" class="panel-tab" data-panel="parsed">Parsed</button>
             <button type="button" class="panel-tab" data-panel="warnings">Warnings</button>
             <button type="button" class="panel-tab" data-panel="raw">Raw</button>
           </div>
           <div class="side-panels">
-          <section class="panel-block side-panel" data-panel-name="summary">
-            <h3>Conversation State</h3>
+          <section class="panel-block big-result side-panel" id="analysisSummary" data-panel-name="analysis">
+            <h3>Analysis</h3>
+            <div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>
+          </section>
+
+          <section class="panel-block side-panel hidden-panel" data-panel-name="summary">
+            <h3>Consult State</h3>
             <div class="kv">
               <div class="k">Stage</div><div class="v" id="summaryStage">—</div>
               <div class="k">Module</div><div class="v" id="summaryModule">—</div>
               <div class="k">Preset</div><div class="v" id="summaryPreset">—</div>
-              <div class="k">Current section</div><div class="v" id="summaryCaseSection">—</div>
-              <div class="k">Pretest factors</div><div class="v" id="summaryFactors">—</div>
+              <div class="k">Section</div><div class="v" id="summaryCaseSection">—</div>
+              <div class="k">Factors</div><div class="v" id="summaryFactors">—</div>
             </div>
             <div id="patientContextBlock" style="display:none; margin-top:12px;">
               <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:8px;">Patient context</div>
               <div class="kv" id="patientContextKV"></div>
             </div>
-          </section>
-
-          <section class="panel-block big-result side-panel hidden-panel" id="analysisSummary" data-panel-name="analysis">
-            <h3>Analysis</h3>
-            <div class="muted">No analysis yet. Complete the guided steps and describe a case.</div>
           </section>
 
           <section class="panel-block side-panel hidden-panel" id="parsedPanel" data-panel-name="parsed">
@@ -902,7 +1111,7 @@
           </div>
         </aside>
       </section>
-    </div>
+    </div><!-- /.shell -->
 
     <script>
       const state = {
@@ -928,9 +1137,17 @@
         launchpad: document.getElementById("launchpad"),
         composerHint: document.getElementById("composerHint"),
         helpBanner: document.getElementById("helpBanner"),
+        // legacy progress elements (hidden, kept for renderProgress compat)
         progressTitle: document.getElementById("progressTitle"),
         progressMeta: document.getElementById("progressMeta"),
         progressSteps: document.getElementById("progressSteps"),
+        // new status-line elements
+        statusTitle: document.getElementById("statusTitle"),
+        statusSep: document.getElementById("statusSep"),
+        statusStep: document.getElementById("statusStep"),
+        // overlay
+        quickstartOverlay: document.getElementById("quickstartOverlay"),
+        // summary state panel
         summaryStage: document.getElementById("summaryStage"),
         summaryModule: document.getElementById("summaryModule"),
         summaryPreset: document.getElementById("summaryPreset"),
@@ -938,6 +1155,7 @@
         summaryFactors: document.getElementById("summaryFactors"),
         patientContextBlock: document.getElementById("patientContextBlock"),
         patientContextKV: document.getElementById("patientContextKV"),
+        patientBar: document.getElementById("patientBar"),
         narrationBadge: document.getElementById("narrationBadge"),
         parserBadge: document.getElementById("parserBadge"),
         analysisSummary: document.getElementById("analysisSummary"),
@@ -1133,7 +1351,7 @@
         els.userInput.style.height = `${nextHeight}px`;
       }
 
-      function setActiveSidePanel(panelName = "summary") {
+      function setActiveSidePanel(panelName = "analysis") {
         els.panelTabs.forEach((tab) => {
           tab.classList.toggle("active", tab.dataset.panel === panelName);
         });
@@ -1152,20 +1370,19 @@
       function renderProgress(assistantState = {}) {
         const workflow = assistantState.workflow || "probid";
         const stage = assistantState.stage || "select_module";
-        const steps = PROGRESS_STEPS[workflow] || PROGRESS_STEPS.probid;
-        const activeKey = progressKeyForState(assistantState);
-        const activeIndex = Math.max(steps.findIndex((step) => step.key === activeKey), 0);
+        // Update new status-line
+        if (stage === "select_module") {
+          els.statusTitle.textContent = "ID Assistant";
+          els.statusSep.style.display = "none";
+          els.statusStep.textContent = "";
+        } else {
+          els.statusTitle.textContent = workflowLabel(workflow);
+          els.statusSep.style.display = "";
+          els.statusStep.textContent = stageLabel(stage);
+        }
+        // Keep hidden legacy elements updated (renderProgress was the only writer)
         els.progressTitle.textContent = `${workflowLabel(workflow)}: ${stageLabel(stage)}`;
         els.progressMeta.textContent = progressMetaForState(assistantState);
-        els.progressSteps.innerHTML = "";
-        steps.forEach((step, index) => {
-          const chip = document.createElement("div");
-          chip.className = "progress-step";
-          if (index < activeIndex) chip.classList.add("completed");
-          if (index === activeIndex) chip.classList.add("current");
-          chip.textContent = step.label;
-          els.progressSteps.appendChild(chip);
-        });
       }
 
       function syncComposerContext(assistantState = {}) {
@@ -1180,6 +1397,9 @@
 
       function resetConversationUi() {
         clearConversationMessages();
+        removeTypingIndicator();
+        els.patientBar.classList.add("hidden");
+        els.patientBar.innerHTML = "";
         els.optionTray.innerHTML = "";
         syncConsultButton([]);
         state.assistantState = null;
@@ -1199,7 +1419,7 @@
         syncComposerContext(emptyState);
         syncLaunchpad(null);
         setTopStatus({ state: emptyState });
-        setActiveSidePanel("summary");
+        setActiveSidePanel("analysis");
       }
 
       function setBusy(next) {
@@ -1230,13 +1450,40 @@
       function appendMessage(role, text) {
         const node = document.createElement("div");
         node.className = `msg ${role}`;
+        const copyBtnHtml = role === "assistant"
+          ? `<button type="button" class="copy-btn" title="Copy message">Copy</button>`
+          : "";
         node.innerHTML = `
-          <div class="role">${role === "assistant" ? "Assistant" : "You"}</div>
+          <div class="role" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>${role === "assistant" ? "Assistant" : "You"}</span>${copyBtnHtml}
+          </div>
           <div class="text"></div>
         `;
         node.querySelector(".text").textContent = text;
+        if (role === "assistant") {
+          node.querySelector(".copy-btn").addEventListener("click", () => {
+            navigator.clipboard.writeText(text).then(() => {
+              const btn = node.querySelector(".copy-btn");
+              btn.textContent = "Copied";
+              setTimeout(() => { btn.textContent = "Copy"; }, 1600);
+            }).catch(() => {});
+          });
+        }
         els.messages.appendChild(node);
         els.messages.scrollTop = els.messages.scrollHeight;
+      }
+
+      function appendTypingIndicator() {
+        const node = document.createElement("div");
+        node.id = "typingIndicator";
+        node.className = "typing-indicator";
+        node.innerHTML = `<div class="tdot"></div><div class="tdot"></div><div class="tdot"></div>`;
+        els.messages.appendChild(node);
+        els.messages.scrollTop = els.messages.scrollHeight;
+      }
+
+      function removeTypingIndicator() {
+        document.getElementById("typingIndicator")?.remove();
       }
 
       function clearConversationMessages() {
@@ -1514,28 +1761,22 @@
             `<div class="k">${escapeHtml(r.k)}</div><div class="v">${escapeHtml(r.v)}</div>`
           ).join("");
           els.patientContextBlock.style.display = "";
+          // Inline patient bar in chat
+          els.patientBar.classList.remove("hidden");
+          els.patientBar.innerHTML =
+            `<div class="pb-label">Active patient</div>` +
+            rows.map(r => `<div class="pb-item"><span class="pb-k">${escapeHtml(r.k)}</span><span class="pb-v">${escapeHtml(r.v)}</span></div>`).join("");
         } else {
           els.patientContextBlock.style.display = "none";
+          els.patientBar.classList.add("hidden");
+          els.patientBar.innerHTML = "";
         }
 
         renderProgress(s);
         syncComposerContext(s);
         syncLaunchpad(workflow === "probid" && s.stage === "select_module" ? null : workflow);
-        if (workflow === "mechid" && s.stage === "mechid_describe") {
-          els.helpBanner.textContent = "Current step: paste the organism, AST pattern, and any treatment context you have.";
-        } else if (workflow === "mechid" && s.stage === "mechid_confirm") {
-          els.helpBanner.textContent = "Current step: review the extracted organism and susceptibility pattern, then run the interpretation.";
-        } else if (workflow === "immunoid" && s.stage === "immunoid_select_agents") {
-          els.helpBanner.textContent = "Current step: add the planned immunosuppressive agents.";
-        } else if (workflow === "immunoid" && s.stage === "immunoid_collect_context") {
-          els.helpBanner.textContent = "Current step: answer the missing context question that changes the screening or prophylaxis checklist.";
-        } else if (workflow === "doseid" && s.stage === "doseid_describe") {
-          els.helpBanner.textContent = "Current step: add the antimicrobial, weight, renal function, and dialysis context.";
-        } else {
-          els.helpBanner.textContent = currentSection
-            ? `Current step: ${currentSectionLabel}. Add details for this section, then click Next to continue.`
-            : "I’m your ID Consultant Assistant. Describe a syndrome case, dosing question, isolate plus AST pattern, or immunosuppression exposure profile.";
-        }
+        // helpBanner is hidden in the new UI; updates are no-ops kept for JS compat
+        els.helpBanner.textContent = "";
       }
 
       function decisionClass(decision) {
@@ -2060,6 +2301,7 @@
             if (userVisibleText) appendMessage("user", userVisibleText);
             else if (messageText) appendMessage("user", messageText);
           }
+          appendTypingIndicator();
 
           const payload = {
             state: state.assistantState,
@@ -2071,6 +2313,7 @@
           if (messageText) payload.message = messageText;
 
           const resp = await callAssistantTurn(payload);
+          removeTypingIndicator();
           state.lastResponse = resp;
           const nextState = resp.state || null;
           if (
@@ -2113,6 +2356,7 @@
             els.composerHint.textContent = tips[0] || "Type a response or use the quick options.";
           }
         } catch (err) {
+          removeTypingIndicator();
           appendMessage("assistant", `I hit an error: ${err.message}`);
           els.composerHint.textContent = "Check your server logs and try again.";
           els.parserBadge.textContent = "parser: error";
@@ -2183,6 +2427,19 @@
 
       els.consultBtn.addEventListener("click", () => {
         sendTurn({ selection: "run_assessment", userVisibleText: "Give consultant impression" });
+      });
+
+      // Quickstart overlay
+      function openQuickstart() { els.quickstartOverlay.classList.remove("hidden"); }
+      function closeQuickstart() { els.quickstartOverlay.classList.add("hidden"); }
+      document.getElementById("quickstartBtn")?.addEventListener("click", openQuickstart);
+      document.getElementById("closeQuickstartBtn")?.addEventListener("click", closeQuickstart);
+      document.getElementById("newConsultBtnHeader")?.addEventListener("click", () => {
+        closeQuickstart();
+        sendTurn({ message: "restart", userVisibleText: "New consult" });
+      });
+      els.quickstartOverlay.addEventListener("click", (e) => {
+        if (e.target === els.quickstartOverlay) closeQuickstart();
       });
 
       els.panelTabs.forEach((button) => {
@@ -2314,6 +2571,7 @@
         };
         button.addEventListener("click", () => {
           if (!workflow) return;
+          closeQuickstart();
           jumpToWorkflow(workflow, labels[workflow] || "Start consult");
         });
       });

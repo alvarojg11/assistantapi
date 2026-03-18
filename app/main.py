@@ -5693,6 +5693,7 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
                 follow_up = _assistant_single_ast_follow_up(advice.missing_susceptibilities[0])
                 if follow_up:
                     summary += f"\n{follow_up}"
+                summary += "\nAlternatively, if you already have a specific antibiotic in mind, name it and I can calculate the renal-adjusted dose."
             summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
             return summary
 
@@ -9365,7 +9366,7 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
         sex = "female"
 
     weight_kg = None
-    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?)\b", normalized)
+    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?|kilos?)\b", normalized)
     if weight_match:
         weight_kg = float(weight_match.group(1))
     else:
@@ -9378,7 +9379,7 @@ def _assistant_parse_doseid_patient_context(message_text: str) -> DoseIDAssistan
     if height_match:
         height_cm = float(height_match.group(1))
     else:
-        feet_inches_match = re.search(r"\b(\d)\s*ft\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
+        feet_inches_match = re.search(r"\b(\d)\s*(?:ft|feet|foot)\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
         if feet_inches_match:
             feet = int(feet_inches_match.group(1))
             inches = int(feet_inches_match.group(2) or 0)
@@ -10109,7 +10110,7 @@ def _build_doseid_text_response(
 
 def _assistant_doseid_simple_numeric_reply(reply: str) -> str | None:
     normalized = _assistant_doseid_normalize(reply)
-    match = re.fullmatch(r"(\d+(?:\.\d+)?)(?:\s*(mg/?dl|mg dl|ml/?min|ml min|kg|cm|lb|lbs))?", normalized)
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)(?:\s*(mg/?dl|mg dl|ml/?min|ml min|kg|kgs|kilograms?|kilos?|cm|lb|lbs))?", normalized)
     if not match:
         return None
     number = match.group(1)
@@ -10118,6 +10119,8 @@ def _assistant_doseid_simple_numeric_reply(reply: str) -> str | None:
         unit = "mg/dl"
     elif unit in {"ml/min", "ml min"}:
         unit = "ml/min"
+    elif unit in {"kgs", "kilogram", "kilograms", "kilo", "kilos"}:
+        unit = "kg"
     return f"{number} {unit}".strip()
 
 
@@ -10159,7 +10162,7 @@ def _assistant_doseid_multi_field_reply_fragments(
     elif re.search(r"\bfemale\b|\bwoman\b", normalized):
         remember("sex", "female", explicit=True)
 
-    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?)\b", normalized)
+    weight_match = re.search(r"\b(\d+(?:\.\d+)?)\s*(kg|kgs|kilograms?|kilos?)\b", normalized)
     if weight_match:
         remember("weight", f"{weight_match.group(1)} kg", explicit=True)
     else:
@@ -10171,7 +10174,7 @@ def _assistant_doseid_multi_field_reply_fragments(
     if height_match:
         remember("height", f"{height_match.group(1)} cm", explicit=True)
     else:
-        feet_inches_match = re.search(r"\b(\d)\s*ft\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
+        feet_inches_match = re.search(r"\b(\d)\s*(?:ft|feet|foot)\s*(\d{1,2})?\s*(?:in|inch|inches)?\b", normalized)
         if feet_inches_match:
             feet = feet_inches_match.group(1)
             inches = feet_inches_match.group(2) or "0"
