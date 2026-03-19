@@ -87,6 +87,7 @@ from .services.module_store import InMemoryModuleStore
 from .services.antibiotic_allergy_service import AGENT_ALIASES, analyze_antibiotic_allergy, parse_antibiotic_allergy_text
 from .services.consult_narrator import (
     narrate_allergyid_assistant_message,
+    narrate_consult_summary,
     narrate_doseid_assistant_message,
     narrate_general_id_answer,
     narrate_immunoid_assistant_message,
@@ -2680,6 +2681,8 @@ def _assistant_allergyid_response(
     message, narration_refined = narrate_allergyid_assistant_message(
         allergy_result=result,
         fallback_message=fallback_message,
+        established_syndrome=state.established_syndrome,
+        prior_context_summary=_consult_prior_context_summary(state),
     )
     doseid_options = _allergyid_doseid_options(result)
     options: List[AssistantOption] = [
@@ -5634,7 +5637,7 @@ def _friendly_mechid_bottom_line(
     return "The main takeaway is that this pattern needs organism-specific interpretation before choosing therapy."
 
 
-def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False) -> str:
+def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False, established_syndrome: str | None = None) -> str:
     parsed = result.parsed_request
     if parsed is None:
         message = (
@@ -5651,9 +5654,11 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
     if parsed.resistance_phenotypes:
         summary += f" I also noted {_join_readable(parsed.resistance_phenotypes)}."
     context_bits: List[str] = []
+    if established_syndrome:
+        context_bits.append(established_syndrome)
     if parsed.tx_context.focus_detail != "Not specified":
         context_bits.append(parsed.tx_context.focus_detail)
-    if parsed.tx_context.syndrome != "Not specified":
+    if parsed.tx_context.syndrome != "Not specified" and parsed.tx_context.syndrome != established_syndrome:
         context_bits.append(parsed.tx_context.syndrome)
     if parsed.tx_context.severity != "Not specified":
         context_bits.append(parsed.tx_context.severity)
@@ -5755,18 +5760,26 @@ def _assistant_mechid_review_message(
     *,
     final: bool = False,
     transient_examples: List[Dict[str, str]] | None = None,
+    established_syndrome: str | None = None,
+    consult_organisms: List[str] | None = None,
+    polymicrobial_analyses: List[Dict[str, Any]] | None = None,
 ) -> tuple[str, bool]:
-    fallback = _build_mechid_review_message(result, final=final)
+    fallback = _build_mechid_review_message(result, final=final, established_syndrome=established_syndrome)
     if final:
         return narrate_mechid_assistant_message(
             mechid_result=result,
             fallback_message=fallback,
             transient_examples=transient_examples,
+            established_syndrome=established_syndrome,
+            consult_organisms=consult_organisms,
+            polymicrobial_analyses=polymicrobial_analyses,
         )
     return narrate_mechid_review_message(
         mechid_result=result,
         fallback_message=fallback,
         transient_examples=transient_examples,
+        established_syndrome=established_syndrome,
+        consult_organisms=consult_organisms,
     )
 
 
@@ -7382,6 +7395,7 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
             "- immunoid: Prophylaxis or immunosuppression — mentions biologic therapy, chemotherapy, steroids, transplant, or asks about pre-treatment infection screening\n"
             "- allergyid: Antibiotic allergy or cross-reactivity — describes an antibiotic allergy and asks what is safe to use\n"
             "- general_id: General ID knowledge question — educational or conceptual ID question without specific patient findings for formal analysis\n"
+            "- consult_summary: The clinician is asking for a summary, full picture, or recap of everything discussed in this consult\n"
             "- unclear: Cannot be classified as an infectious diseases question\n"
             "Reply with ONLY a JSON object on one line: {\"intent\": \"<one of the above>\"}\n"
             "No explanation, no markdown, no extra keys."
@@ -7395,11 +7409,97 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
         output_text = getattr(response, "output_text", None) or ""
         data = _json.loads(output_text.strip())
         intent = data.get("intent", "unclear")
-        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "general_id", "unclear"}:
+        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "general_id", "consult_summary", "unclear"}:
             return "unclear"
         return intent
     except Exception:
         return None
+
+
+def _assistant_consult_summary_response(state: AssistantState) -> AssistantTurnResponse:
+    """Build a unified verbal summary of everything established in the current consult."""
+    pc = state.patient_context
+    patient_summary_parts: List[str] = []
+    if pc:
+        if pc.age_years is not None:
+            patient_summary_parts.append(f"{pc.age_years}yo")
+        if pc.sex:
+            patient_summary_parts.append(pc.sex)
+        if pc.total_body_weight_kg is not None:
+            patient_summary_parts.append(f"{pc.total_body_weight_kg}kg")
+        if pc.serum_creatinine_mg_dl is not None:
+            patient_summary_parts.append(f"SCr {pc.serum_creatinine_mg_dl}")
+        if pc.renal_mode != "standard":
+            patient_summary_parts.append(pc.renal_mode.upper())
+        if pc.allergy_text:
+            patient_summary_parts.append(f"allergy: {pc.allergy_text}")
+    patient_summary = ", ".join(patient_summary_parts) if patient_summary_parts else None
+
+    # Build compact fallback text
+    fallback_parts: List[str] = []
+    if state.established_syndrome:
+        fallback_parts.append(f"Syndrome: {state.established_syndrome}.")
+    if state.consult_organisms:
+        fallback_parts.append(f"Organisms: {', '.join(state.consult_organisms)}.")
+    if patient_summary:
+        fallback_parts.append(f"Patient: {patient_summary}.")
+    if not fallback_parts:
+        fallback_parts.append(
+            "I don't have enough consult data to summarise yet. "
+            "Start with a syndrome description or paste culture results and I'll build the picture."
+        )
+    fallback_message = " ".join(fallback_parts)
+
+    message, narration_refined = narrate_consult_summary(
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        probid_payload=None,   # future: pass last probid result from state
+        mechid_payload=None,
+        doseid_payload=None,
+        allergy_payload=None,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=message,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="add_more_details", label="Add more details"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="doseid", label="Calculate dosing"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "Ask for a summary anytime to get the full picture of what we've established.",
+            "Add another module result and ask again — the summary will update.",
+        ],
+    )
+
+
+_CONSULT_SUMMARY_TRIGGERS: tuple[str, ...] = (
+    "summary",
+    "summarize",
+    "summarise",
+    "full picture",
+    "give me the full",
+    "what have we established",
+    "what do we know",
+    "recap",
+    "recapitulate",
+    "sign out",
+    "sign-out",
+    "overall impression",
+    "pull it together",
+    "put it together",
+    "what's the plan",
+    "the plan",
+)
+
+
+def _is_consult_summary_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _CONSULT_SUMMARY_TRIGGERS)
 
 
 def _assistant_general_id_response(
@@ -7499,6 +7599,9 @@ def _assistant_llm_triage(
     if intent == "general_id":
         return _assistant_general_id_response(message_text, state)
 
+    if intent == "consult_summary":
+        return _assistant_consult_summary_response(state)
+
     # intent == "unclear" — return None to fall through to the original generic response
     return None
 
@@ -7523,6 +7626,179 @@ def _extract_allergy_mention(text: str) -> str | None:
             span = text[match.start():match.end()].strip()
             return span[:120]  # cap length
     return None
+
+
+def _build_polymicrobial_analyses(
+    original_text: str,
+    primary_result: "MechIDTextAnalyzeResponse",
+    *,
+    parser_strategy: str = "auto",
+    parser_model: str | None = None,
+    allow_fallback: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    When multiple organisms are present but no single organism was assigned as primary,
+    attempt to split the text by organism and run individual MechID analyses per organism.
+    Returns a list of dicts: [{"organism": str, "analysis": dict | None, "provisionalAdvice": dict | None}]
+    """
+    parsed = primary_result.parsed_request
+    if parsed is None:
+        return []
+    organisms = parsed.mentioned_organisms or []
+    # Only activate when the parser found multiple organisms but no primary
+    if not organisms or parsed.organism is not None:
+        return []
+    if len(organisms) < 2:
+        return []
+
+    per_organism_results: List[Dict[str, Any]] = []
+    text_lower = original_text.lower()
+
+    for org in organisms[:4]:  # cap at 4 organisms
+        # Find the section of text most relevant to this organism
+        org_lower = org.lower()
+        # Use the organism's canonical short form (last word for species) to find it in text
+        search_terms = [org_lower]
+        parts = org_lower.split()
+        if len(parts) >= 2:
+            search_terms.append(parts[-1])  # e.g. "aureus" from "staphylococcus aureus"
+            search_terms.append(parts[0][:4])  # e.g. "stap" abbreviation
+
+        org_pos = -1
+        for term in search_terms:
+            pos = text_lower.find(term)
+            if pos != -1:
+                org_pos = pos
+                break
+
+        if org_pos == -1:
+            # Organism not clearly found in text; build a minimal synthesis entry from organism name only
+            per_organism_results.append({
+                "organism": org,
+                "analysis": None,
+                "provisionalAdvice": None,
+                "note": "Organism mentioned but not clearly associated with distinct AST data.",
+            })
+            continue
+
+        # Extract the text segment starting from this organism mention
+        # (heuristic: from org_pos to the next organism mention or end of text)
+        segment_end = len(original_text)
+        for other_org in organisms:
+            if other_org == org:
+                continue
+            other_lower = other_org.lower()
+            other_parts = other_lower.split()
+            for term in ([other_lower] + ([other_parts[-1]] if len(other_parts) >= 2 else [])):
+                other_pos = text_lower.find(term, org_pos + len(org_lower))
+                if other_pos != -1 and other_pos < segment_end:
+                    segment_end = other_pos
+                    break
+
+        segment = original_text[org_pos:segment_end].strip()
+        if len(segment) < 10:
+            segment = original_text  # fall back to full text if segment is too short
+
+        try:
+            org_result = _build_mechid_text_response(
+                segment,
+                parser_strategy=parser_strategy,
+                parser_model=parser_model,
+                allow_fallback=allow_fallback,
+            )
+            per_organism_results.append({
+                "organism": org,
+                "analysis": org_result.analysis.model_dump(by_alias=True) if org_result.analysis else None,
+                "provisionalAdvice": org_result.provisional_advice.model_dump(by_alias=True) if org_result.provisional_advice else None,
+            })
+        except Exception:
+            per_organism_results.append({
+                "organism": org,
+                "analysis": None,
+                "provisionalAdvice": None,
+            })
+
+    return per_organism_results
+
+
+# Syndromes where microbiology is central — proactively suggest pasting culture results
+_MICRO_CENTRAL_SYNDROMES: frozenset[str] = frozenset({
+    "infective endocarditis",
+    "bacteremia",
+    "septic arthritis",
+    "prosthetic joint infection (pji)",
+    "bacterial meningitis",
+    "brain abscess",
+    "spinal epidural abscess",
+    "community-acquired pneumonia (cap)",
+    "ventilator-associated pneumonia (vap)",
+    "urinary tract infection (uti)",
+    "diabetic foot infection / osteomyelitis",
+    "necrotizing soft tissue infection",
+    "invasive candidiasis",
+})
+
+
+def _probid_micro_bridge_option(state: AssistantState) -> AssistantOption | None:
+    """Return a 'Paste culture results' option when syndrome is known and no organisms have been identified yet."""
+    syndrome = (state.established_syndrome or "").lower()
+    if not syndrome:
+        return None
+    if state.consult_organisms:
+        return None  # already have organisms — don't show this nudge
+    matches = any(s in syndrome for s in _MICRO_CENTRAL_SYNDROMES)
+    if not matches:
+        return None
+    return AssistantOption(
+        value="mechid",
+        label="Paste culture results",
+        description="I'll interpret the organism and susceptibility pattern in the context of this syndrome.",
+    )
+
+
+def _consult_prior_context_summary(state: AssistantState) -> str | None:
+    """
+    Build a compact one-line summary of what is already known in this consult,
+    suitable for passing to narrators so they can reference prior context naturally.
+    e.g. "65yo male, 80kg, SCr 1.4 · Syndrome: Infective endocarditis · Organisms: MSSA, E. faecalis"
+    """
+    parts: List[str] = []
+    pc = state.patient_context
+    if pc:
+        demo: List[str] = []
+        if pc.age_years is not None:
+            demo.append(f"{pc.age_years}yo")
+        if pc.sex:
+            demo.append(pc.sex)
+        if pc.total_body_weight_kg is not None:
+            demo.append(f"{pc.total_body_weight_kg}kg")
+        if pc.serum_creatinine_mg_dl is not None:
+            demo.append(f"SCr {pc.serum_creatinine_mg_dl}")
+        if pc.renal_mode != "standard":
+            demo.append(pc.renal_mode.upper())
+        if demo:
+            parts.append(", ".join(demo))
+    if state.established_syndrome:
+        parts.append(f"Syndrome: {state.established_syndrome}")
+    if state.consult_organisms:
+        parts.append(f"Organisms: {', '.join(state.consult_organisms)}")
+    return " · ".join(parts) if parts else None
+
+
+def _accumulate_consult_organisms(state: AssistantState, result: "MechIDTextAnalyzeResponse") -> None:
+    """Accumulate organisms identified from a MechID result into the session's consult_organisms list."""
+    parsed = result.parsed_request
+    if parsed is None:
+        return
+    candidates: List[str] = []
+    if parsed.organism:
+        candidates.append(parsed.organism)
+    for org in (parsed.mentioned_organisms or []):
+        if org and org not in candidates:
+            candidates.append(org)
+    for org in candidates:
+        if org and org not in state.consult_organisms:
+            state.consult_organisms.append(org)
 
 
 def _update_session_patient_context(state: AssistantState, text: str) -> None:
@@ -8175,7 +8451,12 @@ def _assistant_start_mechid_from_text(
     state.endo_blood_culture_context = None
     state.endo_score_factor_ids = []
     state.mechid_text = message_text
-    review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
+    _accumulate_consult_organisms(state, mechid_result)
+    review_message, narration_refined = _assistant_mechid_review_message(
+        mechid_result,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+    )
     return AssistantTurnResponse(
         assistantMessage=review_message,
         assistantNarrationRefined=narration_refined,
@@ -10540,6 +10821,9 @@ def _assistant_doseid_response(
     message, narration_refined = narrate_doseid_assistant_message(
         doseid_result=result,
         fallback_message=fallback_message,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        prior_context_summary=_consult_prior_context_summary(state),
     )
     return AssistantTurnResponse(
         assistantMessage=message,
@@ -11281,6 +11565,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     explicit_workflow_id,
                     lead_in=f"This reads like an explicit request for {workflow_label}, so I’ll start in that pathway. ",
                 )
+            if _is_consult_summary_request(message_text):
+                return _assistant_consult_summary_response(state)
             consult_intent_response = _assistant_handle_consult_intent(req, state)
             if consult_intent_response is not None:
                 return consult_intent_response
@@ -11389,6 +11675,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         chosen_module_id = _select_module_from_turn(req)
         if chosen_module_id:
             return _assistant_begin_selected_workflow(state, chosen_module_id)
+
+        if _is_consult_summary_request(req.message or ""):
+            return _assistant_consult_summary_response(state)
 
         llm_triage_response = _assistant_llm_triage(req, state)
         if llm_triage_response is not None:
@@ -11574,7 +11863,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             parser_model=state.parser_model,
             allow_fallback=state.allow_fallback,
         )
-        review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
+        _accumulate_consult_organisms(state, mechid_result)
+        review_message, narration_refined = _assistant_mechid_review_message(
+            mechid_result,
+            established_syndrome=state.established_syndrome,
+            consult_organisms=state.consult_organisms or None,
+        )
         return AssistantTurnResponse(
             assistantMessage=review_message,
             assistantNarrationRefined=narration_refined,
@@ -11623,7 +11917,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         if _is_ready_to_assess(req):
             if mechid_result.analysis is None and mechid_result.provisional_advice is None:
-                review_message, narration_refined = _assistant_mechid_review_message(mechid_result)
+                review_message, narration_refined = _assistant_mechid_review_message(
+                    mechid_result,
+                    established_syndrome=state.established_syndrome,
+                    consult_organisms=state.consult_organisms or None,
+                )
                 return AssistantTurnResponse(
                     assistantMessage=review_message,
                     assistantNarrationRefined=narration_refined,
@@ -11635,7 +11933,21 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     ],
                 )
             state.stage = "done"
-            narrated_message, narration_refined = _assistant_mechid_review_message(mechid_result, final=True)
+            _accumulate_consult_organisms(state, mechid_result)
+            poly_analyses = _build_polymicrobial_analyses(
+                state.mechid_text or "",
+                mechid_result,
+                parser_strategy=state.parser_strategy,
+                parser_model=state.parser_model,
+                allow_fallback=state.allow_fallback,
+            )
+            narrated_message, narration_refined = _assistant_mechid_review_message(
+                mechid_result,
+                final=True,
+                established_syndrome=state.established_syndrome,
+                consult_organisms=state.consult_organisms or None,
+                polymicrobial_analyses=poly_analyses or None,
+            )
             done_options = [
                 AssistantOption(value="add_more_details", label="Update this case"),
                 AssistantOption(value="restart", label="Start new consult"),
@@ -12277,7 +12589,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 text_result=text_result,
                 fallback_message=final_message,
                 module_label=_assistant_module_label(module),
+                prior_context_summary=_consult_prior_context_summary(state),
             )
+            # Carry the identified syndrome forward so MechID and DoseID can use it
+            if not state.established_syndrome and module is not None:
+                state.established_syndrome = _assistant_module_label(module)
             mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, text_result, state)
             if mechid_followup_text:
                 state.pending_followup_workflow = "mechid"
@@ -12296,15 +12612,19 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if state.pending_followup_workflow == "mechid" and (state.pending_followup_text or "").strip():
                 done_options.insert(0, AssistantOption(value="continue_to_resistance", label="Continue to resistance"))
                 done_tips.insert(0, "If you want, I can carry the same case into the isolate/resistance interpretation next.")
+            micro_bridge = _probid_micro_bridge_option(state)
+            if micro_bridge and not any(o.value in {"continue_to_resistance", "mechid"} for o in done_options):
+                done_options.insert(0, micro_bridge)
+                done_tips.insert(0, "If culture results are back, paste them and I'll interpret resistance and therapy in the context of this syndrome.")
             probid_doseid_ids = _assistant_probid_doseid_candidate_ids(module, text_result, state)
             if probid_doseid_ids:
                 narrated_message = _assistant_append_dosing_invitation(narrated_message)
                 done_options.insert(
-                    1 if done_options and done_options[0].value == "continue_to_resistance" else 0,
+                    1 if done_options and done_options[0].value in {"continue_to_resistance", "mechid"} else 0,
                     AssistantOption(value="continue_to_dosing", label="Continue to dosing"),
                 )
                 done_tips.insert(
-                    1 if done_tips and "resistance" in done_tips[0].lower() else 0,
+                    1 if done_tips and ("resistance" in done_tips[0].lower() or "culture" in done_tips[0].lower()) else 0,
                     "If you want, I can keep going into antimicrobial dosing for the treatment options suggested by this consult.",
                 )
                 _probid_meds_by_id = _assistant_doseid_medications_by_id()
@@ -12503,7 +12823,21 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     parser_model=state.parser_model,
                     allow_fallback=state.allow_fallback,
                 )
-                updated_message, narration_refined = _assistant_mechid_review_message(updated_result, final=True)
+                _accumulate_consult_organisms(state, updated_result)
+                upd_poly = _build_polymicrobial_analyses(
+                    state.mechid_text or "",
+                    updated_result,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                updated_message, narration_refined = _assistant_mechid_review_message(
+                    updated_result,
+                    final=True,
+                    established_syndrome=state.established_syndrome,
+                    consult_organisms=state.consult_organisms or None,
+                    polymicrobial_analyses=upd_poly or None,
+                )
                 prefix = "I updated the isolate consult with the new information."
                 if previous_result.analysis is not None and updated_result.analysis is not None:
                     if previous_result.analysis.final_results != updated_result.analysis.final_results:
@@ -12591,7 +12925,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         text_result=updated_result,
                         fallback_message=final_message,
                         module_label=_assistant_module_label(module),
+                        prior_context_summary=_consult_prior_context_summary(state),
                     )
+                    # Keep established_syndrome current with the active module
+                    if module is not None:
+                        state.established_syndrome = _assistant_module_label(module)
                     mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, updated_result, state)
                     if mechid_followup_text:
                         state.pending_followup_workflow = "mechid"

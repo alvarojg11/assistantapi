@@ -574,6 +574,9 @@ class AssistantState(BaseModel):
     parser_model: Optional[str] = Field(default=None, alias="parserModel")
     allow_fallback: bool = Field(default=True, alias="allowFallback")
     patient_context: Optional[SessionPatientContext] = Field(default=None, alias="patientContext")
+    # Cross-module consult thread — carries clinical context across module transitions
+    established_syndrome: Optional[str] = Field(default=None, alias="establishedSyndrome")
+    consult_organisms: List[str] = Field(default_factory=list, alias="consultOrganisms")
 
     model_config = {"populate_by_name": True}
 
