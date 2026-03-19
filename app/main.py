@@ -55,6 +55,7 @@ from .schemas import (
     ImmunoRegimenListResponse,
     MechIDAnalyzeRequest,
     MechIDAnalyzeResponse,
+    AntibiogramUploadRequest,
     MechIDImageAnalyzeRequest,
     MechIDImageAnalyzeResponse,
     MechIDProvisionalAdvice,
@@ -88,13 +89,40 @@ from .services.antibiotic_allergy_service import AGENT_ALIASES, analyze_antibiot
 from .services.consult_narrator import (
     narrate_allergyid_assistant_message,
     narrate_consult_summary,
+    narrate_discharge_counselling_answer,
     narrate_doseid_assistant_message,
+    narrate_allergy_delabeling_answer,
+    narrate_biomarker_interpretation_answer,
+    narrate_cns_infection_answer,
+    narrate_drug_interaction_answer,
+    narrate_duration_answer,
+    narrate_empiric_therapy_answer,
+    narrate_fluid_interpretation_answer,
+    narrate_followup_tests_answer,
+    narrate_fungal_management_answer,
     narrate_general_id_answer,
+    narrate_mycobacterial_answer,
+    narrate_pregnancy_antibiotics_answer,
+    narrate_sepsis_management_answer,
+    narrate_travel_medicine_answer,
     narrate_immunoid_assistant_message,
+    narrate_iv_to_oral_answer,
     narrate_mechid_assistant_message,
     narrate_mechid_review_message,
+    narrate_opat_answer,
+    narrate_oral_therapy_answer,
     narrate_probid_assistant_message,
     narrate_probid_review_message,
+    narrate_prophylaxis_dose_answer,
+    narrate_source_control_answer,
+    narrate_stewardship_answer,
+    narrate_treatment_failure_answer,
+    narrate_stewardship_review_answer,
+    narrate_impression_plan,
+    narrate_duke_criteria_answer,
+    narrate_ast_clinical_meaning_answer,
+    narrate_complexity_flag_answer,
+    narrate_course_tracker_answer,
 )
 from .services.doseid_llm_parser import parse_doseid_text_with_openai
 from .services.doseid_service import (
@@ -111,6 +139,7 @@ from .services.immunoid_engine import analyze_immunoid, list_immunoid_agents, li
 from .services.immunoid_regimens import IMMUNOID_REGIMENS
 from .services.mechid_engine import MechIDEngineError, analyze_mechid, list_mechid_organisms
 from .services.mechid_eval import EvalStats, evaluate_mechid_case
+from .services.antibiogram_image_parser import antibiogram_to_prompt_block, parse_antibiogram_image_with_openai
 from .services.mechid_image_parser import parse_mechid_image_with_openai
 from .services.mechid_llm_parser import parse_mechid_text_with_openai
 from .services.mechid_text_parser import parse_mechid_text
@@ -2677,6 +2706,7 @@ def _assistant_allergyid_response(
     _assistant_reset_immunoid_state(state)
     parsed = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=message_text))
     result = parsed.analysis or analyze_antibiotic_allergy(AntibioticAllergyAnalyzeRequest(infectionContext=message_text))
+    _snapshot_allergy_result(state, result)
     fallback_message = ((prefix or "") + _assistant_allergyid_message(result)).strip()
     message, narration_refined = narrate_allergyid_assistant_message(
         allergy_result=result,
@@ -2697,6 +2727,15 @@ def _assistant_allergyid_response(
     ]
     if doseid_options:
         tips.insert(0, "If you want, I can calculate the renal-adjusted dose for the preferred safe alternative.")
+    # Proactive bridging: if allergy rules out the primary agent and MechID organisms are known, offer empiric alternative
+    allergy_verdict = getattr(result, "verdict", None) or ""
+    if allergy_verdict.lower() in {"avoid", "caution"} and state.consult_organisms and state.established_syndrome:
+        options.insert(0, AssistantOption(
+            value="empiric_therapy",
+            label="Find safe empiric alternative",
+            description="I'll suggest an agent that covers the same organism/syndrome while respecting this allergy.",
+        ))
+        tips.insert(0, "I can suggest an empiric alternative that covers the same pathogen while avoiding this allergy.")
     return AssistantTurnResponse(
         assistantMessage=message,
         assistantNarrationRefined=narration_refined,
@@ -2933,6 +2972,58 @@ def assistant_mechid_image(req: MechIDImageAnalyzeRequest) -> AssistantTurnRespo
             "If the extraction looks right, click Give consultant impression.",
             "If anything is off, type the correction in plain language, for example 'meropenem resistant' or 'this is Klebsiella, not E. coli'.",
         ],
+    )
+
+
+@app.post("/v1/assistant/antibiogram-upload", response_model=AssistantTurnResponse)
+def assistant_antibiogram_upload(req: AntibiogramUploadRequest) -> AssistantTurnResponse:
+    """Load an institutional antibiogram image into the session state for antibiogram-aware empiric therapy."""
+    state = _get_or_init_state(req.state)
+    try:
+        antibiogram = parse_antibiogram_image_with_openai(
+            image_data_url=req.image_data_url,
+            filename=req.filename,
+        )
+    except LLMParserError as exc:
+        raise HTTPException(status_code=502, detail=f"Antibiogram extraction failed: {exc}") from exc
+
+    state.institutional_antibiogram = antibiogram
+
+    institution = antibiogram.get("institution") or "your institution"
+    year = antibiogram.get("year")
+    year_str = f" ({year})" if year else ""
+    organisms: dict = antibiogram.get("organisms", {})
+    org_count = len(organisms)
+    org_names_list = list(organisms.keys())
+    if org_count <= 5:
+        org_names = ", ".join(org_names_list)
+    else:
+        org_names = ", ".join(org_names_list[:5]) + f" and {org_count - 5} more"
+    confidence = antibiogram.get("confidence", "medium")
+    confidence_note = " (extraction confidence: low — please review)" if confidence == "low" else ""
+    ambiguities = antibiogram.get("ambiguities", [])
+    ambiguity_note = f" Flagged ambiguities: {'; '.join(ambiguities[:3])}." if ambiguities else ""
+
+    assistant_message = (
+        f"I've loaded {institution}{year_str}'s antibiogram covering {org_count} organism{'s' if org_count != 1 else ''}{confidence_note}. "
+        f"Organisms on file: {org_names}.{ambiguity_note} "
+        "From now on, when you ask for empiric therapy recommendations, I'll incorporate your local resistance rates — "
+        "flagging any agent where local susceptibility is below 80% and suggesting alternatives with higher coverage at your institution."
+    )
+    tips = [
+        "Ask 'What's the best empiric coverage for HAP at our institution?' and I'll use your antibiogram.",
+        "You can upload a new antibiogram at any time to update the local data.",
+    ]
+    return AssistantTurnResponse(
+        assistantMessage=assistant_message,
+        assistantNarrationRefined=False,
+        state=state,
+        options=[
+            AssistantOption(value="empiric_therapy", label="Ask about empiric therapy"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="probid", label="Start syndrome workup"),
+        ],
+        tips=tips,
     )
 
 
@@ -7394,6 +7485,33 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
             "- doseid: Antimicrobial dosing — asks about drug dose, renal adjustment, dialysis dosing, or regimen calculation\n"
             "- immunoid: Prophylaxis or immunosuppression — mentions biologic therapy, chemotherapy, steroids, transplant, or asks about pre-treatment infection screening\n"
             "- allergyid: Antibiotic allergy or cross-reactivity — describes an antibiotic allergy and asks what is safe to use\n"
+            "- empiric_therapy: Asks what antibiotic to start empirically — before cultures return, or what to cover given a syndrome without yet knowing the organism\n"
+            "- iv_to_oral: Asks whether to switch from IV to oral antibiotics, or what the oral equivalent is for a given regimen\n"
+            "- duration: Asks how long to treat, when to stop antibiotics, or what the duration of therapy should be\n"
+            "- followup_tests: Asks about follow-up investigations — TEE, repeat blood cultures, inflammatory markers, drug levels, imaging, or lung biopsy\n"
+            "- stewardship: Asks about de-escalation, narrowing antibiotics, streamlining therapy after cultures return, or stopping unnecessary agents\n"
+            "- stewardship_review: Asks to review a specific list of current antibiotics and advise stop/narrow/continue for each agent\n"
+            "- opat: Asks about OPAT (outpatient parenteral antibiotic therapy), discharging on IV antibiotics, home IV therapy, or PICC line suitability\n"
+            "- oral_therapy: Asks about oral antibiotic options for a syndrome — whether oral is appropriate, which oral agent to use, OVIVA/POET trial applicability\n"
+            "- discharge_counselling: Asks what to tell the patient at discharge — treatment plan, monitoring schedule, red flag symptoms, follow-up instructions\n"
+            "- drug_interaction: Asks about a drug-drug interaction involving an antimicrobial — safety of combining two drugs, CYP interactions, additive toxicity, dose adjustment needed\n"
+            "- prophylaxis: Asks about antimicrobial prophylaxis dosing for an immunosuppressed patient — PCP, MAC, antifungal, CMV, toxoplasma, or HBV reactivation prophylaxis\n"
+            "- source_control: Asks about source control — whether to remove a line, drain an abscess, perform debridement, retain or exchange a prosthetic joint or cardiac device\n"
+            "- treatment_failure: Patient is not improving on antibiotics — asks why treatment is failing, what to do, differential for persistent fever or bacteraemia\n"
+            "- biomarker_interpretation: Asks what a specific lab value means — procalcitonin, beta-D-glucan, galactomannan, cryptococcal antigen, IGRA, histoplasma antigen\n"
+            "- fluid_interpretation: Asks about the meaning of CSF, pleural, ascitic, peritoneal, or synovial fluid results — cell count, glucose, protein, opening pressure\n"
+            "- allergy_delabeling: Asks whether a reported antibiotic allergy is genuine, whether it is safe to rechallenge, cross-reactivity between beta-lactams, oral challenge or skin test decision\n"
+            "- fungal_management: Asks about invasive fungal infection treatment — candidaemia, invasive Aspergillosis, cryptococcal meningitis, mucormycosis, antifungal choice and duration\n"
+            "- sepsis_management: Asks about sepsis recognition, the Hour-1 bundle, vasopressors, lactate, or PCT-guided antibiotic stopping in a septic patient\n"
+            "- cns_infection: Asks about CNS infection management — bacterial meningitis empiric therapy, dexamethasone timing, HSV encephalitis acyclovir, brain abscess drainage, Listeria coverage\n"
+            "- mycobacterial: Asks about TB treatment (HRZE), LTBI treatment (3HP/6H), MAC pulmonary disease, MDR-TB, TB drug monitoring\n"
+            "- pregnancy_antibiotics: Asks about antibiotic safety in pregnancy — which antibiotics are safe, which to avoid, trimester-specific guidance, GBS prophylaxis\n"
+            "- travel_medicine: Asks about fever or illness in a returned traveller — malaria workup and treatment, dengue, typhoid, rickettsiae, eosinophilia, tropical infections\n"
+            "- impression_plan: Clinician asks for a structured impression and plan suitable for the medical record — 'write a consult note', 'give me the impression and plan', 'write up the case'\n"
+            "- duke_criteria: Asks about applying Modified Duke Criteria for endocarditis classification — major/minor criteria, definite/possible/rejected IE classification\n"
+            "- ast_meaning: Asks what an AST resistance phenotype means clinically — ESBL, AmpC, MRSA beta-lactam reliability, vancomycin MIC, D-zone, daptomycin-lung, hVISA\n"
+            "- complexity_flag: Asks whether a case is complex, whether to escalate, whether it needs MDT review, or flags high-risk features\n"
+            "- course_tracker: Asks about day-of-therapy milestones — what to check on day X, when to switch to oral, when treatment is complete, SAB/IE/candidaemia duration\n"
             "- general_id: General ID knowledge question — educational or conceptual ID question without specific patient findings for formal analysis\n"
             "- consult_summary: The clinician is asking for a summary, full picture, or recap of everything discussed in this consult\n"
             "- unclear: Cannot be classified as an infectious diseases question\n"
@@ -7409,7 +7527,7 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
         output_text = getattr(response, "output_text", None) or ""
         data = _json.loads(output_text.strip())
         intent = data.get("intent", "unclear")
-        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "general_id", "consult_summary", "unclear"}:
+        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "empiric_therapy", "iv_to_oral", "duration", "followup_tests", "stewardship", "stewardship_review", "opat", "oral_therapy", "discharge_counselling", "drug_interaction", "prophylaxis", "source_control", "treatment_failure", "biomarker_interpretation", "fluid_interpretation", "allergy_delabeling", "fungal_management", "sepsis_management", "cns_infection", "mycobacterial", "pregnancy_antibiotics", "travel_medicine", "impression_plan", "duke_criteria", "ast_meaning", "complexity_flag", "course_tracker", "general_id", "consult_summary", "unclear"}:
             return "unclear"
         return intent
     except Exception:
@@ -7454,10 +7572,10 @@ def _assistant_consult_summary_response(state: AssistantState) -> AssistantTurnR
         established_syndrome=state.established_syndrome,
         consult_organisms=state.consult_organisms or None,
         patient_summary=patient_summary,
-        probid_payload=None,   # future: pass last probid result from state
-        mechid_payload=None,
-        doseid_payload=None,
-        allergy_payload=None,
+        probid_payload=state.last_probid_summary,
+        mechid_payload=state.last_mechid_summary,
+        doseid_payload=state.last_doseid_summary,
+        allergy_payload=state.last_allergy_summary,
         fallback_message=fallback_message,
     )
     return AssistantTurnResponse(
@@ -7500,6 +7618,1861 @@ _CONSULT_SUMMARY_TRIGGERS: tuple[str, ...] = (
 def _is_consult_summary_request(text: str) -> bool:
     normalized = text.lower().strip()
     return any(trigger in normalized for trigger in _CONSULT_SUMMARY_TRIGGERS)
+
+
+# ---------------------------------------------------------------------------
+# Empiric therapy, IV-to-oral, duration, and follow-up test intents
+# ---------------------------------------------------------------------------
+
+_EMPIRIC_THERAPY_TRIGGERS: tuple[str, ...] = (
+    "empiric",
+    "empirical",
+    "start empiric",
+    "empiric treatment",
+    "empiric therapy",
+    "empiric coverage",
+    "what do i start",
+    "what should i start",
+    "what to start",
+    "before cultures",
+    "cultures pending",
+    "culture pending",
+    "waiting for cultures",
+    "awaiting cultures",
+    "best empiric",
+    "broad coverage",
+    "cover empirically",
+)
+
+_IV_TO_ORAL_TRIGGERS: tuple[str, ...] = (
+    "iv to oral",
+    "iv-to-oral",
+    "switch to oral",
+    "oral step-down",
+    "oral stepdown",
+    "step down to oral",
+    "transition to oral",
+    "po step",
+    "convert to po",
+    "switch to po",
+    "oral equivalent",
+    "oral option",
+    "oral therapy",
+    "oral alternative",
+    "can i switch",
+    "ready for oral",
+    "eligible for oral",
+)
+
+_DURATION_TRIGGERS: tuple[str, ...] = (
+    "how long",
+    "duration",
+    "length of therapy",
+    "length of treatment",
+    "how many days",
+    "how many weeks",
+    "treatment duration",
+    "antibiotic duration",
+    "course of antibiotics",
+    "finish antibiotics",
+    "complete therapy",
+    "when to stop",
+    "stop antibiotics",
+    "when can i stop",
+    "total course",
+    "total duration",
+)
+
+_FOLLOWUP_TEST_TRIGGERS: tuple[str, ...] = (
+    "tee",
+    "transesophageal",
+    "echocardiogram",
+    "echo",
+    "repeat blood culture",
+    "repeat cultures",
+    "follow-up culture",
+    "follow up culture",
+    "clearance culture",
+    "document clearance",
+    "inflammatory markers",
+    "crp",
+    "esr",
+    "procalcitonin",
+    "drug level",
+    "vancomycin level",
+    "vanco level",
+    "trough",
+    "auc",
+    "lung biopsy",
+    "bronchoscopy",
+    "bal",
+    "bronchoalveolar",
+    "pet scan",
+    "pet ct",
+    "mri spine",
+    "follow-up imaging",
+    "what tests",
+    "what investigations",
+    "what workup",
+    "further workup",
+    "additional testing",
+    "do i need a tee",
+    "should i get a tee",
+    "need imaging",
+)
+
+
+_STEWARDSHIP_TRIGGERS: tuple[str, ...] = (
+    "de-escalate",
+    "de-escalation",
+    "deescalate",
+    "deescalation",
+    "narrow",
+    "narrowing",
+    "narrow down",
+    "streamline",
+    "streamlining",
+    "stop antibiotics",
+    "stop the antibiotics",
+    "cultures came back",
+    "cultures are back",
+    "cultures returned",
+    "what to narrow",
+    "can i stop",
+    "when to stop",
+    "can we stop",
+    "discontinue",
+    "stewardship",
+    "antibiotic stewardship",
+    "de escalate",
+    "switch from vancomycin",
+    "switch from vanco",
+    "off vanco",
+)
+
+_OPAT_TRIGGERS: tuple[str, ...] = (
+    "opat",
+    "outpatient iv",
+    "outpatient parenteral",
+    "outpatient antibiotic",
+    "home iv",
+    "home antibiotics",
+    "send home on iv",
+    "discharge on iv",
+    "discharge on antibiotics",
+    "iv at home",
+    "home therapy",
+    "home treatment",
+    "eligible for opat",
+    "candidate for opat",
+    "picc",
+    "outpatient treatment",
+    "complete treatment at home",
+    "finish antibiotics at home",
+)
+
+
+def _is_empiric_therapy_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _EMPIRIC_THERAPY_TRIGGERS)
+
+
+def _is_iv_to_oral_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _IV_TO_ORAL_TRIGGERS)
+
+
+def _is_duration_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _DURATION_TRIGGERS)
+
+
+def _is_followup_test_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _FOLLOWUP_TEST_TRIGGERS)
+
+
+_ORAL_THERAPY_TRIGGERS: tuple[str, ...] = (
+    "oral antibiotics",
+    "oral antibiotic",
+    "oral therapy",
+    "oral treatment",
+    "oral option",
+    "treat with oral",
+    "treated orally",
+    "oral for osteomyelitis",
+    "oral for bone",
+    "oral for joint",
+    "oral for uti",
+    "oral for pneumonia",
+    "oral for cellulitis",
+    "oviva",
+    "poet trial",
+    "high bioavailability",
+    "can oral treat",
+    "can i use oral",
+    "is oral enough",
+    "po antibiotics",
+    "po therapy",
+    "oral bone",
+    "oral osteomyelitis",
+)
+
+_DISCHARGE_COUNSELLING_TRIGGERS: tuple[str, ...] = (
+    "discharge counselling",
+    "discharge counseling",
+    "what do i tell the patient",
+    "what to tell the patient",
+    "patient education",
+    "going home",
+    "ready for discharge",
+    "discharge instructions",
+    "red flags",
+    "red flag symptoms",
+    "monitoring at home",
+    "follow up instructions",
+    "what should the patient watch for",
+    "patient information",
+    "discharge plan",
+    "discharge summary",
+    "what should i tell",
+)
+
+_STEWARDSHIP_REVIEW_TRIGGERS: tuple[str, ...] = (
+    "review my antibiotics",
+    "review the antibiotics",
+    "antibiotic review",
+    "review my regimen",
+    "antibiotic list",
+    "current antibiotics",
+    "my current antibiotics",
+    "list of antibiotics",
+    "running on",
+    "currently on antibiotics",
+    "which antibiotics can i stop",
+    "what can i stop",
+    "what should i stop",
+    "antibiotics to stop",
+    "antibiotic checklist",
+)
+
+
+def _is_stewardship_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _STEWARDSHIP_TRIGGERS)
+
+
+def _is_opat_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _OPAT_TRIGGERS)
+
+
+def _is_oral_therapy_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _ORAL_THERAPY_TRIGGERS)
+
+
+def _is_discharge_counselling_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _DISCHARGE_COUNSELLING_TRIGGERS)
+
+
+def _is_stewardship_review_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _STEWARDSHIP_REVIEW_TRIGGERS)
+
+
+_DRUG_INTERACTION_TRIGGERS: tuple[str, ...] = (
+    "drug interaction",
+    "drug-drug interaction",
+    "interaction between",
+    "safe to give",
+    "safe with",
+    "can i give",
+    "can i use",
+    "interact with",
+    "interacts with",
+    "combination of",
+    "rifampin and",
+    "rifampicin and",
+    "fluconazole and",
+    "voriconazole and",
+    "tacrolimus and",
+    "warfarin and",
+    "linezolid and",
+    "metronidazole and",
+    "vancomycin and",
+    "serotonin syndrome",
+    "cytochrome",
+    "cyp3a4",
+    "drug level",
+    "drug levels",
+)
+
+
+def _is_drug_interaction_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _DRUG_INTERACTION_TRIGGERS)
+
+
+_PROPHYLAXIS_TRIGGERS: tuple[str, ...] = (
+    "pcp prophylaxis",
+    "pcp prevention",
+    "pneumocystis prophylaxis",
+    "mac prophylaxis",
+    "mac prevention",
+    "mycobacterium avium prophylaxis",
+    "antifungal prophylaxis",
+    "cmv prophylaxis",
+    "cmv prevention",
+    "toxoplasma prophylaxis",
+    "prophylaxis dose",
+    "prophylaxis dosing",
+    "prophylaxis for",
+    "prophylaxis in",
+    "prevention dose",
+    "cotrimoxazole prophylaxis",
+    "tmp-smx prophylaxis",
+    "bactrim prophylaxis",
+    "posaconazole prophylaxis",
+    "valganciclovir prophylaxis",
+    "letermovir",
+    "hbv prophylaxis",
+    "hepatitis b reactivation",
+    "immunosuppressed prophylaxis",
+    "transplant prophylaxis",
+    "hiv prophylaxis",
+)
+
+
+def _is_prophylaxis_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _PROPHYLAXIS_TRIGGERS)
+
+
+_SOURCE_CONTROL_TRIGGERS: tuple[str, ...] = (
+    "source control",
+    "remove the line",
+    "pull the line",
+    "take out the line",
+    "pull out the line",
+    "remove the catheter",
+    "line removal",
+    "line out",
+    "drain the abscess",
+    "drain this",
+    "drainage",
+    "need to drain",
+    "need drainage",
+    "debridement",
+    "dair",
+    "implant retention",
+    "retain the implant",
+    "remove the implant",
+    "joint revision",
+    "two-stage",
+    "one-stage",
+    "surgical intervention",
+    "need surgery",
+    "needs surgery",
+    "surgical drainage",
+    "abscess drainage",
+    "empyema",
+    "necrotising fasciitis",
+    "necrotizing fasciitis",
+    "fasciitis",
+    "peritonsillar",
+    "parapharyngeal",
+    "lead extraction",
+    "device extraction",
+    "cardiac device",
+    "infected device",
+    "infected hardware",
+    "infected implant",
+    "remove the port",
+    "remove the picc",
+)
+
+
+def _is_source_control_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _SOURCE_CONTROL_TRIGGERS)
+
+
+_TREATMENT_FAILURE_TRIGGERS: tuple[str, ...] = (
+    "still febrile",
+    "still has fever",
+    "not improving",
+    "not getting better",
+    "not responding",
+    "failing treatment",
+    "treatment failure",
+    "antibiotics not working",
+    "antibiotics aren't working",
+    "fever persists",
+    "persistent fever",
+    "persistent bacteraemia",
+    "persistent bacteremia",
+    "cultures still positive",
+    "still bacteraemic",
+    "still bacteremic",
+    "still septic",
+    "why is this patient",
+    "why isn't this",
+    "why is the fever",
+    "day 5 still",
+    "day 7 still",
+    "day 3 and still",
+    "drug fever",
+    "could this be drug fever",
+)
+
+
+def _is_treatment_failure_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _TREATMENT_FAILURE_TRIGGERS)
+
+
+_BIOMARKER_TRIGGERS: tuple[str, ...] = (
+    "procalcitonin",
+    "pct level",
+    "pct is",
+    "beta-d-glucan",
+    "beta d glucan",
+    "bdg",
+    "galactomannan",
+    "1,3-beta",
+    "cryptococcal antigen",
+    "crag",
+    "cryptococcal antigen",
+    "igra",
+    "quantiferon",
+    "t-spot",
+    "histoplasma antigen",
+    "blastomyces antigen",
+    "aspergillus antigen",
+    "biomarker",
+    "what does this level mean",
+    "what does this result mean",
+    "interpret this result",
+    "is this positive",
+    "false positive",
+)
+
+
+def _is_biomarker_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _BIOMARKER_TRIGGERS)
+
+
+_FLUID_INTERPRETATION_TRIGGERS: tuple[str, ...] = (
+    "csf result",
+    "csf shows",
+    "lumbar puncture",
+    "lp result",
+    "lp showed",
+    "cerebrospinal fluid",
+    "pleural fluid",
+    "pleural tap",
+    "thoracentesis",
+    "ascitic fluid",
+    "paracentesis",
+    "ascites tap",
+    "synovial fluid",
+    "joint fluid",
+    "joint tap",
+    "arthrocentesis",
+    "opening pressure",
+    "wbc in the csf",
+    "white cells in csf",
+    "glucose ratio",
+    "light's criteria",
+    "saag",
+    "pmn count",
+    "interpret the fluid",
+    "fluid interpretation",
+    "peritoneal fluid",
+)
+
+
+def _is_fluid_interpretation_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _FLUID_INTERPRETATION_TRIGGERS)
+
+
+_ALLERGY_DELABELING_TRIGGERS: tuple[str, ...] = (
+    "penicillin allergy",
+    "penicillin allergic",
+    "allergic to penicillin",
+    "beta-lactam allergy",
+    "beta lactam allergy",
+    "cephalosporin allergy",
+    "cross-reactivity",
+    "cross reactivity",
+    "can i give penicillin",
+    "can i use penicillin",
+    "is the allergy real",
+    "true allergy",
+    "allergy delabel",
+    "delabeling",
+    "rechallenge",
+    "oral challenge",
+    "skin test",
+    "penicillin skin test",
+    "red man syndrome",
+    "allergy history",
+    "says they are allergic",
+    "says she is allergic",
+    "says he is allergic",
+    "reported allergy",
+    "listed as allergic",
+)
+
+
+def _is_allergy_delabeling_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _ALLERGY_DELABELING_TRIGGERS)
+
+
+_FUNGAL_MANAGEMENT_TRIGGERS: tuple[str, ...] = (
+    "candidaemia",
+    "candidemia",
+    "candida in the blood",
+    "candida fungaemia",
+    "candida fungemia",
+    "aspergillosis",
+    "aspergillus infection",
+    "invasive aspergillus",
+    "cryptococcal",
+    "cryptococcus",
+    "mucormycosis",
+    "mucor",
+    "rhizopus",
+    "fusarium",
+    "invasive fungal",
+    "fungal infection",
+    "antifungal treatment",
+    "antifungal therapy",
+    "voriconazole treatment",
+    "liposomal amphotericin",
+    "amphotericin b",
+    "echinocandin",
+    "anidulafungin",
+    "micafungin",
+    "caspofungin",
+    "isavuconazole",
+    "candida auris",
+)
+
+
+def _is_fungal_management_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _FUNGAL_MANAGEMENT_TRIGGERS)
+
+
+_SEPSIS_TRIGGERS: tuple[str, ...] = (
+    "sepsis",
+    "septic shock",
+    "hour-1 bundle",
+    "hour 1 bundle",
+    "surviving sepsis",
+    "sepsis bundle",
+    "qsofa",
+    "sofa score",
+    "lactate is",
+    "lactate level",
+    "lactate >",
+    "vasopressor",
+    "noradrenaline",
+    "norepinephrine",
+    "septic patient",
+    "think this is sepsis",
+    "looks septic",
+    "blood cultures before",
+    "when to de-escalate sepsis",
+)
+
+
+def _is_sepsis_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _SEPSIS_TRIGGERS)
+
+
+_CNS_INFECTION_TRIGGERS: tuple[str, ...] = (
+    "meningitis",
+    "encephalitis",
+    "brain abscess",
+    "cerebral abscess",
+    "cns infection",
+    "lumbar puncture empiric",
+    "suspected meningitis",
+    "bacterial meningitis",
+    "viral meningitis",
+    "hsv encephalitis",
+    "herpes encephalitis",
+    "toxoplasma brain",
+    "ring-enhancing",
+    "ring enhancing",
+    "dexamethasone meningitis",
+    "ceftriaxone meningitis",
+    "ampicillin listeria",
+    "listeria meningitis",
+    "acyclovir empiric",
+    "start acyclovir",
+    "treat meningitis",
+)
+
+
+def _is_cns_infection_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _CNS_INFECTION_TRIGGERS)
+
+
+_MYCOBACTERIAL_TRIGGERS: tuple[str, ...] = (
+    "tuberculosis",
+    " tb ",
+    "tb treatment",
+    "tb therapy",
+    "active tb",
+    "latent tb",
+    "ltbi",
+    "rifampicin isoniazid",
+    "hrze",
+    "ripe regimen",
+    "isoniazid",
+    "pyrazinamide",
+    "ethambutol",
+    "rifabutin",
+    "mac infection",
+    "mycobacterium avium",
+    "mycobacterium abscessus",
+    "ntm infection",
+    "nontuberculous",
+    "non-tuberculous",
+    "mdr-tb",
+    "xdr-tb",
+    "drug-resistant tb",
+    "bedaquiline",
+    "3hp regimen",
+    "9hp regimen",
+    "igra positive",
+    "quantiferon positive",
+    "treat latent",
+)
+
+
+def _is_mycobacterial_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _MYCOBACTERIAL_TRIGGERS)
+
+
+_PREGNANCY_ANTIBIOTICS_TRIGGERS: tuple[str, ...] = (
+    "pregnant",
+    "pregnancy",
+    "trimester",
+    "antenatal",
+    "prenatal",
+    "in pregnancy",
+    "during pregnancy",
+    "safe in pregnancy",
+    "antibiotics in pregnancy",
+    "antibiotic safe",
+    "is it safe",
+    "breastfeeding antibiotic",
+    "gbs prophylaxis",
+    "group b strep",
+    "intrapartum",
+    "postpartum infection",
+    "puerperal",
+    "nitrofurantoin pregnancy",
+    "fluoroquinolone pregnancy",
+    "doxycycline pregnancy",
+)
+
+
+def _is_pregnancy_antibiotics_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _PREGNANCY_ANTIBIOTICS_TRIGGERS)
+
+
+_TRAVEL_MEDICINE_TRIGGERS: tuple[str, ...] = (
+    "returned traveller",
+    "returned traveler",
+    "travel history",
+    "travel to",
+    "travelled to",
+    "traveled to",
+    "returning from",
+    "came back from",
+    "malaria",
+    "dengue",
+    "typhoid",
+    "enteric fever",
+    "leptospirosis",
+    "chikungunya",
+    "zika",
+    "yellow fever",
+    "schistosomiasis",
+    "visceral leishmaniasis",
+    "kala-azar",
+    "strongyloides",
+    "tropical fever",
+    "fever in traveller",
+    "fever after travel",
+    "artemether",
+    "artesunate",
+    "antimalarial",
+    "travel medicine",
+    "ebola",
+    "viral haemorrhagic fever",
+    "vhf",
+    "eosinophilia travel",
+)
+
+
+def _is_travel_medicine_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _TRAVEL_MEDICINE_TRIGGERS)
+
+
+_IMPRESSION_PLAN_TRIGGERS: tuple[str, ...] = (
+    "impression and plan",
+    "impression & plan",
+    "write an impression",
+    "write a plan",
+    "id consult note",
+    "consult note",
+    "write up the consult",
+    "generate impression",
+    "write the note",
+    "formulate a plan",
+    "what's my impression",
+    "what is my impression",
+    "note for the chart",
+    "documentation",
+    "write a note",
+)
+
+
+def _is_impression_plan_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _IMPRESSION_PLAN_TRIGGERS)
+
+
+_DUKE_CRITERIA_TRIGGERS: tuple[str, ...] = (
+    "duke criteria",
+    "duke's criteria",
+    "modified duke",
+    "endocarditis criteria",
+    "ie criteria",
+    "definite ie",
+    "possible ie",
+    "rejected ie",
+    "major criteria",
+    "minor criteria",
+    "duke classification",
+)
+
+
+def _is_duke_criteria_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _DUKE_CRITERIA_TRIGGERS)
+
+
+_AST_MEANING_TRIGGERS: tuple[str, ...] = (
+    "what does this susceptibility mean",
+    "what does the susceptibility mean",
+    "what does susceptible mean",
+    "what does resistant mean",
+    "what does s/i/r mean",
+    "esbl",
+    "extended spectrum beta",
+    "amp c",
+    "ampc",
+    "merino trial",
+    "d-zone",
+    "d zone",
+    "inducible clindamycin",
+    "hvisa",
+    "hvisa",
+    "vancomycin mic",
+    "daptomycin lung",
+    "what does the ast mean",
+    "interpret this ast",
+    "explain the ast",
+    "what does resistant mean",
+    "what does intermediate mean",
+)
+
+
+def _is_ast_meaning_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _AST_MEANING_TRIGGERS)
+
+
+_COMPLEXITY_TRIGGERS: tuple[str, ...] = (
+    "is this complex",
+    "is this a complex case",
+    "should i escalate",
+    "should this go to mdt",
+    "needs senior review",
+    "high risk patient",
+    "complex patient",
+    "unusual case",
+    "difficult case",
+    "should i involve",
+    "do i need to escalate",
+    "complexity",
+    "high complexity",
+    "red flags",
+    "flag this case",
+)
+
+
+def _is_complexity_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _COMPLEXITY_TRIGGERS)
+
+
+_COURSE_TRACKER_TRIGGERS: tuple[str, ...] = (
+    "day of therapy",
+    "day of treatment",
+    "how many days",
+    "what day am i on",
+    "where am i in the course",
+    "treatment milestone",
+    "antibiotic day",
+    "therapy day",
+    "clearance culture",
+    "when can i switch",
+    "when can i stop",
+    "when is the course done",
+    "when do i stop",
+    "course complete",
+    "end of course",
+)
+
+
+def _is_course_tracker_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _COURSE_TRACKER_TRIGGERS)
+
+
+def _assistant_empiric_therapy_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer an empiric therapy question — best regimen before cultures return."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "For empiric therapy, the best regimen depends on the syndrome and patient factors. "
+        "Start a syndrome workup and I can give a more precise recommendation based on the clinical picture."
+    )
+    antibiogram_block: str | None = None
+    if state.institutional_antibiogram:
+        antibiogram_block = antibiogram_to_prompt_block(state.institutional_antibiogram)
+    answer, narration_refined = narrate_empiric_therapy_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        institutional_antibiogram_block=antibiogram_block,
+        fallback_message=fallback_message,
+    )
+    antibiogram_tip = (
+        "Your institutional antibiogram is loaded — recommendations reflect local resistance rates."
+        if state.institutional_antibiogram
+        else "Upload your institutional antibiogram for location-specific empiric guidance."
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="probid", label="Syndrome workup"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="allergyid", label="Allergy check"),
+            AssistantOption(value="doseid", label="Calculate dosing"),
+        ],
+        tips=[
+            antibiogram_tip,
+            "Once cultures return, paste the organism and susceptibilities and I'll refine the recommendation.",
+        ],
+    )
+
+
+def _assistant_iv_to_oral_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Assess IV-to-oral step-down eligibility and name the oral agent."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "IV-to-oral step-down is appropriate when the patient is afebrile for 24-48h, "
+        "WBC is trending to normal, they are tolerating oral intake, and there is no endovascular or CNS source requiring IV therapy. "
+        "The specific oral agent depends on the organism and susceptibilities."
+    )
+    answer, narration_refined = narrate_iv_to_oral_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Paste susceptibilities"),
+            AssistantOption(value="doseid", label="Calculate oral dose"),
+            AssistantOption(value="allergyid", label="Allergy check"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "Paste the organism and AST and I can confirm the best oral agent for this isolate.",
+            "For high-bioavailability options like fluoroquinolones or TMP-SMX, serum levels are equivalent to IV.",
+        ],
+    )
+
+
+def _assistant_duration_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a treatment duration question."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Duration depends on the syndrome, organism, and whether source control has been achieved. "
+        "For bacteraemia the clock typically starts from the first negative blood culture. "
+        "Provide the syndrome and organism for a specific recommendation."
+    )
+    answer, narration_refined = narrate_duration_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="add_more_details", label="Add source control details"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="doseid", label="Calculate dosing"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "Duration runs from first negative culture for bacteraemia, not from antibiotic start.",
+            "Source control status (line removed, abscess drained) is the biggest modifier of duration.",
+        ],
+    )
+
+
+def _assistant_followup_tests_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a follow-up test ordering question — TEE, repeat cultures, imaging, drug levels."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Follow-up testing depends on the syndrome and organism. "
+        "For S. aureus bacteraemia, TEE is recommended for most patients and repeat cultures at 48-72h are essential. "
+        "Provide the organism and syndrome for specific guidance."
+    )
+    answer, narration_refined = narrate_followup_tests_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="probid", label="Syndrome workup"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="doseid", label="Calculate dosing"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "For S. aureus bacteraemia, TEE should not be delayed beyond 5-7 days.",
+            "Document culture clearance before counting duration for bacteraemia.",
+        ],
+    )
+
+
+def _assistant_oral_therapy_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a question about oral antibiotic options — which syndromes can be treated orally."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Oral antibiotics are appropriate for many syndromes. Bone and joint infections can be stepped down to oral after "
+        "initial IV stabilisation (OVIVA trial). UTI and cystitis should always be oral. Mild CAP and cellulitis are oral from the start. "
+        "Provide the syndrome and organism for specific recommendations."
+    )
+    answer, narration_refined = narrate_oral_therapy_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="iv_to_oral", label="Assess step-down criteria"),
+            AssistantOption(value="doseid", label="Calculate oral dose"),
+            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="duration", label="Confirm duration"),
+        ],
+        tips=[
+            "OVIVA (2019): oral step-down non-inferior to IV for bone and joint infections after clinical stabilisation.",
+            "High-bioavailability agents (fluoroquinolones, TMP-SMX, linezolid) achieve serum levels equivalent to IV.",
+        ],
+    )
+
+
+def _assistant_discharge_counselling_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Generate discharge counselling — treatment plan, monitoring, red flags."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Discharge counselling should cover: the antibiotic name, form, dose, and duration; what to monitor "
+        "(labs, wound, temperature); red flag symptoms prompting return to ED; and the follow-up plan. "
+        "Provide the syndrome and treatment details for a specific plan."
+    )
+    answer, narration_refined = narrate_discharge_counselling_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="duration", label="Confirm treatment duration"),
+            AssistantOption(value="doseid", label="Confirm dose"),
+            AssistantOption(value="opat", label="OPAT assessment"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "Always tell the patient not to stop antibiotics early even if feeling better.",
+            "Red flags for S. aureus or endocarditis: recurrent fever, new joint pain, neurological symptoms.",
+        ],
+    )
+
+
+def _assistant_stewardship_review_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Review a listed antibiotic regimen — stop, narrow, or continue each agent."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "List your current antibiotics and I'll advise which to stop, narrow, or continue based on the cultures "
+        "and clinical picture. For example: 'Patient is on vancomycin, pip-tazo, and fluconazole — cultures grew MSSA.'"
+    )
+    answer, narration_refined = narrate_stewardship_review_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Paste full susceptibility report"),
+            AssistantOption(value="iv_to_oral", label="Consider oral step-down"),
+            AssistantOption(value="duration", label="Confirm duration for narrowed agent"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "MSSA on vancomycin: always narrow to beta-lactam (oxacillin or cefazolin) — beta-lactams are superior.",
+            "Empiric antifungals: can usually stop at 72-96h if cultures negative and patient defervesced.",
+        ],
+    )
+
+
+def _assistant_stewardship_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a de-escalation or antibiotic stewardship question."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "De-escalation should happen as soon as culture results allow narrowing. "
+        "Key principle: always narrow MSSA from vancomycin to a beta-lactam, and de-escalate broad gram-negative coverage "
+        "once susceptibilities permit. Paste the culture results and I can give a specific recommendation."
+    )
+    answer, narration_refined = narrate_stewardship_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Paste susceptibilities"),
+            AssistantOption(value="doseid", label="Calculate narrow agent dose"),
+            AssistantOption(value="allergyid", label="Allergy check"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "Paste the final susceptibility report and I'll confirm the narrowest effective agent.",
+            "Always narrow MSSA from vancomycin to a beta-lactam — oxacillin or cefazolin is superior.",
+        ],
+    )
+
+
+def _assistant_sepsis_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Sepsis Hour-1 bundle: measure lactate, draw blood cultures ×2 before antibiotics, "
+        "give broad-spectrum antibiotics within 1 hour, 30 mL/kg IV crystalloid if hypotensive or lactate ≥4, "
+        "start vasopressors if MAP <65. De-escalate at 48-72h when cultures return. "
+        "PCT-guided stopping: drop >80% from peak or <0.5 ng/mL."
+    )
+    answer, narration_refined = narrate_sepsis_management_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="empiric_therapy", label="Empiric antibiotic selection"),
+            AssistantOption(value="source_control", label="Source control decision"),
+            AssistantOption(value="doseid", label="Calculate antibiotic dose"),
+            AssistantOption(value="stewardship", label="De-escalation plan"),
+        ],
+        tips=[
+            "Every hour of antibiotic delay in septic shock increases mortality ~7% — start broad, narrow later.",
+            "PCT-guided stopping: drop >80% from peak, or <0.5 ng/mL — safe to stop antibiotics in most sepsis.",
+        ],
+    )
+
+
+def _assistant_cns_infection_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Bacterial meningitis: ceftriaxone 2g BD + dexamethasone 0.15mg/kg QDS — give dexamethasone BEFORE or WITH first antibiotic dose. "
+        "Add ampicillin if Listeria risk (age >50, immunosuppressed, pregnancy). "
+        "Viral encephalitis: start acyclovir 10mg/kg TDS empirically — do not wait for HSV PCR. "
+        "Brain abscess: neurosurgical drainage + ceftriaxone + metronidazole."
+    )
+    answer, narration_refined = narrate_cns_infection_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="fluid_interpretation", label="Interpret LP result"),
+            AssistantOption(value="doseid", label="Calculate dose"),
+            AssistantOption(value="duration", label="Duration of treatment"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        ],
+        tips=[
+            "Dexamethasone only reduces mortality if given before or with the first antibiotic — giving it after is largely futile.",
+            "Listeria is cephalosporin-resistant — always add ampicillin in patients over 50 or immunosuppressed.",
+        ],
+    )
+
+
+def _assistant_mycobacterial_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Drug-sensitive TB: 2 months HRZE (isoniazid + rifampicin + pyrazinamide + ethambutol), then 4 months HR. "
+        "Add pyridoxine with isoniazid. Monitor LFTs monthly and visual acuity (ethambutol). "
+        "LTBI: 3HP (rifapentine + isoniazid weekly ×12) is preferred. "
+        "MAC pulmonary: azithromycin + ethambutol + rifampicin ×12 months culture-negative."
+    )
+    answer, narration_refined = narrate_mycobacterial_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="drug_interaction", label="Rifampicin drug interactions"),
+            AssistantOption(value="doseid", label="Calculate TB drug dose"),
+            AssistantOption(value="duration", label="Confirm treatment duration"),
+            AssistantOption(value="followup_tests", label="Monitoring tests"),
+        ],
+        tips=[
+            "Rifampicin induces CYP450 — check all concurrent medications before starting (tacrolimus, warfarin, azoles, ARVs, OCPs).",
+            "Never start LTBI treatment without first excluding active TB — CXR + symptom screen mandatory.",
+        ],
+    )
+
+
+def _assistant_pregnancy_antibiotics_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Safe in pregnancy (all trimesters): beta-lactams, azithromycin, clindamycin. "
+        "Avoid: fluoroquinolones (cartilage), tetracyclines after 16 weeks (bone/teeth), aminoglycosides (fetal ototoxicity). "
+        "Near term: avoid nitrofurantoin (≥36 weeks — haemolytic anaemia) and TMP-SMX (kernicterus). "
+        "Tell me the infection type and trimester and I'll give a specific recommendation."
+    )
+    answer, narration_refined = narrate_pregnancy_antibiotics_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="doseid", label="Calculate safe dose"),
+            AssistantOption(value="allergyid", label="Allergy check"),
+            AssistantOption(value="empiric_therapy", label="Empiric options"),
+        ],
+        tips=[
+            "Beta-lactams are first-line for almost all infections in pregnancy — use them broadly.",
+            "TMP-SMX: avoid in 1st trimester (folate antagonist) and near term (kernicterus) — safe in 2nd trimester with folic acid 5mg/day.",
+        ],
+    )
+
+
+def _assistant_travel_medicine_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Fever in a returned traveller: exclude malaria first — thick and thin blood film + RDT, repeat ×3 if negative. "
+        "P. falciparum: artemether-lumefantrine ×3 days (uncomplicated) or IV artesunate (severe). "
+        "Also consider dengue (thrombocytopenia + leukopenia), typhoid (blood culture, ceftriaxone), "
+        "rickettsiae (eschar + rash — treat empirically with doxycycline). "
+        "Tell me the travel destination and incubation period."
+    )
+    answer, narration_refined = narrate_travel_medicine_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="biomarker_interpretation", label="Interpret lab results"),
+            AssistantOption(value="empiric_therapy", label="Empiric treatment"),
+            AssistantOption(value="probid", label="Syndrome workup"),
+        ],
+        tips=[
+            "Malaria must be excluded in any fever within 3 months of travel to endemic areas — even if the patient took prophylaxis.",
+            "Suspect VHF if travel to sub-Saharan Africa within 21 days + fever + haemorrhagic features — isolate first, call ID.",
+        ],
+    )
+
+
+def _assistant_impression_plan_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Generate a structured ID consult impression and plan for the medical record."""
+    patient_summary = _consult_prior_context_summary(state)
+    syndrome = state.established_syndrome or "not yet established"
+    orgs = ", ".join(state.consult_organisms) if state.consult_organisms else "not yet identified"
+    fallback_message = (
+        f"IMPRESSION: ID consult for {syndrome}. Causative organism(s): {orgs}. "
+        "PLAN: 1. Antimicrobial therapy — [specify agent, dose, route based on AST]. "
+        "2. Duration — [syndrome-specific]. "
+        "3. Source control — [line removal, drainage, debridement if indicated]. "
+        "4. Monitoring — drug levels, renal function, clinical response at 48-72h. "
+        "5. Investigations — pending cultures, imaging follow-up, TEE if indicated. "
+        "6. Stewardship — review for de-escalation at 48-72h when cultures confirmed. "
+        "7. ID follow-up — [outpatient OPAT review if applicable]."
+    )
+    answer, narration_refined = narrate_impression_plan(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        last_probid_summary=state.last_probid_summary,
+        last_mechid_summary=state.last_mechid_summary,
+        last_doseid_summary=state.last_doseid_summary,
+        last_allergy_summary=state.last_allergy_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="consult_summary", label="Full consult summary"),
+            AssistantOption(value="discharge_counselling", label="Discharge counselling"),
+            AssistantOption(value="course_tracker", label="Track treatment course"),
+        ],
+        tips=[
+            "The impression and plan can be copied directly into the medical record — review and edit as needed before signing.",
+            "ID consult notes are most useful when they include a clear diagnosis, specific antibiotic with dose, duration, and a monitoring plan.",
+        ],
+    )
+
+
+def _assistant_duke_criteria_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Apply Modified Duke Criteria and classify IE likelihood."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Modified Duke Criteria for IE — MAJOR: (1) positive blood cultures ×2 with typical organism (S. aureus, viridans Streptococci, HACEK, Enterococcus without primary focus) "
+        "or persistently positive cultures ≥12h apart; (2) endocardial involvement on echo (vegetation, abscess, new valvular regurgitation). "
+        "MINOR: (1) predisposing valve disease or IVDU; (2) fever ≥38°C; (3) vascular phenomena (emboli, Janeway lesions, septic infarcts); "
+        "(4) immunological phenomena (Osler nodes, Roth spots, RF); (5) positive blood cultures not meeting major criteria. "
+        "DEFINITE: 2 major OR 1 major + 3 minor OR 5 minor. POSSIBLE: 1 major + 1 minor OR 3 minor. REJECTED: firm alternative diagnosis, resolution with ≤4 days antibiotics, or no pathological evidence at surgery. "
+        "Tell me the clinical findings and I'll classify the case."
+    )
+    answer, narration_refined = narrate_duke_criteria_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="followup_tests", label="Order TEE / echo"),
+            AssistantOption(value="mechid", label="Review organism + AST"),
+            AssistantOption(value="duration", label="Treatment duration for IE"),
+        ],
+        tips=[
+            "TTE sensitivity for vegetation is ~60-70%; TEE is >90% — order TEE if TTE negative and suspicion remains.",
+            "S. aureus bacteraemia warrants TEE routinely regardless of Duke score — all SAB patients need echocardiography.",
+        ],
+    )
+
+
+def _assistant_ast_meaning_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Explain the clinical meaning of AST resistance phenotypes."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Key AST clinical pitfalls: ESBL — treat with carbapenem not pip-tazo (MERINO 2018: meropenem superior for ESBL bacteraemia). "
+        "MRSA — all beta-lactams unreliable even if reported 'susceptible'; use vancomycin, daptomycin, or linezolid. "
+        "Vancomycin MIC ≥2 — clinical failure likely even if technically 'susceptible'; consider daptomycin or ceftaroline. "
+        "AmpC (ESCPM: Enterobacter, Serratia, Citrobacter, Providencia, Morganella) — 3GC may appear susceptible in vitro but derepression occurs on therapy; use cefepime or carbapenems. "
+        "D-zone test positive = inducible clindamycin resistance — do not use clindamycin. "
+        "Daptomycin + pulmonary infections — daptomycin is inactivated by surfactant; never use for pneumonia. "
+        "Tell me the specific result you want explained."
+    )
+    answer, narration_refined = narrate_ast_clinical_meaning_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Full MechID review"),
+            AssistantOption(value="empiric_therapy", label="Alternative therapy options"),
+            AssistantOption(value="doseid", label="Dose calculation"),
+        ],
+        tips=[
+            "The MERINO trial (NEJM 2018) definitively showed pip-tazo is inferior to meropenem for ESBL/AmpC bacteraemia — always use carbapenem.",
+            "Paste the full AST panel for a complete analysis of all resistance mechanisms.",
+        ],
+    )
+
+
+def _assistant_complexity_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Assess case complexity and escalation thresholds."""
+    patient_summary = _consult_prior_context_summary(state)
+    # Extract known complexity features from state context
+    complexity_features: list[str] = []
+    if state.consult_organisms:
+        high_risk_orgs = {"mrsa", "vre", "esbl", "mdr", "pdra", "candida", "aspergillus", "mucor", "klebsiella", "acinetobacter"}
+        for org in state.consult_organisms:
+            if any(h in org.lower() for h in high_risk_orgs):
+                complexity_features.append(f"High-risk organism: {org}")
+    if state.established_syndrome:
+        high_stakes = {"endocarditis", "meningitis", "osteomyelitis", "septic arthritis", "bacteraemia", "candidaemia", "brain abscess"}
+        if any(s in state.established_syndrome.lower() for s in high_stakes):
+            complexity_features.append(f"High-stakes syndrome: {state.established_syndrome}")
+    fallback_message = (
+        "Case complexity red flags requiring escalation to senior ID or MDT: "
+        "(1) MDR/XDR organism with limited treatment options; "
+        "(2) Immunocompromised host (transplant, haematological malignancy, biologics); "
+        "(3) Prosthetic material infection (valve, joint, mesh, CIED); "
+        "(4) CNS involvement; "
+        "(5) Treatment failure after 72-96h of appropriate therapy; "
+        "(6) Polymicrobial bacteraemia; "
+        "(7) Unusual or rare pathogen. "
+        "3 or more red flags = escalate to senior ID review and consider MDT (cardiac surgery, transplant team, microbiology). "
+        "Tell me the specific case features."
+    )
+    answer, narration_refined = narrate_complexity_flag_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        complexity_features=complexity_features or None,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="consult_summary", label="Full consult summary"),
+            AssistantOption(value="impression_plan", label="Generate impression + plan"),
+            AssistantOption(value="followup_tests", label="Investigations to order"),
+        ],
+        tips=[
+            "Prosthetic material infections nearly always require MDT involvement — cardiac surgery for valve, orthopaedics for joint, ID pharmacy for extended regimens.",
+            "Consider FDG-PET/CT for occult embolic foci or metastatic infection when source control is unclear.",
+        ],
+    )
+
+
+def _assistant_course_tracker_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Track day-of-therapy milestones and advise what to do next."""
+    patient_summary = _consult_prior_context_summary(state)
+    syndrome = state.established_syndrome or "the infection being treated"
+    fallback_message = (
+        f"Day-of-therapy milestones for {syndrome}: "
+        "SAB — Day 0-2: remove or change IV access; Day 2-3: repeat blood cultures to confirm clearance; Day 7-14: echocardiography (TEE preferred); full 14d IV from first negative culture (uncomplicated), 28-42d (complicated/endocarditis). "
+        "Candidaemia — Day 0-1: ophthalmology review (fundoscopy); remove central line; Day 14: first negative culture = clock start; stop echinocandin at Day 14 minimum. "
+        "IE — Day 10-17: assess POET eligibility for oral step-down (stable, no CNS emboli, no abscess, good bioavailability organism); "
+        "Bone/joint — Day 7: consider OVIVA oral step-down if stable and susceptible organism; "
+        "GNR bacteraemia — Day 3-5: de-escalate on culture; total 7-14d depending on source control. "
+        "Tell me the day of therapy and syndrome for specific advice."
+    )
+    answer, narration_refined = narrate_course_tracker_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="iv_to_oral", label="IV-to-oral step-down"),
+            AssistantOption(value="stewardship", label="De-escalation review"),
+            AssistantOption(value="opat", label="OPAT candidacy"),
+        ],
+        tips=[
+            "Clock the start of treatment from the first negative blood culture, not the antibiotic start date — this matters for SAB and candidaemia duration calculations.",
+            "Set a calendar reminder at day 2-3 for repeat blood cultures and at day 7 for first formal de-escalation review.",
+        ],
+    )
+
+
+def _assistant_treatment_failure_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Structured differential for treatment failure — patient not improving on antibiotics."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Treatment failure has a structured differential: wrong diagnosis (drug fever, non-infectious cause), "
+        "wrong drug (resistance, superinfection), wrong dose (check drug levels), uncontrolled source (repeat imaging), "
+        "metastatic seeding (TEE, MRI spine for S. aureus), or host immune failure. "
+        "Tell me the clinical picture and current antibiotics and I'll work through it."
+    )
+    answer, narration_refined = narrate_treatment_failure_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Paste updated cultures"),
+            AssistantOption(value="followup_tests", label="What tests to order"),
+            AssistantOption(value="doseid", label="Check drug levels / dosing"),
+            AssistantOption(value="source_control", label="Source control decision"),
+        ],
+        tips=[
+            "S. aureus still bacteraemic at day 3: get a TEE and MRI spine — metastatic seeding is the rule, not the exception.",
+            "Drug fever classically appears day 7-10, patient looks well despite fever, eosinophilia may be present.",
+        ],
+    )
+
+
+def _assistant_biomarker_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Interpret infectious disease biomarkers — PCT, BDG, galactomannan, CrAg, IGRA."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Biomarker interpretation depends on the clinical context. Key thresholds: "
+        "procalcitonin >0.5 ng/mL suggests bacterial infection; <0.1 makes it unlikely. "
+        "Beta-D-glucan >80 pg/mL is positive for invasive fungal infection (not Cryptococcus or Mucor). "
+        "Galactomannan ≥0.5 (serum) suggests Aspergillus in the right host. "
+        "Tell me the specific value and context."
+    )
+    answer, narration_refined = narrate_biomarker_interpretation_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="empiric_therapy", label="Empiric antifungal / antibiotic"),
+            AssistantOption(value="followup_tests", label="What to test next"),
+            AssistantOption(value="probid", label="Syndrome workup"),
+        ],
+        tips=[
+            "PCT stopping rule: drop >80% from peak, or <0.5 ng/mL — safe to stop antibiotics in most settings.",
+            "Two consecutive positive BDG results increase specificity — a single value in a low-risk patient may be a false positive.",
+        ],
+    )
+
+
+def _assistant_fluid_interpretation_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Interpret CSF, pleural, ascitic, or synovial fluid results."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Paste the fluid results and I'll interpret them. Key rules: "
+        "CSF WBC >1000 (neutrophilic) + low glucose = bacterial meningitis — treat immediately. "
+        "Pleural PMN count + low pH + low glucose = empyema needing drainage. "
+        "Ascitic PMN ≥250 = SBP — start cefotaxime now. "
+        "Synovial WBC >50,000 strongly suggests septic arthritis."
+    )
+    answer, narration_refined = narrate_fluid_interpretation_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="empiric_therapy", label="Empiric therapy for this result"),
+            AssistantOption(value="cns_infection", label="CNS infection guidance"),
+            AssistantOption(value="source_control", label="Source control / drainage"),
+            AssistantOption(value="probid", label="Syndrome workup"),
+        ],
+        tips=[
+            "For suspected bacterial meningitis: start antibiotics immediately — do not delay for CT unless focal neurology or papilloedema.",
+            "Cryptococcal meningitis: measure opening pressure at every LP — raised ICP is the main driver of early mortality.",
+        ],
+    )
+
+
+def _assistant_allergy_delabeling_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Assess whether a reported antibiotic allergy is genuine and advise on delabeling."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Most reported penicillin allergies are not true allergies — over 90% tolerate penicillin on formal testing. "
+        "Low-risk history (remote, mild rash, GI upset, childhood amoxicillin rash with viral illness) → direct oral challenge is appropriate. "
+        "True IgE-mediated reactions (anaphylaxis, angioedema within 1 hour) → avoid and refer allergy. "
+        "Tell me the specific reaction history and I'll stratify the risk."
+    )
+    answer, narration_refined = narrate_allergy_delabeling_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="allergyid", label="Find safe alternative"),
+            AssistantOption(value="empiric_therapy", label="Empiric therapy options"),
+            AssistantOption(value="mechid", label="Paste susceptibilities"),
+        ],
+        tips=[
+            "Penicillin-to-cephalosporin cross-reactivity is ~1-2% (not 10%) — driven by R1 side chain, not the ring.",
+            "Red man syndrome with vancomycin is NOT an allergy — it is a rate-related infusion reaction.",
+        ],
+    )
+
+
+def _assistant_fungal_management_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Manage invasive fungal infection — candidaemia, Aspergillus, Cryptococcus, Mucor."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Invasive fungal infection management depends on the species. "
+        "Candidaemia: remove lines, ophthalmology review, echinocandin first-line, 14 days from first negative culture. "
+        "Aspergillosis: voriconazole or isavuconazole, minimum 6-12 weeks. "
+        "Cryptococcal meningitis: amphotericin B + flucytosine induction, manage ICP with therapeutic LPs. "
+        "Mucormycosis: urgent surgery + liposomal amphotericin — do NOT use voriconazole. "
+        "Tell me the species and I'll give a specific plan."
+    )
+    answer, narration_refined = narrate_fungal_management_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="source_control", label="Source control decision"),
+            AssistantOption(value="doseid", label="Calculate antifungal dose"),
+            AssistantOption(value="drug_interaction", label="Check antifungal interactions"),
+            AssistantOption(value="followup_tests", label="Monitoring tests"),
+        ],
+        tips=[
+            "Candidaemia: the 14-day clock starts from the FIRST NEGATIVE blood culture — not from when you started antifungals.",
+            "Mucormycosis: voriconazole is contraindicated — it has no activity against Mucorales and may promote growth.",
+        ],
+    )
+
+
+def _assistant_drug_interaction_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a drug-drug interaction question involving antimicrobial agents."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Drug interactions with antimicrobials are common. Key ones to know: rifampin is a potent inducer that "
+        "lowers levels of tacrolimus, azoles, and warfarin. Azole antifungals raise tacrolimus levels significantly. "
+        "Linezolid is an MAOI — avoid with serotonergic drugs. Vancomycin with pip-tazo increases nephrotoxicity risk. "
+        "Tell me the specific drugs and I'll advise on the interaction."
+    )
+    answer, narration_refined = narrate_drug_interaction_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="allergyid", label="Allergy check"),
+            AssistantOption(value="doseid", label="Calculate adjusted dose"),
+            AssistantOption(value="mechid", label="Paste susceptibilities"),
+        ],
+        tips=[
+            "Rifampin interactions take 2-3 days to onset and 2 weeks to offset — plan accordingly.",
+            "Azole antifungals (especially fluconazole) typically require tacrolimus dose reduction of 30-50%.",
+        ],
+    )
+
+
+def _assistant_prophylaxis_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Answer a prophylaxis dosing question for immunosuppressed patients."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Prophylaxis dosing depends on the infection risk and the degree of immunosuppression. "
+        "For PCP: TMP-SMX 960mg OD or three times weekly — first choice. "
+        "For antifungal prophylaxis in high-risk haematology: posaconazole 300mg OD (delayed-release). "
+        "For CMV in transplant: valganciclovir 900mg OD, dose-adjusted for renal function. "
+        "Tell me the patient's immunosuppressant and I'll give the specific regimen."
+    )
+    answer, narration_refined = narrate_prophylaxis_dose_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="immunoid", label="Full immunosuppression screen"),
+            AssistantOption(value="doseid", label="Calculate prophylaxis dose"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        ],
+        tips=[
+            "PCP prophylaxis threshold: prednisolone >20mg/day for >4 weeks, or any calcineurin inhibitor + antimetabolite.",
+            "Posaconazole monitoring: trough after 5-7 days; target >0.7 mg/L for prophylaxis.",
+        ],
+    )
+
+
+def _assistant_source_control_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on source control — line removal, abscess drainage, surgical debridement, implant management."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Source control is critical in many infections. Key rules: always remove lines for S. aureus bacteraemia "
+        "and Candida fungaemia. Drain any abscess >2cm. For prosthetic joint infection, discuss DAIR vs 2-stage exchange "
+        "based on timing and organism. For necrotising fasciitis: immediate surgical debridement is life-saving. "
+        "Tell me the specific scenario and I'll advise on the source control decision."
+    )
+    answer, narration_refined = narrate_source_control_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="mechid", label="Paste susceptibilities"),
+            AssistantOption(value="duration", label="Duration after source control"),
+            AssistantOption(value="doseid", label="Calculate antibiotic dose"),
+            AssistantOption(value="probid", label="Syndrome workup"),
+        ],
+        tips=[
+            "S. aureus bacteraemia: line removal reduces duration of bacteraemia and mortality — do not delay.",
+            "Prosthetic joint DAIR: rifampicin must be added once wound is sealed — never start in bacteraemic phase.",
+        ],
+    )
+
+
+def _opat_doseid_options(state: AssistantState) -> List[AssistantOption]:
+    """Return once-daily DoseID options appropriate for OPAT based on known organisms."""
+    organisms_lower = " ".join(state.consult_organisms or []).lower()
+    meds_by_id = _assistant_doseid_medications_by_id()
+    options: List[AssistantOption] = []
+    # Suggest ertapenem for susceptible GNR (non-pseudomonal)
+    if any(org in organisms_lower for org in ("coli", "klebsiella", "enterobacter", "proteus", "morganella", "serratia")):
+        if "ertapenem" in meds_by_id:
+            options.append(AssistantOption(value="doseid_pick:ertapenem", label="Dose ertapenem 1g OD (OPAT)"))
+    # Suggest ceftriaxone for susceptible GNR or streptococcal
+    if any(org in organisms_lower for org in ("coli", "klebsiella", "streptococcus", "strep", "enterobacter")):
+        if "ceftriaxone" in meds_by_id:
+            options.append(AssistantOption(value="doseid_pick:ceftriaxone", label="Dose ceftriaxone 2g OD (OPAT)"))
+    # Generic OPAT dosing if no organism-specific match
+    if not options:
+        options.append(AssistantOption(value="doseid", label="Calculate OPAT dose"))
+    return options[:2]  # cap at 2
+
+
+def _assistant_opat_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Assess OPAT candidacy — suitability for outpatient IV antibiotic therapy at discharge."""
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "OPAT is appropriate when the patient is clinically stable, the syndrome requires continued IV therapy, "
+        "and there is no suitable oral alternative. Once-daily agents (ceftriaxone, ertapenem, dalbavancin) are preferred. "
+        "Provide syndrome and organism details for a specific recommendation."
+    )
+    answer, narration_refined = narrate_opat_answer(
+        question=message_text,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    opat_dose_options = _opat_doseid_options(state)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="iv_to_oral", label="Consider oral step-down instead"),
+            *opat_dose_options,
+            AssistantOption(value="duration", label="Confirm treatment duration"),
+            AssistantOption(value="restart", label="Start new consult"),
+        ],
+        tips=[
+            "If a high-bioavailability oral agent covers the organism, oral step-down is preferred over OPAT.",
+            "Once-daily dosing (ceftriaxone, ertapenem) makes home IV much more manageable for patients.",
+        ],
+    )
 
 
 def _assistant_general_id_response(
@@ -7596,6 +9569,87 @@ def _assistant_llm_triage(
             lead_in="This looks like an antibiotic allergy or cross-reactivity question. ",
         )
 
+    if intent == "empiric_therapy":
+        return _assistant_empiric_therapy_response(message_text, state)
+
+    if intent == "iv_to_oral":
+        return _assistant_iv_to_oral_response(message_text, state)
+
+    if intent == "duration":
+        return _assistant_duration_response(message_text, state)
+
+    if intent == "followup_tests":
+        return _assistant_followup_tests_response(message_text, state)
+
+    if intent == "stewardship":
+        return _assistant_stewardship_response(message_text, state)
+
+    if intent == "stewardship_review":
+        return _assistant_stewardship_review_response(message_text, state)
+
+    if intent == "opat":
+        return _assistant_opat_response(message_text, state)
+
+    if intent == "oral_therapy":
+        return _assistant_oral_therapy_response(message_text, state)
+
+    if intent == "discharge_counselling":
+        return _assistant_discharge_counselling_response(message_text, state)
+
+    if intent == "drug_interaction":
+        return _assistant_drug_interaction_response(message_text, state)
+
+    if intent == "prophylaxis":
+        return _assistant_prophylaxis_response(message_text, state)
+
+    if intent == "source_control":
+        return _assistant_source_control_response(message_text, state)
+
+    if intent == "treatment_failure":
+        return _assistant_treatment_failure_response(message_text, state)
+
+    if intent == "biomarker_interpretation":
+        return _assistant_biomarker_response(message_text, state)
+
+    if intent == "fluid_interpretation":
+        return _assistant_fluid_interpretation_response(message_text, state)
+
+    if intent == "allergy_delabeling":
+        return _assistant_allergy_delabeling_response(message_text, state)
+
+    if intent == "fungal_management":
+        return _assistant_fungal_management_response(message_text, state)
+
+    if intent == "sepsis_management":
+        return _assistant_sepsis_response(message_text, state)
+
+    if intent == "cns_infection":
+        return _assistant_cns_infection_response(message_text, state)
+
+    if intent == "mycobacterial":
+        return _assistant_mycobacterial_response(message_text, state)
+
+    if intent == "pregnancy_antibiotics":
+        return _assistant_pregnancy_antibiotics_response(message_text, state)
+
+    if intent == "travel_medicine":
+        return _assistant_travel_medicine_response(message_text, state)
+
+    if intent == "impression_plan":
+        return _assistant_impression_plan_response(message_text, state)
+
+    if intent == "duke_criteria":
+        return _assistant_duke_criteria_response(message_text, state)
+
+    if intent == "ast_meaning":
+        return _assistant_ast_meaning_response(message_text, state)
+
+    if intent == "complexity_flag":
+        return _assistant_complexity_response(message_text, state)
+
+    if intent == "course_tracker":
+        return _assistant_course_tracker_response(message_text, state)
+
     if intent == "general_id":
         return _assistant_general_id_response(message_text, state)
 
@@ -7654,50 +9708,86 @@ def _build_polymicrobial_analyses(
     per_organism_results: List[Dict[str, Any]] = []
     text_lower = original_text.lower()
 
-    for org in organisms[:4]:  # cap at 4 organisms
-        # Find the section of text most relevant to this organism
+    def _org_search_terms(org: str) -> List[str]:
+        """Build a ranked list of search terms to locate this organism in text."""
         org_lower = org.lower()
-        # Use the organism's canonical short form (last word for species) to find it in text
-        search_terms = [org_lower]
+        terms = [org_lower]
         parts = org_lower.split()
         if len(parts) >= 2:
-            search_terms.append(parts[-1])  # e.g. "aureus" from "staphylococcus aureus"
-            search_terms.append(parts[0][:4])  # e.g. "stap" abbreviation
+            # "enterococcus faecalis" → "e. faecalis", "e faecalis", "faecalis"
+            terms.append(f"{parts[0][0]}. {parts[-1]}")
+            terms.append(f"{parts[0][0]} {parts[-1]}")
+            terms.append(parts[-1])
+            terms.append(parts[0][:4])  # genus prefix
+        # Common abbreviations for known organisms
+        abbrev_map = {
+            "staphylococcus aureus": ["s. aureus", "s aureus", "staph aureus", "mssa", "mrsa"],
+            "staphylococcus epidermidis": ["s. epidermidis", "mrse", "mr-cons", "mr-cons", "cons"],
+            "enterococcus faecalis": ["e. faecalis", "e faecalis", "vsa", "vre"],
+            "enterococcus faecium": ["e. faecium", "e faecium", "vre"],
+            "streptococcus pneumoniae": ["s. pneumoniae", "pneumococcus", "pneumo"],
+            "pseudomonas aeruginosa": ["p. aeruginosa", "p aeruginosa", "pseudomonas"],
+            "klebsiella pneumoniae": ["k. pneumoniae", "k pneumoniae", "klebsiella"],
+            "escherichia coli": ["e. coli", "e coli"],
+            "candida albicans": ["c. albicans", "c albicans"],
+        }
+        for canonical, abbrevs in abbrev_map.items():
+            if org_lower == canonical or org_lower in abbrevs:
+                terms.extend(abbrevs)
+                break
+        return list(dict.fromkeys(terms))  # deduplicate, preserve order
+
+    for org in organisms[:4]:  # cap at 4 organisms
+        search_terms = _org_search_terms(org)
 
         org_pos = -1
+        matched_term_len = len(org)
         for term in search_terms:
             pos = text_lower.find(term)
             if pos != -1:
                 org_pos = pos
+                matched_term_len = len(term)
                 break
 
         if org_pos == -1:
-            # Organism not clearly found in text; build a minimal synthesis entry from organism name only
-            per_organism_results.append({
-                "organism": org,
-                "analysis": None,
-                "provisionalAdvice": None,
-                "note": "Organism mentioned but not clearly associated with distinct AST data.",
-            })
+            # Organism not clearly found in text; run on full text with organism hint
+            try:
+                org_result = _build_mechid_text_response(
+                    f"{org}: {original_text}",
+                    parser_strategy=parser_strategy,
+                    parser_model=parser_model,
+                    allow_fallback=allow_fallback,
+                )
+                per_organism_results.append({
+                    "organism": org,
+                    "analysis": org_result.analysis.model_dump(by_alias=True) if org_result.analysis else None,
+                    "provisionalAdvice": org_result.provisional_advice.model_dump(by_alias=True) if org_result.provisional_advice else None,
+                    "note": "Organism name not clearly located; ran on full text with organism hint.",
+                })
+            except Exception:
+                per_organism_results.append({
+                    "organism": org,
+                    "analysis": None,
+                    "provisionalAdvice": None,
+                    "note": "Organism mentioned but not clearly associated with distinct AST data.",
+                })
             continue
 
-        # Extract the text segment starting from this organism mention
-        # (heuristic: from org_pos to the next organism mention or end of text)
+        # Extract the text segment from this organism mention to the next organism mention
         segment_end = len(original_text)
         for other_org in organisms:
             if other_org == org:
                 continue
-            other_lower = other_org.lower()
-            other_parts = other_lower.split()
-            for term in ([other_lower] + ([other_parts[-1]] if len(other_parts) >= 2 else [])):
-                other_pos = text_lower.find(term, org_pos + len(org_lower))
+            for term in _org_search_terms(other_org):
+                other_pos = text_lower.find(term, org_pos + matched_term_len)
                 if other_pos != -1 and other_pos < segment_end:
                     segment_end = other_pos
                     break
 
         segment = original_text[org_pos:segment_end].strip()
-        if len(segment) < 10:
-            segment = original_text  # fall back to full text if segment is too short
+        # Minimum useful segment: at least 20 chars; otherwise use full text with organism prefix
+        if len(segment) < 20:
+            segment = f"{org}: {original_text}"
 
         try:
             org_result = _build_mechid_text_response(
@@ -7737,6 +9827,41 @@ _MICRO_CENTRAL_SYNDROMES: frozenset[str] = frozenset({
     "necrotizing soft tissue infection",
     "invasive candidiasis",
 })
+
+
+_HIGH_STAKES_DOSE_SYNDROMES: frozenset[str] = frozenset({
+    "infective endocarditis",
+    "endocarditis",
+    "osteomyelitis",
+    "septic arthritis",
+    "prosthetic joint infection",
+    "pji",
+    "bacterial meningitis",
+    "meningitis",
+    "brain abscess",
+    "spinal epidural abscess",
+    "bacteremia",
+    "invasive candidiasis",
+    "necrotizing soft tissue infection",
+})
+
+
+def _mechid_doseid_bridge_option(state: AssistantState) -> AssistantOption | None:
+    """Return a 'Calculate dose' option after MechID completes for high-stakes syndromes where dosing precision matters."""
+    if state.doseid_text:
+        return None  # dosing already underway — don't show again
+    syndrome = (state.established_syndrome or "").lower()
+    organisms = state.consult_organisms
+    if not organisms:
+        return None  # no organism yet — no drug to dose
+    is_high_stakes = syndrome and any(s in syndrome for s in _HIGH_STAKES_DOSE_SYNDROMES)
+    if not is_high_stakes:
+        return None
+    return AssistantOption(
+        value="doseid",
+        label="Calculate renal-adjusted dose",
+        description="I'll factor in renal function for the recommended agent.",
+    )
 
 
 def _probid_micro_bridge_option(state: AssistantState) -> AssistantOption | None:
@@ -7783,6 +9908,72 @@ def _consult_prior_context_summary(state: AssistantState) -> str | None:
     if state.consult_organisms:
         parts.append(f"Organisms: {', '.join(state.consult_organisms)}")
     return " · ".join(parts) if parts else None
+
+
+def _snapshot_probid_result(state: AssistantState, text_result: "TextAnalyzeResponse", module: "SyndromeModule | None") -> None:
+    """Save a compact ProbID result snapshot to state for use in consult summary."""
+    if text_result.analysis is None:
+        return
+    snap: Dict[str, Any] = {}
+    if module:
+        snap["syndrome"] = _assistant_module_label(module)
+    analysis = text_result.analysis
+    if hasattr(analysis, "posttest_probability") and analysis.posttest_probability is not None:
+        snap["probability"] = round(analysis.posttest_probability, 2)
+    if hasattr(analysis, "recommendation") and analysis.recommendation:
+        snap["recommendation"] = analysis.recommendation
+    if hasattr(analysis, "treatment_duration_guidance") and analysis.treatment_duration_guidance:
+        snap["treatmentDuration"] = analysis.treatment_duration_guidance
+    if hasattr(analysis, "monitoring_recommendations") and analysis.monitoring_recommendations:
+        snap["monitoring"] = analysis.monitoring_recommendations
+    state.last_probid_summary = snap
+
+
+def _snapshot_mechid_result(state: AssistantState, result: "MechIDTextAnalyzeResponse") -> None:
+    """Save a compact MechID result snapshot to state for use in consult summary."""
+    parsed = result.parsed_request
+    if parsed is None:
+        return
+    snap: Dict[str, Any] = {}
+    if parsed.organism:
+        snap["organism"] = parsed.organism
+    if parsed.resistance_phenotypes:
+        snap["resistancePhenotypes"] = parsed.resistance_phenotypes
+    if parsed.susceptibility_results:
+        snap["susceptibilityResults"] = {k: v for k, v in list(parsed.susceptibility_results.items())[:6]}
+    tx = parsed.tx_context or {}
+    if tx.get("syndrome") and tx["syndrome"] != "Not specified":
+        snap["syndrome"] = tx["syndrome"]
+    if tx.get("carbapenemaseResult") and tx["carbapenemaseResult"] != "Not specified":
+        snap["carbapenemaseResult"] = tx["carbapenemaseResult"]
+    if tx.get("carbapenemaseClass") and tx["carbapenemaseClass"] != "Not specified":
+        snap["carbapenemaseClass"] = tx["carbapenemaseClass"]
+    state.last_mechid_summary = snap
+
+
+def _snapshot_doseid_result(state: AssistantState, dose_result: Dict[str, Any]) -> None:
+    """Save a compact DoseID result snapshot to state for use in consult summary."""
+    if not dose_result:
+        return
+    snap: Dict[str, Any] = {}
+    for key in ("drug", "dose", "interval", "route", "renalAdjustment", "monitoringNotes"):
+        if dose_result.get(key):
+            snap[key] = dose_result[key]
+    state.last_doseid_summary = snap if snap else None
+
+
+def _snapshot_allergy_result(state: AssistantState, allergy_result: "AntibioticAllergyAnalyzeResponse") -> None:
+    """Save a compact AllergyID result snapshot to state for use in consult summary."""
+    snap: Dict[str, Any] = {}
+    if hasattr(allergy_result, "candidate_drug") and allergy_result.candidate_drug:
+        snap["candidateDrug"] = allergy_result.candidate_drug
+    if hasattr(allergy_result, "verdict") and allergy_result.verdict:
+        snap["verdict"] = allergy_result.verdict
+    if hasattr(allergy_result, "allergen") and allergy_result.allergen:
+        snap["allergen"] = allergy_result.allergen
+    if hasattr(allergy_result, "reaction_phenotype") and allergy_result.reaction_phenotype:
+        snap["reactionPhenotype"] = allergy_result.reaction_phenotype
+    state.last_allergy_summary = snap if snap else None
 
 
 def _accumulate_consult_organisms(state: AssistantState, result: "MechIDTextAnalyzeResponse") -> None:
@@ -8452,6 +10643,7 @@ def _assistant_start_mechid_from_text(
     state.endo_score_factor_ids = []
     state.mechid_text = message_text
     _accumulate_consult_organisms(state, mechid_result)
+    _snapshot_mechid_result(state, mechid_result)
     review_message, narration_refined = _assistant_mechid_review_message(
         mechid_result,
         established_syndrome=state.established_syndrome,
@@ -10817,6 +13009,13 @@ def _assistant_doseid_response(
         force_best_effort=force_best_effort,
         session_patient_context=state.patient_context,
     )
+    # Snapshot for consult summary
+    if result.medications:
+        med = result.medications[0]
+        _snapshot_doseid_result(state, {
+            "drug": med.name if hasattr(med, "name") else None,
+            "route": getattr(med, "route", None),
+        })
     fallback_message = ((prefix or "") + _assistant_doseid_message(result)).strip()
     message, narration_refined = narrate_doseid_assistant_message(
         doseid_result=result,
@@ -11567,6 +13766,60 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
             if _is_consult_summary_request(message_text):
                 return _assistant_consult_summary_response(state)
+            if _is_empiric_therapy_request(message_text):
+                return _assistant_empiric_therapy_response(message_text, state)
+            if _is_iv_to_oral_request(message_text):
+                return _assistant_iv_to_oral_response(message_text, state)
+            if _is_duration_request(message_text):
+                return _assistant_duration_response(message_text, state)
+            if _is_followup_test_request(message_text):
+                return _assistant_followup_tests_response(message_text, state)
+            if _is_stewardship_request(message_text):
+                return _assistant_stewardship_response(message_text, state)
+            if _is_stewardship_review_request(message_text):
+                return _assistant_stewardship_review_response(message_text, state)
+            if _is_opat_request(message_text):
+                return _assistant_opat_response(message_text, state)
+            if _is_oral_therapy_request(message_text):
+                return _assistant_oral_therapy_response(message_text, state)
+            if _is_discharge_counselling_request(message_text):
+                return _assistant_discharge_counselling_response(message_text, state)
+            if _is_drug_interaction_request(message_text):
+                return _assistant_drug_interaction_response(message_text, state)
+            if _is_prophylaxis_request(message_text):
+                return _assistant_prophylaxis_response(message_text, state)
+            if _is_source_control_request(message_text):
+                return _assistant_source_control_response(message_text, state)
+            if _is_treatment_failure_request(message_text):
+                return _assistant_treatment_failure_response(message_text, state)
+            if _is_biomarker_request(message_text):
+                return _assistant_biomarker_response(message_text, state)
+            if _is_fluid_interpretation_request(message_text):
+                return _assistant_fluid_interpretation_response(message_text, state)
+            if _is_allergy_delabeling_request(message_text):
+                return _assistant_allergy_delabeling_response(message_text, state)
+            if _is_fungal_management_request(message_text):
+                return _assistant_fungal_management_response(message_text, state)
+            if _is_sepsis_request(message_text):
+                return _assistant_sepsis_response(message_text, state)
+            if _is_cns_infection_request(message_text):
+                return _assistant_cns_infection_response(message_text, state)
+            if _is_mycobacterial_request(message_text):
+                return _assistant_mycobacterial_response(message_text, state)
+            if _is_pregnancy_antibiotics_request(message_text):
+                return _assistant_pregnancy_antibiotics_response(message_text, state)
+            if _is_travel_medicine_request(message_text):
+                return _assistant_travel_medicine_response(message_text, state)
+            if _is_impression_plan_request(message_text):
+                return _assistant_impression_plan_response(message_text, state)
+            if _is_duke_criteria_request(message_text):
+                return _assistant_duke_criteria_response(message_text, state)
+            if _is_ast_meaning_request(message_text):
+                return _assistant_ast_meaning_response(message_text, state)
+            if _is_complexity_request(message_text):
+                return _assistant_complexity_response(message_text, state)
+            if _is_course_tracker_request(message_text):
+                return _assistant_course_tracker_response(message_text, state)
             consult_intent_response = _assistant_handle_consult_intent(req, state)
             if consult_intent_response is not None:
                 return consult_intent_response
@@ -11678,6 +13931,61 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
 
         if _is_consult_summary_request(req.message or ""):
             return _assistant_consult_summary_response(state)
+        _msg_text = (req.message or "").strip()
+        if _is_empiric_therapy_request(_msg_text):
+            return _assistant_empiric_therapy_response(_msg_text, state)
+        if _is_iv_to_oral_request(_msg_text):
+            return _assistant_iv_to_oral_response(_msg_text, state)
+        if _is_duration_request(_msg_text):
+            return _assistant_duration_response(_msg_text, state)
+        if _is_followup_test_request(_msg_text):
+            return _assistant_followup_tests_response(_msg_text, state)
+        if _is_stewardship_request(_msg_text):
+            return _assistant_stewardship_response(_msg_text, state)
+        if _is_stewardship_review_request(_msg_text):
+            return _assistant_stewardship_review_response(_msg_text, state)
+        if _is_opat_request(_msg_text):
+            return _assistant_opat_response(_msg_text, state)
+        if _is_oral_therapy_request(_msg_text):
+            return _assistant_oral_therapy_response(_msg_text, state)
+        if _is_discharge_counselling_request(_msg_text):
+            return _assistant_discharge_counselling_response(_msg_text, state)
+        if _is_drug_interaction_request(_msg_text):
+            return _assistant_drug_interaction_response(_msg_text, state)
+        if _is_prophylaxis_request(_msg_text):
+            return _assistant_prophylaxis_response(_msg_text, state)
+        if _is_source_control_request(_msg_text):
+            return _assistant_source_control_response(_msg_text, state)
+        if _is_treatment_failure_request(_msg_text):
+            return _assistant_treatment_failure_response(_msg_text, state)
+        if _is_biomarker_request(_msg_text):
+            return _assistant_biomarker_response(_msg_text, state)
+        if _is_fluid_interpretation_request(_msg_text):
+            return _assistant_fluid_interpretation_response(_msg_text, state)
+        if _is_allergy_delabeling_request(_msg_text):
+            return _assistant_allergy_delabeling_response(_msg_text, state)
+        if _is_fungal_management_request(_msg_text):
+            return _assistant_fungal_management_response(_msg_text, state)
+        if _is_sepsis_request(_msg_text):
+            return _assistant_sepsis_response(_msg_text, state)
+        if _is_cns_infection_request(_msg_text):
+            return _assistant_cns_infection_response(_msg_text, state)
+        if _is_mycobacterial_request(_msg_text):
+            return _assistant_mycobacterial_response(_msg_text, state)
+        if _is_pregnancy_antibiotics_request(_msg_text):
+            return _assistant_pregnancy_antibiotics_response(_msg_text, state)
+        if _is_travel_medicine_request(_msg_text):
+            return _assistant_travel_medicine_response(_msg_text, state)
+        if _is_impression_plan_request(_msg_text):
+            return _assistant_impression_plan_response(_msg_text, state)
+        if _is_duke_criteria_request(_msg_text):
+            return _assistant_duke_criteria_response(_msg_text, state)
+        if _is_ast_meaning_request(_msg_text):
+            return _assistant_ast_meaning_response(_msg_text, state)
+        if _is_complexity_request(_msg_text):
+            return _assistant_complexity_response(_msg_text, state)
+        if _is_course_tracker_request(_msg_text):
+            return _assistant_course_tracker_response(_msg_text, state)
 
         llm_triage_response = _assistant_llm_triage(req, state)
         if llm_triage_response is not None:
@@ -11864,6 +14172,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             allow_fallback=state.allow_fallback,
         )
         _accumulate_consult_organisms(state, mechid_result)
+        _snapshot_mechid_result(state, mechid_result)
         review_message, narration_refined = _assistant_mechid_review_message(
             mechid_result,
             established_syndrome=state.established_syndrome,
@@ -11934,6 +14243,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 )
             state.stage = "done"
             _accumulate_consult_organisms(state, mechid_result)
+            _snapshot_mechid_result(state, mechid_result)
             poly_analyses = _build_polymicrobial_analyses(
                 state.mechid_text or "",
                 mechid_result,
@@ -11978,6 +14288,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_mechid_candidate_names)
                 if allergy_opt:
                     done_options.append(allergy_opt)
+            else:
+                # No specific doseid_options from mechid, but for high-stakes syndromes offer a generic dose bridge
+                dose_bridge = _mechid_doseid_bridge_option(state)
+                if dose_bridge:
+                    done_options.insert(0, dose_bridge)
+                    done_tips.insert(0, "For this syndrome, precise renal-adjusted dosing is important — I can calculate it now.")
             return AssistantTurnResponse(
                 assistantMessage=narrated_message,
                 assistantNarrationRefined=narration_refined,
@@ -12594,6 +14910,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             # Carry the identified syndrome forward so MechID and DoseID can use it
             if not state.established_syndrome and module is not None:
                 state.established_syndrome = _assistant_module_label(module)
+            _snapshot_probid_result(state, text_result, module)
             mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, text_result, state)
             if mechid_followup_text:
                 state.pending_followup_workflow = "mechid"
@@ -12824,6 +15141,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     allow_fallback=state.allow_fallback,
                 )
                 _accumulate_consult_organisms(state, updated_result)
+                _snapshot_mechid_result(state, updated_result)
                 upd_poly = _build_polymicrobial_analyses(
                     state.mechid_text or "",
                     updated_result,
@@ -12930,6 +15248,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     # Keep established_syndrome current with the active module
                     if module is not None:
                         state.established_syndrome = _assistant_module_label(module)
+                    _snapshot_probid_result(state, updated_result, module)
                     mechid_followup_text = _assistant_build_probid_mechid_followup_text(module, updated_result, state)
                     if mechid_followup_text:
                         state.pending_followup_workflow = "mechid"

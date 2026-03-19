@@ -577,6 +577,13 @@ class AssistantState(BaseModel):
     # Cross-module consult thread — carries clinical context across module transitions
     established_syndrome: Optional[str] = Field(default=None, alias="establishedSyndrome")
     consult_organisms: List[str] = Field(default_factory=list, alias="consultOrganisms")
+    # Compact result snapshots — populated at each module completion, consumed by consult summary
+    last_probid_summary: Optional[Dict] = Field(default=None, alias="lastProbidSummary")
+    last_mechid_summary: Optional[Dict] = Field(default=None, alias="lastMechidSummary")
+    last_doseid_summary: Optional[Dict] = Field(default=None, alias="lastDoseidSummary")
+    last_allergy_summary: Optional[Dict] = Field(default=None, alias="lastAllergySummary")
+    # Institutional antibiogram — loaded once per session, used to localise empiric therapy advice
+    institutional_antibiogram: Optional[Dict] = Field(default=None, alias="institutionalAntibiogram")
 
     model_config = {"populate_by_name": True}
 
@@ -887,6 +894,14 @@ class MechIDImageAnalyzeRequest(BaseModel):
     image_data_url: str = Field(min_length=1, alias="imageDataUrl")
     filename: Optional[str] = None
     parser_model: Optional[str] = Field(default=None, alias="parserModel")
+
+    model_config = {"populate_by_name": True}
+
+
+class AntibiogramUploadRequest(BaseModel):
+    image_data_url: str = Field(min_length=1, alias="imageDataUrl")
+    filename: Optional[str] = None
+    state: Optional["AssistantState"] = None
 
     model_config = {"populate_by_name": True}
 

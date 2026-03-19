@@ -1165,6 +1165,8 @@
                 <button type="button" class="btn accent" id="exampleBtn">Example</button>
                 <button type="button" class="btn" id="imageBtn">Upload AST image</button>
                 <input type="file" id="imageInput" class="hidden" accept="image/*" />
+                <button type="button" class="btn" id="antibiogramBtn">Upload antibiogram</button>
+                <input type="file" id="antibiogramInput" class="hidden" accept="image/*" />
                 <button type="button" class="btn consult hidden" id="consultBtn">Consultant impression</button>
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
               </div>
@@ -1247,6 +1249,8 @@
         exampleBtn: document.getElementById("exampleBtn"),
         imageBtn: document.getElementById("imageBtn"),
         imageInput: document.getElementById("imageInput"),
+        antibiogramBtn: document.getElementById("antibiogramBtn"),
+        antibiogramInput: document.getElementById("antibiogramInput"),
         consultBtn: document.getElementById("consultBtn"),
         launchpad: document.getElementById("launchpad"),
         composerHint: document.getElementById("composerHint"),
@@ -1546,6 +1550,7 @@
         els.restartBtn.disabled = next;
         els.exampleBtn.disabled = next;
         els.imageBtn.disabled = next;
+        els.antibiogramBtn.disabled = next;
         els.consultBtn.disabled = next;
         els.userInput.disabled = next;
         if (next) els.sendBtn.textContent = "Sending...";
@@ -2445,6 +2450,54 @@
         }
       }
 
+      async function callAssistantAntibiogramUpload(payload) {
+        const res = await fetch("/v1/assistant/antibiogram-upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        let data = null;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`Server returned ${res.status} without JSON`);
+        }
+        if (!res.ok) {
+          throw new Error(data?.detail || `HTTP ${res.status}`);
+        }
+        return data;
+      }
+
+      async function uploadInstitutionalAntibiogram(file) {
+        if (!file || state.busy) return;
+        setBusy(true);
+        try {
+          appendMessage("user", `Uploaded institutional antibiogram: ${file.name}`);
+          const imageDataUrl = await fileToDataUrl(file);
+          const resp = await callAssistantAntibiogramUpload({
+            imageDataUrl,
+            filename: file.name,
+            state: state.assistantState,
+          });
+          state.lastResponse = resp;
+          state.assistantState = resp.state || null;
+          appendMessage("assistant", resp.assistantMessage || "No message.");
+          renderOptions(resp.options || []);
+          renderAnalysis(resp);
+          setTopStatus(resp);
+          els.rawResponse.textContent = JSON.stringify(resp, null, 2);
+          const tips = resp.tips || [];
+          els.composerHint.textContent = tips[0] || "Antibiogram loaded. Ask about empiric therapy and I'll use your local resistance data.";
+        } catch (err) {
+          appendMessage("assistant", `I hit an error loading the antibiogram: ${err.message}`);
+          els.composerHint.textContent = "Antibiogram extraction failed. Try a clearer image of the table.";
+        } finally {
+          setBusy(false);
+          els.antibiogramInput.value = "";
+          els.userInput.focus();
+        }
+      }
+
       async function sendTurn({ message = null, selection = null, userVisibleText = null } = {}) {
         if (state.busy) return;
         const currentStage = state.assistantState?.stage || null;
@@ -2588,6 +2641,15 @@
       els.imageInput.addEventListener("change", () => {
         const [file] = Array.from(els.imageInput.files || []);
         if (file) uploadAntibiogram(file);
+      });
+
+      els.antibiogramBtn.addEventListener("click", () => {
+        els.antibiogramInput.click();
+      });
+
+      els.antibiogramInput.addEventListener("change", () => {
+        const [file] = Array.from(els.antibiogramInput.files || []);
+        if (file) uploadInstitutionalAntibiogram(file);
       });
 
       els.consultBtn.addEventListener("click", () => {
