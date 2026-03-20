@@ -3884,6 +3884,15 @@ def _build_mechid_duration_monitoring_guidance(
 
     if organism.startswith("Enterococcus"):
         if syndrome == "Bloodstream infection" or focus_detail == "Endocarditis":
+            if organism == "Enterococcus faecalis" and focus_detail == "Endocarditis" and final_results.get("Ampicillin") == "Susceptible":
+                duration = [
+                    "Ampicillin-susceptible Enterococcus faecalis endocarditis is usually treated with a prolonged beta-lactam synergy course, commonly about 6 weeks, with the final clock anchored to culture clearance and valve complexity."
+                ]
+                monitoring = [
+                    "Repeat blood cultures until clearance and keep the echo strategy and source-control review active throughout the case.",
+                    "If using Ampicillin plus Ceftriaxone, follow CBC, renal function, and hepatic chemistry during the prolonged dual beta-lactam course rather than centering monitoring on salvage-agent toxicities.",
+                ]
+                return duration, monitoring
             duration = [
                 "Uncomplicated enterococcal bacteremia is often treated for at least 14 days after clearance, while enterococcal endocarditis usually requires a prolonged course such as 4 to 6 weeks and sometimes synergy-based treatment depending on the regimen."
             ]
@@ -5285,6 +5294,78 @@ def _assistant_mechid_review_options(
     return options
 
 
+def _assistant_apply_established_syndrome_to_mechid_parsed_request(
+    parsed_request: MechIDTextParsedRequest | None,
+    established_syndrome: str | None,
+) -> MechIDTextParsedRequest | None:
+    if parsed_request is None:
+        return None
+
+    label = (established_syndrome or "").strip()
+    if not label or label == "Other":
+        return parsed_request
+
+    tx_updates: Dict[str, Any] = {}
+    focus_detail = parsed_request.tx_context.focus_detail
+    syndrome = parsed_request.tx_context.syndrome
+
+    if label == "Bacteraemia":
+        tx_updates["syndrome"] = "Bloodstream infection"
+        tx_updates["focus_detail"] = "Not specified"
+    elif label == "Urinary tract infection":
+        tx_updates["syndrome"] = (
+            syndrome if syndrome in {"Uncomplicated cystitis", "Complicated UTI / pyelonephritis"} else "Complicated UTI / pyelonephritis"
+        )
+        tx_updates["focus_detail"] = "Not specified"
+    elif label == "Pneumonia":
+        tx_updates["syndrome"] = "Pneumonia (HAP/VAP or severe CAP)"
+        tx_updates["focus_detail"] = "Not specified"
+    elif label == "Infective endocarditis":
+        tx_updates["syndrome"] = "Bloodstream infection"
+        tx_updates["focus_detail"] = "Endocarditis"
+    elif label == "Intra-abdominal infection":
+        tx_updates["syndrome"] = "Intra-abdominal infection"
+        tx_updates["focus_detail"] = "Not specified"
+    elif label == "Skin/soft tissue infection":
+        tx_updates["syndrome"] = "Other deep-seated / high-inoculum focus"
+        tx_updates["focus_detail"] = focus_detail if focus_detail != "Not specified" else "Skin/soft tissue infection"
+    elif label == "Bone/joint infection":
+        tx_updates["syndrome"] = "Bone/joint infection"
+        tx_updates["focus_detail"] = "Not specified"
+    elif label == "CNS infection":
+        tx_updates["syndrome"] = "CNS infection"
+        tx_updates["focus_detail"] = "Not specified"
+    else:
+        return parsed_request
+
+    updated_tx_context = parsed_request.tx_context.model_copy(update=tx_updates)
+    if updated_tx_context == parsed_request.tx_context:
+        return parsed_request
+    return parsed_request.model_copy(update={"tx_context": updated_tx_context})
+
+
+def _assistant_effective_mechid_result(
+    result: MechIDTextAnalyzeResponse,
+    *,
+    established_syndrome: str | None = None,
+) -> MechIDTextAnalyzeResponse:
+    effective_parsed = _assistant_apply_established_syndrome_to_mechid_parsed_request(
+        result.parsed_request,
+        established_syndrome,
+    )
+    if effective_parsed is None or effective_parsed == result.parsed_request:
+        return result
+
+    parsed_payload = effective_parsed.model_dump(by_alias=True, mode="json")
+    return _build_mechid_response_from_parsed(
+        text=result.text,
+        parsed=parsed_payload,
+        parser_name=result.parser,
+        parser_fallback_used=result.parser_fallback_used,
+        warnings=result.warnings,
+    )
+
+
 def _clean_mechid_text(text: str) -> str:
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     cleaned = cleaned.replace("→", ": ").replace("β", "beta")
@@ -5423,6 +5504,18 @@ def _friendly_mechid_therapy(
     def _is_enterococcus_faecium() -> bool:
         return organism_norm == "enterococcus faecium"
 
+    def _is_ampicillin_susceptible_e_faecalis_endocarditis(
+        syndrome_local: str,
+        focus_local: str,
+        susceptible_agents_local: list[str],
+    ) -> bool:
+        return (
+            organism_norm == "enterococcus faecalis"
+            and syndrome_local == "Bloodstream infection"
+            and focus_local == "Endocarditis"
+            and "Ampicillin" in susceptible_agents_local
+        )
+
     def _is_vre_faecium_endocarditis(
         syndrome_local: str,
         focus_local: str,
@@ -5486,6 +5579,14 @@ def _friendly_mechid_therapy(
             )
 
         if syndrome_local == "Bloodstream infection":
+            if _is_ampicillin_susceptible_e_faecalis_endocarditis(
+                syndrome_local,
+                focus_local,
+                susceptible_agents,
+            ):
+                return (
+                    "For ampicillin-susceptible Enterococcus faecalis endocarditis, I would keep the plan narrow and beta-lactam based rather than surfacing broader fallback agents up front."
+                )
             if _is_enterococcus_faecium():
                 provided_map = parsed.susceptibility_results if parsed is not None else result.final_results
                 if _is_vre_faecium_endocarditis(
@@ -5704,6 +5805,15 @@ def _friendly_mechid_therapy(
                 )
             return (
                 "For uncomplicated cystitis, I would look first for a susceptible oral lower-tract option rather than defaulting to a broad IV agent."
+            )
+
+        if _is_ampicillin_susceptible_e_faecalis_endocarditis(
+            syndrome_local,
+            focus_local,
+            susceptible_agents_local,
+        ):
+            return (
+                "Because this is ampicillin-susceptible Enterococcus faecalis endocarditis, I would use Ampicillin plus Ceftriaxone as the preferred narrow synergy regimen and reserve Vancomycin or Linezolid for beta-lactam intolerance or other fallback situations."
             )
 
         if _is_enterococcus_faecium():
@@ -6119,6 +6229,7 @@ def _antibiogram_provisional_note(
 
 
 def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False, established_syndrome: str | None = None, institutional_antibiogram: Dict[str, Any] | None = None) -> str:
+    result = _assistant_effective_mechid_result(result, established_syndrome=established_syndrome)
     parsed = result.parsed_request
     if parsed is None:
         message = (
@@ -12512,6 +12623,10 @@ def _assistant_start_mechid_from_text(
     mechid_result = _assistant_preview_mechid_from_text(message_text, state)
     if mechid_result is None:
         return None
+    mechid_result = _assistant_effective_mechid_result(
+        mechid_result,
+        established_syndrome=state.established_syndrome,
+    )
 
     _assistant_reset_immunoid_state(state)
     state.workflow = "mechid"
@@ -13941,6 +14056,8 @@ def _assistant_doseid_indication_for_query(medication_id: str, message_text: str
     ):
         return "complicated_or_deep"
     if medication_id == "ceftriaxone":
+        if "endocarditis" in normalized and any(token in normalized for token in ("enterococcus faecalis", "e faecalis")):
+            return "enterococcal_endocarditis_synergy"
         if _assistant_doseid_has_any(normalized, DOSEID_CNS_TOKENS):
             return "meningitis"
         if _assistant_doseid_has_any(normalized, DOSEID_BACTEREMIA_TOKENS) or any(
@@ -15365,6 +15482,7 @@ def _assistant_build_mechid_doseid_prompt(
     case_text: str | None,
     medication_ids: List[str] | None = None,
 ) -> str | None:
+    explicit_medication_ids = medication_ids is not None
     medication_ids = _assistant_unique_medication_ids(
         medication_ids if medication_ids is not None else _assistant_mechid_doseid_candidate_ids(result)
     )
@@ -15392,7 +15510,7 @@ def _assistant_build_mechid_doseid_prompt(
     prompt = f"Please calculate dosing for {_join_readable(medication_names)} using the same case context."
     if context_bits:
         prompt += " " + " ".join(context_bits) + "."
-    if case_text and case_text.strip():
+    if case_text and case_text.strip() and not (explicit_medication_ids and parsed is not None):
         prompt += f" Case context: {case_text.strip()}"
     return prompt
 
@@ -15448,6 +15566,10 @@ def _assistant_start_selected_doseid_from_mechid_state(
         parser_strategy=state.parser_strategy,
         parser_model=state.parser_model,
         allow_fallback=state.allow_fallback,
+    )
+    result = _assistant_effective_mechid_result(
+        result,
+        established_syndrome=state.established_syndrome,
     )
     selected_ids = _assistant_expand_mechid_selected_doseid_ids(result, medication_id)
     prompt = _assistant_build_mechid_doseid_prompt(
@@ -16321,6 +16443,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             parser_model=state.parser_model,
             allow_fallback=state.allow_fallback,
         )
+        mechid_result = _assistant_effective_mechid_result(
+            mechid_result,
+            established_syndrome=state.established_syndrome,
+        )
         _accumulate_consult_organisms(state, mechid_result)
         _snapshot_mechid_result(state, mechid_result)
         review_message, narration_refined = _assistant_mechid_review_message(
@@ -16364,6 +16490,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             parser_model=state.parser_model,
             allow_fallback=state.allow_fallback,
         )
+        mechid_result = _assistant_effective_mechid_result(
+            mechid_result,
+            established_syndrome=state.established_syndrome,
+        )
 
         if req.selection == "add_more_details" and not (req.message and req.message.strip()):
             state.stage = "mechid_describe"
@@ -16385,6 +16515,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             _syndrome_label = _sel.split(":", 1)[1].strip()
             if _syndrome_label and _syndrome_label != "Other":
                 state.established_syndrome = _syndrome_label
+            mechid_result = _assistant_effective_mechid_result(
+                mechid_result,
+                established_syndrome=state.established_syndrome,
+            )
             # Auto-proceed to therapy recommendation (same as run_assessment path)
             if mechid_result.analysis is not None or mechid_result.provisional_advice is not None:
                 state.stage = "done"
@@ -17415,12 +17549,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     parser_model=state.parser_model,
                     allow_fallback=state.allow_fallback,
                 )
+                previous_result = _assistant_effective_mechid_result(
+                    previous_result,
+                    established_syndrome=state.established_syndrome,
+                )
                 state.mechid_text = _append_case_text(state.mechid_text, req.message)
                 updated_result = _build_mechid_text_response(
                     state.mechid_text,
                     parser_strategy=state.parser_strategy,
                     parser_model=state.parser_model,
                     allow_fallback=state.allow_fallback,
+                )
+                updated_result = _assistant_effective_mechid_result(
+                    updated_result,
+                    established_syndrome=state.established_syndrome,
                 )
                 _accumulate_consult_organisms(state, updated_result)
                 _snapshot_mechid_result(state, updated_result)

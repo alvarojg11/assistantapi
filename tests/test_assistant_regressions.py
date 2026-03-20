@@ -177,6 +177,68 @@ class AssistantRegressionTests(unittest.TestCase):
                 self.assertEqual(response.mechid_analysis.parsed_request.organism, organism)
                 self.assertTrue(response.mechid_analysis.parsed_request.susceptibility_results)
 
+    def test_mechid_endocarditis_summary_prefers_ampicillin_plus_ceftriaxone(self) -> None:
+        start = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "Please interpret this susceptibility pattern. Enterococcus faecalis bloodstream isolate. "
+                    "Ampicillin susceptible, vancomycin susceptible, linezolid susceptible."
+                )
+            )
+        )
+
+        response = assistant_turn(
+            AssistantTurnRequest(
+                state=start.state,
+                selection="mechid_set_syndrome:Infective endocarditis",
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "mechid")
+        self.assertEqual(response.state.stage, "done")
+        self.assertIn("Ampicillin plus Ceftriaxone", response.assistant_message)
+        self.assertNotIn("Ampicillin, Vancomycin, and Linezolid", response.assistant_message)
+        self.assertIsNotNone(response.mechid_analysis)
+        self.assertIsNotNone(response.mechid_analysis.analysis)
+        self.assertIn(
+            "Ampicillin plus Ceftriaxone",
+            " ".join(response.mechid_analysis.analysis.monitoring_recommendations),
+        )
+        self.assertIn("doseid_pick:ampicillin", {option.value for option in response.options})
+        self.assertIn("doseid_pick:ceftriaxone", {option.value for option in response.options})
+
+    def test_mechid_ceftriaxone_doseid_bridge_uses_enterococcal_endocarditis_synergy_dose(self) -> None:
+        start = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "Please interpret this susceptibility pattern. Enterococcus faecalis bloodstream isolate. "
+                    "Ampicillin susceptible, vancomycin susceptible, linezolid susceptible."
+                )
+            )
+        )
+        final = assistant_turn(
+            AssistantTurnRequest(
+                state=start.state,
+                selection="mechid_set_syndrome:Infective endocarditis",
+            )
+        )
+
+        response = assistant_turn(
+            AssistantTurnRequest(
+                state=final.state,
+                selection="doseid_pick:ceftriaxone",
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "doseid")
+        self.assertEqual(response.state.stage, "doseid_describe")
+        self.assertIsNotNone(response.doseid_analysis)
+        self.assertTrue(response.doseid_analysis.recommendations)
+        ceftriaxone = response.doseid_analysis.recommendations[0]
+        self.assertEqual(ceftriaxone.medication_name, "Ceftriaxone")
+        self.assertEqual(ceftriaxone.indication_id, "enterococcal_endocarditis_synergy")
+        self.assertEqual(ceftriaxone.regimen, "2 g IV q12h")
+
     def test_conversational_pneumonia_treatment_question_does_not_jump_to_mechid(self) -> None:
         response = assistant_turn(
             AssistantTurnRequest(

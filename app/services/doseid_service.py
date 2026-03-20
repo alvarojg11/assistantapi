@@ -619,6 +619,15 @@ def _cefazolin(patient: NormalizedPatient, indication_id: str, renal_mode: Renal
 
 
 def _ceftriaxone(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
+    if indication_id == "enterococcal_endocarditis_synergy":
+        return DoseResult(
+            regimen="2 g IV q12h",
+            renal_bucket=no_renal_adjust_bucket(renal_mode),
+            notes=[
+                "No routine renal adjustment in major adult references.",
+                "This is the standard synergy-dose ceftriaxone pathway used with ampicillin for Enterococcus faecalis endocarditis.",
+            ],
+        )
     if indication_id == "meningitis":
         return DoseResult(
             regimen="2 g IV q12h",
@@ -2563,6 +2572,7 @@ MEDICATIONS: Dict[str, MedicationRule] = {
         indications=[
             MedicationIndication("standard_dose", "Standard infection"),
             MedicationIndication("serious_infection", "Serious infection"),
+            MedicationIndication("enterococcal_endocarditis_synergy", "Enterococcal endocarditis synergy"),
             MedicationIndication("meningitis", "Meningitis / CNS infection"),
         ],
         source_pages=ANTIBACTERIAL_SOURCE,
@@ -3176,6 +3186,7 @@ def _default_indication_for_mechid(
     therapy_notes: Iterable[str],
 ) -> str:
     syndrome = (tx_context or {}).get("syndrome", "Not specified")
+    focus_detail = (tx_context or {}).get("focusDetail", "Not specified")
     severity = (tx_context or {}).get("severity", "Not specified")
     carbapenemase_result = (tx_context or {}).get("carbapenemaseResult", "Not specified")
     notes_text = " ".join(therapy_notes).lower()
@@ -3207,6 +3218,15 @@ def _default_indication_for_mechid(
     if medication_id == "cefazolin":
         return "complicated_or_deep" if deep or severe else "uncomplicated_infection"
     if medication_id == "ceftriaxone":
+        if (
+            organism == "Enterococcus faecalis"
+            and focus_detail == "Endocarditis"
+            and (
+                final_results.get("Ampicillin") == "Susceptible"
+                or "ampicillin + ceftriaxone" in notes_text
+            )
+        ):
+            return "enterococcal_endocarditis_synergy"
         if syndrome == "CNS infection":
             return "meningitis"
         return "serious_infection" if deep or severe else "standard_dose"
