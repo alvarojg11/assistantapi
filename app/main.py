@@ -2637,9 +2637,14 @@ def _assistant_clean_allergy_reaction_reply(reply: str) -> str:
 
 
 def _assistant_merge_allergyid_followup_text(existing_text: str | None, reply: str) -> str:
-    previous = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=existing_text or ""))
+    existing_text = (existing_text or "").strip()
+    previous = (
+        parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=existing_text))
+        if existing_text
+        else None
+    )
     update = parse_antibiotic_allergy_text(AntibioticAllergyTextAnalyzeRequest(text=reply))
-    previous_parsed = previous.parsed_request
+    previous_parsed = previous.parsed_request if previous is not None else None
     update_parsed = update.parsed_request
 
     candidate_agents: List[str] = []
@@ -8339,6 +8344,8 @@ _BIOMARKER_TRIGGERS: tuple[str, ...] = (
 
 
 def _is_biomarker_request(text: str) -> bool:
+    if _assistant_detect_consult_intent(text) in {"treatment_decision", "therapy_selection"}:
+        return False
     normalized = text.lower().strip()
     return any(trigger in normalized for trigger in _BIOMARKER_TRIGGERS)
 
@@ -8444,6 +8451,8 @@ _FUNGAL_MANAGEMENT_TRIGGERS: tuple[str, ...] = (
 
 
 def _is_fungal_management_request(text: str) -> bool:
+    if _assistant_detect_consult_intent(text) in {"treatment_decision", "therapy_selection"}:
+        return False
     normalized = text.lower().strip()
     return any(trigger in normalized for trigger in _FUNGAL_MANAGEMENT_TRIGGERS)
 
@@ -11492,13 +11501,13 @@ def _snapshot_mechid_result(state: AssistantState, result: "MechIDTextAnalyzeRes
         snap["resistancePhenotypes"] = parsed.resistance_phenotypes
     if parsed.susceptibility_results:
         snap["susceptibilityResults"] = {k: v for k, v in list(parsed.susceptibility_results.items())[:6]}
-    tx = parsed.tx_context or {}
-    if tx.get("syndrome") and tx["syndrome"] != "Not specified":
-        snap["syndrome"] = tx["syndrome"]
-    if tx.get("carbapenemaseResult") and tx["carbapenemaseResult"] != "Not specified":
-        snap["carbapenemaseResult"] = tx["carbapenemaseResult"]
-    if tx.get("carbapenemaseClass") and tx["carbapenemaseClass"] != "Not specified":
-        snap["carbapenemaseClass"] = tx["carbapenemaseClass"]
+    tx = parsed.tx_context
+    if tx.syndrome and tx.syndrome != "Not specified":
+        snap["syndrome"] = tx.syndrome
+    if tx.carbapenemase_result and tx.carbapenemase_result != "Not specified":
+        snap["carbapenemaseResult"] = tx.carbapenemase_result
+    if tx.carbapenemase_class and tx.carbapenemase_class != "Not specified":
+        snap["carbapenemaseClass"] = tx.carbapenemase_class
     state.last_mechid_summary = snap
 
 
@@ -13362,6 +13371,26 @@ def _assistant_is_doseid_intent(message_text: str) -> bool:
     normalized = f" {_assistant_doseid_normalize(message_text)} "
     if not normalized.strip():
         return False
+    if (" susceptible dose dependent " in normalized or " sdd " in normalized):
+        explicit_dose_phrases = (
+            " dosing ",
+            " dosage ",
+            " what is the dose ",
+            " what's the dose ",
+            " calculate dosing ",
+            " calculate the dose ",
+            " dose this ",
+            " renal dose ",
+            " renal dosing ",
+            " hemodialysis ",
+            " dialysis ",
+            " crcl ",
+            " creatinine clearance ",
+            " ripe ",
+            " rhze ",
+        )
+        if not any(phrase in normalized for phrase in explicit_dose_phrases):
+            return False
     if _assistant_detect_doseid_medication_ids(message_text):
         return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS) or " q" in normalized
     return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS)
@@ -17212,7 +17241,10 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     prefix="I updated the immunosuppression checklist with the new information. ",
                 )
             if state.workflow == "allergyid":
-                state.allergyid_text = _assistant_merge_allergyid_followup_text(state.allergyid_text, req.message)
+                try:
+                    state.allergyid_text = _assistant_merge_allergyid_followup_text(state.allergyid_text, req.message)
+                except Exception:
+                    state.allergyid_text = _append_case_text(state.allergyid_text, req.message)
                 return _assistant_allergyid_response(
                     state,
                     message_text=state.allergyid_text or req.message,

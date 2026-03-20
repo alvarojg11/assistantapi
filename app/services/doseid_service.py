@@ -1708,7 +1708,7 @@ def _rifampin(patient: NormalizedPatient, indication_id: str, renal_mode: RenalM
 def _ethambutol(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
     high_dose_intermittent = indication_id == "tb_high_dose_intermittent"
     mg_per_kg = 25 if high_dose_intermittent else 20
-    dose_weight = DoseWeight(basis="lbw", kg=patient.lbw_kg)
+    dose_weight = DoseWeight(basis="tbw", kg=patient.total_body_weight_kg)
     max_dose = 2400 if high_dose_intermittent else 1600
     dose_mg = min(max_dose, mg_from_weight(mg_per_kg, dose_weight.kg, 100, max_dose))
     if renal_mode == "ihd":
@@ -1717,7 +1717,7 @@ def _ethambutol(patient: NormalizedPatient, indication_id: str, renal_mode: Rena
             renal_bucket="Intermittent hemodialysis",
             dose_weight=dose_weight,
             notes=[
-                "Template uses lean body weight for obesity dosing.",
+                "Standard TB dosing uses total body weight unless a specialist obesity adjustment is chosen deliberately.",
                 "Use ophthalmologic toxicity monitoring per TB protocol.",
             ],
         )
@@ -1746,7 +1746,7 @@ def _ethambutol(patient: NormalizedPatient, indication_id: str, renal_mode: Rena
 def _pyrazinamide(patient: NormalizedPatient, indication_id: str, renal_mode: RenalMode) -> DoseResult:
     high_dose_intermittent = indication_id == "tb_high_dose_intermittent"
     mg_per_kg = 35 if high_dose_intermittent else 20
-    dose_weight = DoseWeight(basis="lbw", kg=patient.lbw_kg)
+    dose_weight = DoseWeight(basis="tbw", kg=patient.total_body_weight_kg)
     max_dose = 3000 if high_dose_intermittent else 2000
     dose_mg = min(max_dose, mg_from_weight(mg_per_kg, dose_weight.kg, 100, max_dose))
     if renal_mode == "ihd":

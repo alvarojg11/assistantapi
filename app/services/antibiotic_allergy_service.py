@@ -144,6 +144,8 @@ REACTION_PATTERNS: List[Tuple[str, str, str]] = [
     (r"\b(?:family history)\b", "family_history_only", "unknown"),
 ]
 
+REACTION_NEGATION_PATTERN = re.compile(r"(?:\bno\b|\bnot\b|\bwithout\b|\bdenies\b|\bdenied\b|\bnever\b)\s*$")
+
 ALLERGY_KEYWORDS = ("allergy", "allergic", "reaction", "anaphylaxis", "hives", "urticaria", "rash", "angioedema")
 
 REFERENCE_LIST = [
@@ -614,8 +616,13 @@ def analyze_antibiotic_allergy(req: AntibioticAllergyAnalyzeRequest) -> Antibiot
 
 def _detect_reaction_from_window(window: str) -> Tuple[str, str]:
     for pattern, reaction_type, timing in REACTION_PATTERNS:
-        if re.search(pattern, window):
-            return reaction_type, timing
+        match = re.search(pattern, window)
+        if not match:
+            continue
+        prefix = window[max(0, match.start() - 24) : match.start()]
+        if REACTION_NEGATION_PATTERN.search(prefix):
+            continue
+        return reaction_type, timing
     return "unknown", "unknown"
 
 
