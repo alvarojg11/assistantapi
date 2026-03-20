@@ -88,6 +88,93 @@ cd backend
 .venv/bin/python scripts/smoke_test_new_syndromes.py
 ```
 
+## Evaluate full assistant conversations
+
+Run the generic assistant evaluator against the starter multi-turn case set:
+
+```bash
+cd backend
+.venv/bin/python scripts/evaluate_assistant_cases.py --show-failures
+```
+
+This replays full conversations from:
+
+- `backend/app/data/assistant_eval_cases.json`
+
+Generate and run the expanded 100-case suite:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_100.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_100.json`
+
+Generate and run the expanded multi-turn suite with richer follow-ups and carry-forward transitions:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile expanded
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_160.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_160.json`
+
+Generate and run the humanized stress suite with messier conversational prompts, buried clues, and correction turns:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile humanized
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_humanized_260.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_humanized_260.json`
+
+Generate and run the noisy stress suite with shorthand, charty phrasing, and longer correction chains:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile noisy
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_noisy_360.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_noisy_360.json`
+
+It checks things like:
+
+- route selection (`probid`, `mechid`, `doseid`, `immunoid`, `allergyid`)
+- expected stage/module transitions
+- key options appearing or disappearing
+- non-empty analysis payloads
+- targeted structured assertions such as regimen strings or risk categories
+
+You can also point it at a live deployment instead of the in-process app:
+
+```bash
+cd backend
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --target remote \
+  --base-url https://assistantapi-production.up.railway.app \
+  --show-failures
+```
+
 ## Evaluate MechID cases
 
 Run the MechID evaluator against the seed labeled cases:

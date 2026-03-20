@@ -1,0 +1,7231 @@
+[
+  {
+    "id": "assistant_boot_screen",
+    "description": "Initial assistant turn exposes the main workflow choices.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "probid",
+            "mechid",
+            "doseid",
+            "immunoid",
+            "allergyid"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cap_guided_consult",
+    "description": "Guided CAP consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "cap"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "cap"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "ed_adult"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ed_adult"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "moduleId": "cap",
+            "presetId": "ed_adult"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "message": "Fever, tachypnea, pleuritic cough, oxygen saturation 89 percent, and focal crackles."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "WBC elevated and procalcitonin elevated."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sputum culture pending and blood cultures negative so far."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Chest x ray shows a right lower lobe consolidation."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "confirm_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "run_assessment"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "cap"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_sdd_routing",
+    "description": "AST text with susceptible-dose-dependent wording stays in MechID instead of DoseID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. E coli bloodstream isolate. Ceftriaxone resistant, cefepime susceptible dose dependent, piperacillin-tazobactam susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "stage": "mechid_confirm",
+            "workflow": "mechid"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.mechanisms"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_negation_with_candidate",
+    "description": "Negation should preserve a benign delayed rash phenotype and keep cefazolin preferred.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefazolin"
+              },
+              "equals": {
+                "recommendation": "preferred"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_from_vague_prompt",
+    "description": "A vague allergy prompt followed by details should not crash and should stay low risk.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "message_not_contains": [
+            "anaphylaxis"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "fungal_clarification_flow",
+    "description": "Generic fungal treatment questions should prompt the mold-vs-candida clarification flow.",
+    "turns": [
+      {
+        "request": {
+          "message": "should ID start antifungal treatment for this patient with possible fungal infection?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "inv_candida",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mold_consult_routing",
+    "description": "Explicit invasive mold treatment consults should route into the invasive mold pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "should I start mold-active therapy for this neutropenic patient with pulmonary nodules and positive galactomannan?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "cefepime_hd_dosing",
+    "description": "DoseID should produce a hemodialysis cefepime regimen from one natural-language turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg man on intermittent hemodialysis with Pseudomonas bacteremia."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "nonempty_paths": [
+            "doseidAnalysis.recommendations"
+          ],
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Cefepime"
+              },
+              "contains": {
+                "regimen": "post-HD"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "ripe_weight_basis",
+    "description": "RIPE dosing should use total body weight for pyrazinamide and ethambutol in the standard pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "RIPE dosing for 62 kg, CrCl 35, female, 165 cm."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Pyrazinamide"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            },
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Ethambutol"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_hbv_core_positive",
+    "description": "ImmunoID should recognize rituximab plus steroids and produce screening/prophylaxis output.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_septic_arthritis",
+    "description": "Guided septic arthritis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "septic_arthritis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "septic_arthritis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sa_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "presetId": "sa_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "monoarthritis, fever, painful range of motion, unable to bear weight"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ESR elevated, CRP elevated, synovial WBC over 50000"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ultrasound effusion present"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_bacterial_meningitis",
+    "description": "Guided bacterial meningitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "bacterial_meningitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bacterial_meningitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "options_include": [
+            "bm_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bm_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "presetId": "bm_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "fever, headache, neck stiffness, altered mental status"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF pleocytosis, CSF neutrophil predominance, CSF protein elevated, CSF glucose low"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CT not done"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_encephalitis",
+    "description": "Guided encephalitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "encephalitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "encephalitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "options_include": [
+            "enc_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "enc_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "presetId": "enc_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "fever, altered mental status, behavioral change, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF pleocytosis, CSF lymphocytic predominance, CSF protein elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "HSV PCR positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI temporal lobe positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_spinal_epidural_abscess",
+    "description": "Guided spinal epidural abscess consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "spinal_epidural_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "spinal_epidural_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "options_include": [
+            "sea_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sea_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "presetId": "sea_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "back pain, fever, spinal tenderness, neurologic deficit"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ESR elevated, CRP elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_brain_abscess",
+    "description": "Guided brain abscess consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "brain_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "brain_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "options_include": [
+            "ba_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ba_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "presetId": "ba_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "headache, fever, focal deficit, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CRP elevated, WBC elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI with diffusion restriction"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_necrotizing_soft_tissue_infection",
+    "description": "Guided necrotizing soft tissue infection consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "necrotizing_soft_tissue_infection"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "necrotizing_soft_tissue_infection"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "nsti_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "presetId": "nsti_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "pain out of proportion, rapid progression, hypotension, bullae, crepitus"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "WBC elevated, CRP elevated, LRINEC high"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CT compatible with NSTI"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_tb_uveitis",
+    "description": "Guided tb uveitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "tb_uveitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "tb_uveitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "options_include": [
+            "ophthalmology_visit"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ophthalmology_visit"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "presetId": "ophthalmology_visit"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "This is an ophthalmology visit for choroidal tuberculoma in a patient from a TB endemic region."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Tuberculin skin test positive and QuantiFERON positive."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Chest x ray positive for healed or active TB signs."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_cap_therapy_selection",
+    "description": "A pneumonia treatment question should route into CAP preset selection.",
+    "turns": [
+      {
+        "request": {
+          "message": "what would you use for this pneumonia?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "pc_adult",
+            "ed_adult"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_vancomycin_clarification",
+    "description": "A vancomycin start question should ask for syndrome/source.",
+    "turns": [
+      {
+        "request": {
+          "message": "should I start vancomycin?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "cap",
+            "endo",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_hold_antibiotics_clarification",
+    "description": "A hold-antibiotics question should ask for syndrome/source.",
+    "turns": [
+      {
+        "request": {
+          "message": "can I hold antibiotics for now?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "cap",
+            "endo",
+            "uti"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_endocarditis",
+    "description": "Explicit endocarditis routing should land on the endocarditis presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "please evaluate for endocarditis"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "endo"
+          },
+          "options_include": [
+            "endo_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_generic_fungal_consult",
+    "description": "A generic antifungal decision prompt should ask whether this is Candida or mold.",
+    "turns": [
+      {
+        "request": {
+          "message": "should ID start antifungal treatment for this patient with possible fungal infection?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "inv_candida",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_mold_therapy_selection",
+    "description": "Specific mold therapy-selection wording should route into the invasive mold pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "what antifungal would you use for a neutropenic patient with pulmonary nodules and positive galactomannan?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_septic_arthritis",
+    "description": "Explicit septic arthritis wording should route into the septic arthritis presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "septic arthritis"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_spinal_epidural_abscess",
+    "description": "Explicit spinal epidural abscess wording should route into the SEA presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "spinal epidural abscess"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "options_include": [
+            "sea_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_nsti",
+    "description": "Explicit NSTI wording should route into the necrotizing soft tissue infection presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "necrotizing soft tissue infection"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_route_tb_uveitis",
+    "description": "Explicit TB uveitis wording should route into the TB uveitis presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "tb uveitis"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "active_tb"
+          },
+          "options_include": [
+            "tb_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_cefepime",
+    "description": "DoseID should parse Cefepime dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg adult, CrCl 45 mL/min, severe infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_ceftriaxone",
+    "description": "DoseID should parse Ceftriaxone dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ceftriaxone dosing? 70 kg adult, CrCl 45 mL/min, serious infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ceftriaxone"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_cefazolin",
+    "description": "DoseID should parse Cefazolin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefazolin dosing? 82 kg adult, CrCl 38 mL/min, complicated MSSA infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefazolin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_meropenem",
+    "description": "DoseID should parse Meropenem dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with meropenem dosing? 85 kg adult, CrCl 28 mL/min, severe infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Meropenem"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_piperacillin_tazobactam",
+    "description": "DoseID should parse Piperacillin/Tazobactam dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with piperacillin-tazobactam dosing? 88 kg adult, CrCl 32 mL/min, severe intra-abdominal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Piperacillin/Tazobactam"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_vancomycin_iv",
+    "description": "DoseID should parse Vancomycin IV dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with vancomycin dosing? 90 kg adult, serum creatinine 1.4 mg/dL, serious MRSA infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_daptomycin",
+    "description": "DoseID should parse Daptomycin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with daptomycin dosing? 95 kg adult, CrCl 42 mL/min, bacteremia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Daptomycin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_linezolid",
+    "description": "DoseID should parse Linezolid dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with linezolid dosing? 76 kg adult, CrCl 40 mL/min, serious gram-positive infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Linezolid"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_levofloxacin",
+    "description": "DoseID should parse Levofloxacin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with levofloxacin dosing? 74 kg adult, CrCl 36 mL/min, pneumonia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Levofloxacin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_ciprofloxacin",
+    "description": "DoseID should parse Ciprofloxacin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ciprofloxacin dosing? 78 kg adult, CrCl 34 mL/min, pseudomonal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ciprofloxacin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_aztreonam",
+    "description": "DoseID should parse Aztreonam dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with aztreonam dosing? 81 kg adult, CrCl 30 mL/min, gram-negative infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Aztreonam"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_ertapenem",
+    "description": "DoseID should parse Ertapenem dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ertapenem dosing? 79 kg adult, CrCl 29 mL/min, ESBL urinary infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_nafcillin",
+    "description": "DoseID should parse Nafcillin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with nafcillin dosing? 84 kg adult, CrCl 50 mL/min, MSSA bacteremia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nafcillin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_ampicillin_sulbactam",
+    "description": "DoseID should parse Ampicillin/Sulbactam dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ampicillin-sulbactam dosing? 80 kg adult, CrCl 27 mL/min, intra-abdominal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin/Sulbactam"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_amoxicillin",
+    "description": "DoseID should parse Amoxicillin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with amoxicillin dosing? 75 kg adult, normal renal function, streptococcal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_amoxicillin_clavulanate",
+    "description": "DoseID should parse Amoxicillin/Clavulanate dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with amoxicillin-clavulanate dosing? 77 kg adult, CrCl 44 mL/min, respiratory infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin/Clavulanate"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_tmp_smx",
+    "description": "DoseID should parse Trimethoprim-Sulfamethoxazole dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with trimethoprim-sulfamethoxazole dosing? 73 kg adult, CrCl 31 mL/min, skin infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Trimethoprim-Sulfamethoxazole"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_nitrofurantoin",
+    "description": "DoseID should parse Nitrofurantoin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with nitrofurantoin dosing? 68 kg adult, normal renal function, uncomplicated cystitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nitrofurantoin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_fosfomycin",
+    "description": "DoseID should parse Fosfomycin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with fosfomycin dosing? 69 kg adult, normal renal function, uncomplicated cystitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fosfomycin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_fluconazole",
+    "description": "DoseID should parse Fluconazole dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with fluconazole dosing? 80 kg adult, CrCl 35 mL/min, candidemia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fluconazole"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_micafungin",
+    "description": "DoseID should parse Micafungin dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with micafungin dosing? 83 kg adult, CrCl 33 mL/min, candidemia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Micafungin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_voriconazole",
+    "description": "DoseID should parse Voriconazole dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with voriconazole dosing? 75 kg adult, CrCl 48 mL/min, invasive mold infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Voriconazole"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_oseltamivir",
+    "description": "DoseID should parse Oseltamivir dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with oseltamivir dosing? 71 kg adult, CrCl 37 mL/min, influenza treatment."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Oseltamivir"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_acyclovir_iv",
+    "description": "DoseID should parse Acyclovir IV dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with acyclovir IV dosing? 78 kg adult, CrCl 41 mL/min, HSV encephalitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Acyclovir IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_valganciclovir",
+    "description": "DoseID should parse Valganciclovir dosing text into the dosing workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with valganciclovir dosing? 72 kg adult, CrCl 34 mL/min, CMV treatment."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Valganciclovir"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_r_chop",
+    "description": "ImmunoID should accept a direct R-CHOP selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:r_chop"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "r_chop"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_da_r_epoch",
+    "description": "ImmunoID should accept a direct DA-R-EPOCH selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:da_r_epoch"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "da_r_epoch"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_br",
+    "description": "ImmunoID should accept a direct BR selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:br"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "br"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_fcr",
+    "description": "ImmunoID should accept a direct FCR selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:fcr"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "fcr"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_seven_plus_three",
+    "description": "ImmunoID should accept a direct 7+3 selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:seven_plus_three"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "seven_plus_three"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_flag_ida",
+    "description": "ImmunoID should accept a direct FLAG-IDA selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:flag_ida"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "flag_ida"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_vrd",
+    "description": "ImmunoID should accept a direct VRd selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:vrd"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "vrd"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_dara_vrd",
+    "description": "ImmunoID should accept a direct Dara-VRd selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:dara_vrd"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "dara_vrd"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_cybord",
+    "description": "ImmunoID should accept a direct CyBorD selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:cybord"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "cybord"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_regimen_hypercvad_a",
+    "description": "ImmunoID should accept a direct HyperCVAD Part A selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:hypercvad_a"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "hypercvad_a"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_prednisone_20",
+    "description": "ImmunoID should accept a direct Prednisone >= 20 mg/day selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:prednisone_20"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "prednisone_20"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_rituximab",
+    "description": "ImmunoID should accept a direct Rituximab selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:rituximab"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "rituximab"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_infliximab",
+    "description": "ImmunoID should accept a direct Infliximab selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:infliximab"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "infliximab"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_tofacitinib",
+    "description": "ImmunoID should accept a direct Tofacitinib selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:tofacitinib"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "tofacitinib"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_cyclophosphamide",
+    "description": "ImmunoID should accept a direct Cyclophosphamide selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:cyclophosphamide"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "cyclophosphamide"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_tacrolimus",
+    "description": "ImmunoID should accept a direct Tacrolimus selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:tacrolimus"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "tacrolimus"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_mycophenolate_mofetil",
+    "description": "ImmunoID should accept a direct Mycophenolate mofetil (MMF) selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:mycophenolate_mofetil"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "mycophenolate_mofetil"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_eculizumab",
+    "description": "ImmunoID should accept a direct Eculizumab selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:eculizumab"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "eculizumab"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_daratumumab",
+    "description": "ImmunoID should accept a direct Daratumumab (Darzalex / Darzalex Faspro) selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:daratumumab"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "daratumumab"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_agent_lenalidomide",
+    "description": "ImmunoID should accept a direct Lenalidomide selection from the chooser.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with immunosuppression prophylaxis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:lenalidomide"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "lenalidomide"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_remote_rash_cefepime",
+    "description": "Remote rash-only penicillin history should still surface cefepime guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_remote_rash_ceftriaxone",
+    "description": "Remote rash-only penicillin history should still surface ceftriaxone guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs ceftriaxone."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_remote_rash_meropenem",
+    "description": "Remote rash-only penicillin history should still surface meropenem guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs meropenem."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Meropenem"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "description": "Vancomycin infusion-reaction phrasing should preserve ceftriaxone guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Vancomycin infusion reaction only, can I still use ceftriaxone?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_immediate_piptazo_cefepime",
+    "description": "Immediate beta-lactam reaction text should still surface cefepime guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Immediate hives and throat tightness after piperacillin-tazobactam, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_immediate_penicillin_cefepime",
+    "description": "Immediate penicillin reaction text should still surface cefepime guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Immediate hives and throat tightness after penicillin, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_immediate_amoxicillin_cefepime",
+    "description": "Immediate amoxicillin reaction text should still surface cefepime guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Immediate hives and throat tightness after amoxicillin, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_generic_entry_prompt",
+    "description": "A generic allergy request should still route into the AllergyID workflow.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_escherichia_coli",
+    "description": "MechID should parse and hold state for Escherichia coli.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Escherichia coli bloodstream isolate. Ceftriaxone resistant, cefepime susceptible dose dependent, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Escherichia coli"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_klebsiella_pneumoniae",
+    "description": "MechID should parse and hold state for Klebsiella pneumoniae.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella pneumoniae bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella pneumoniae"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_klebsiella_oxytoca",
+    "description": "MechID should parse and hold state for Klebsiella oxytoca.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella oxytoca bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella oxytoca"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_citrobacter_freundii_complex",
+    "description": "MechID should parse and hold state for Citrobacter freundii complex.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Citrobacter freundii complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter freundii complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_citrobacter_koseri",
+    "description": "MechID should parse and hold state for Citrobacter koseri.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Citrobacter koseri bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter koseri"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_morganella_morganii",
+    "description": "MechID should parse and hold state for Morganella morganii.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Morganella morganii bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Morganella morganii"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_proteus_mirabilis",
+    "description": "MechID should parse and hold state for Proteus mirabilis.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Proteus mirabilis bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus mirabilis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_proteus_vulgaris_group",
+    "description": "MechID should parse and hold state for Proteus vulgaris group.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Proteus vulgaris group bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus vulgaris group"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_salmonella_enterica",
+    "description": "MechID should parse and hold state for Salmonella enterica.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Salmonella enterica bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Salmonella enterica"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_serratia_marcescens",
+    "description": "MechID should parse and hold state for Serratia marcescens.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Serratia marcescens bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Serratia marcescens"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_enterobacter_cloacae_complex",
+    "description": "MechID should parse and hold state for Enterobacter cloacae complex.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterobacter cloacae complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterobacter cloacae complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_klebsiella_aerogenes",
+    "description": "MechID should parse and hold state for Klebsiella aerogenes.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella aerogenes bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella aerogenes"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_pseudomonas_aeruginosa",
+    "description": "MechID should parse and hold state for Pseudomonas aeruginosa.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Pseudomonas aeruginosa bloodstream isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_acinetobacter_baumannii_complex",
+    "description": "MechID should parse and hold state for Acinetobacter baumannii complex.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Acinetobacter baumannii complex bloodstream isolate. Ampicillin-sulbactam susceptible, meropenem resistant, ciprofloxacin resistant, trimethoprim-sulfamethoxazole susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_enterococcus_faecalis",
+    "description": "MechID should parse and hold state for Enterococcus faecalis.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecalis bloodstream isolate. Ampicillin susceptible, vancomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecalis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_enterococcus_faecium",
+    "description": "MechID should parse and hold state for Enterococcus faecium.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecium bloodstream isolate. Ampicillin resistant, vancomycin resistant, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecium"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_enterococcus_gallinarum",
+    "description": "MechID should parse and hold state for Enterococcus gallinarum.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus gallinarum bloodstream isolate. Ampicillin susceptible, vancomycin resistant, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus gallinarum"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_staphylococcus_aureus",
+    "description": "MechID should parse and hold state for Staphylococcus aureus.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus aureus bloodstream isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_coagulase-negative_staphylococcus",
+    "description": "MechID should parse and hold state for Coagulase-negative Staphylococcus.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Coagulase-negative Staphylococcus bloodstream isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Coagulase-negative Staphylococcus"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_staphylococcus_lugdunensis",
+    "description": "MechID should parse and hold state for Staphylococcus lugdunensis.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus lugdunensis bloodstream isolate. Oxacillin susceptible, cefazolin susceptible, vancomycin susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus lugdunensis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_cefepime",
+    "description": "DoseID should keep Cefepime in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg adult, CrCl 45 mL/min, severe infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "actually the patient is on intermittent hemodialysis"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_ceftriaxone",
+    "description": "DoseID should keep Ceftriaxone in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ceftriaxone dosing? 70 kg adult, CrCl 45 mL/min, serious infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ceftriaxone"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "180 cm male"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ceftriaxone"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_cefazolin",
+    "description": "DoseID should keep Cefazolin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefazolin dosing? 82 kg adult, CrCl 38 mL/min, complicated MSSA infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefazolin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefazolin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_meropenem",
+    "description": "DoseID should keep Meropenem in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with meropenem dosing? 85 kg adult, CrCl 28 mL/min, severe infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Meropenem"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Meropenem"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_piperacillin_tazobactam",
+    "description": "DoseID should keep Piperacillin/Tazobactam in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with piperacillin-tazobactam dosing? 88 kg adult, CrCl 32 mL/min, severe intra-abdominal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Piperacillin/Tazobactam"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Piperacillin/Tazobactam"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_vancomycin_iv",
+    "description": "DoseID should keep Vancomycin IV in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with vancomycin dosing? 90 kg adult, serum creatinine 1.4 mg/dL, serious MRSA infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "63 year old male, 180 cm"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_daptomycin",
+    "description": "DoseID should keep Daptomycin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with daptomycin dosing? 95 kg adult, CrCl 42 mL/min, bacteremia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Daptomycin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Daptomycin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_linezolid",
+    "description": "DoseID should keep Linezolid in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with linezolid dosing? 76 kg adult, CrCl 40 mL/min, serious gram-positive infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Linezolid"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Linezolid"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_levofloxacin",
+    "description": "DoseID should keep Levofloxacin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with levofloxacin dosing? 74 kg adult, CrCl 36 mL/min, pneumonia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Levofloxacin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Levofloxacin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_ciprofloxacin",
+    "description": "DoseID should keep Ciprofloxacin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ciprofloxacin dosing? 78 kg adult, CrCl 34 mL/min, pseudomonal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ciprofloxacin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ciprofloxacin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_aztreonam",
+    "description": "DoseID should keep Aztreonam in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with aztreonam dosing? 81 kg adult, CrCl 30 mL/min, gram-negative infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Aztreonam"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Aztreonam"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_ertapenem",
+    "description": "DoseID should keep Ertapenem in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ertapenem dosing? 79 kg adult, CrCl 29 mL/min, ESBL urinary infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_nafcillin",
+    "description": "DoseID should keep Nafcillin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with nafcillin dosing? 84 kg adult, CrCl 50 mL/min, MSSA bacteremia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nafcillin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nafcillin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_ampicillin_sulbactam",
+    "description": "DoseID should keep Ampicillin/Sulbactam in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ampicillin-sulbactam dosing? 80 kg adult, CrCl 27 mL/min, intra-abdominal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin/Sulbactam"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin/Sulbactam"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_amoxicillin",
+    "description": "DoseID should keep Amoxicillin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with amoxicillin dosing? 75 kg adult, normal renal function, streptococcal infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_amoxicillin_clavulanate",
+    "description": "DoseID should keep Amoxicillin/Clavulanate in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with amoxicillin-clavulanate dosing? 77 kg adult, CrCl 44 mL/min, respiratory infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin/Clavulanate"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Amoxicillin/Clavulanate"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_tmp_smx",
+    "description": "DoseID should keep Trimethoprim-Sulfamethoxazole in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with trimethoprim-sulfamethoxazole dosing? 73 kg adult, CrCl 31 mL/min, skin infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Trimethoprim-Sulfamethoxazole"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Trimethoprim-Sulfamethoxazole"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_nitrofurantoin",
+    "description": "DoseID should keep Nitrofurantoin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with nitrofurantoin dosing? 68 kg adult, normal renal function, uncomplicated cystitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nitrofurantoin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Nitrofurantoin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_fosfomycin",
+    "description": "DoseID should keep Fosfomycin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with fosfomycin dosing? 69 kg adult, normal renal function, uncomplicated cystitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fosfomycin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fosfomycin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_fluconazole",
+    "description": "DoseID should keep Fluconazole in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with fluconazole dosing? 80 kg adult, CrCl 35 mL/min, candidemia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fluconazole"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fluconazole"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_micafungin",
+    "description": "DoseID should keep Micafungin in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with micafungin dosing? 83 kg adult, CrCl 33 mL/min, candidemia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Micafungin"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Micafungin"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_voriconazole",
+    "description": "DoseID should keep Voriconazole in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with voriconazole dosing? 75 kg adult, CrCl 48 mL/min, invasive mold infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Voriconazole"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Voriconazole"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_oseltamivir",
+    "description": "DoseID should keep Oseltamivir in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with oseltamivir dosing? 71 kg adult, CrCl 37 mL/min, influenza treatment."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Oseltamivir"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Oseltamivir"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_acyclovir_iv",
+    "description": "DoseID should keep Acyclovir IV in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with acyclovir IV dosing? 78 kg adult, CrCl 41 mL/min, HSV encephalitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Acyclovir IV"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Acyclovir IV"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_valganciclovir",
+    "description": "DoseID should keep Valganciclovir in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with valganciclovir dosing? 72 kg adult, CrCl 34 mL/min, CMV treatment."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Valganciclovir"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Valganciclovir"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_escherichia_coli",
+    "description": "MechID should finish the Escherichia coli consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Escherichia coli bloodstream isolate. Ceftriaxone resistant, cefepime susceptible dose dependent, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Escherichia coli"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Escherichia coli"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_klebsiella_pneumoniae",
+    "description": "MechID should finish the Klebsiella pneumoniae consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella pneumoniae bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella pneumoniae"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella pneumoniae"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_klebsiella_oxytoca",
+    "description": "MechID should finish the Klebsiella oxytoca consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella oxytoca bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella oxytoca"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella oxytoca"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_citrobacter_freundii_complex",
+    "description": "MechID should finish the Citrobacter freundii complex consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Citrobacter freundii complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter freundii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter freundii complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_citrobacter_koseri",
+    "description": "MechID should finish the Citrobacter koseri consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Citrobacter koseri bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter koseri"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter koseri"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_morganella_morganii",
+    "description": "MechID should finish the Morganella morganii consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Morganella morganii bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Morganella morganii"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Morganella morganii"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_proteus_mirabilis",
+    "description": "MechID should finish the Proteus mirabilis consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Proteus mirabilis bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus mirabilis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus mirabilis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_proteus_vulgaris_group",
+    "description": "MechID should finish the Proteus vulgaris group consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Proteus vulgaris group bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus vulgaris group"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Proteus vulgaris group"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_salmonella_enterica",
+    "description": "MechID should finish the Salmonella enterica consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Salmonella enterica bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Salmonella enterica"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Salmonella enterica"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_serratia_marcescens",
+    "description": "MechID should finish the Serratia marcescens consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Serratia marcescens bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Serratia marcescens"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Serratia marcescens"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_enterobacter_cloacae_complex",
+    "description": "MechID should finish the Enterobacter cloacae complex consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterobacter cloacae complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterobacter cloacae complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterobacter cloacae complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_klebsiella_aerogenes",
+    "description": "MechID should finish the Klebsiella aerogenes consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella aerogenes bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella aerogenes"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella aerogenes"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_pseudomonas_aeruginosa",
+    "description": "MechID should finish the Pseudomonas aeruginosa consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Pseudomonas aeruginosa bloodstream isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_acinetobacter_baumannii_complex",
+    "description": "MechID should finish the Acinetobacter baumannii complex consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Acinetobacter baumannii complex bloodstream isolate. Ampicillin-sulbactam susceptible, meropenem resistant, ciprofloxacin resistant, trimethoprim-sulfamethoxazole susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_enterococcus_faecalis",
+    "description": "MechID should finish the Enterococcus faecalis consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecalis bloodstream isolate. Ampicillin susceptible, vancomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecalis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecalis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_enterococcus_faecium",
+    "description": "MechID should finish the Enterococcus faecium consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecium bloodstream isolate. Ampicillin resistant, vancomycin resistant, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecium"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecium"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_enterococcus_gallinarum",
+    "description": "MechID should finish the Enterococcus gallinarum consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus gallinarum bloodstream isolate. Ampicillin susceptible, vancomycin resistant, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus gallinarum"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus gallinarum"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_staphylococcus_aureus",
+    "description": "MechID should finish the Staphylococcus aureus consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus aureus bloodstream isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_coagulase-negative_staphylococcus",
+    "description": "MechID should finish the Coagulase-negative Staphylococcus consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Coagulase-negative Staphylococcus bloodstream isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Coagulase-negative Staphylococcus"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Coagulase-negative Staphylococcus"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_finalize_staphylococcus_lugdunensis",
+    "description": "MechID should finish the Staphylococcus lugdunensis consult after a syndrome is selected.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus lugdunensis bloodstream isolate. Oxacillin susceptible, cefazolin susceptible, vancomycin susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus lugdunensis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus lugdunensis"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.rows",
+            "mechidAnalysis.analysis.references"
+          ],
+          "options_include": [
+            "add_more_details"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_citrobacter_freundii_complex_cefepime",
+    "description": "MechID should carry Citrobacter freundii complex into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Citrobacter freundii complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter freundii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_serratia_marcescens_cefepime",
+    "description": "MechID should carry Serratia marcescens into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Serratia marcescens bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Serratia marcescens"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_enterobacter_cloacae_complex_cefepime",
+    "description": "MechID should carry Enterobacter cloacae complex into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterobacter cloacae complex bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterobacter cloacae complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_klebsiella_aerogenes_cefepime",
+    "description": "MechID should carry Klebsiella aerogenes into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella aerogenes bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella aerogenes"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_pseudomonas_aeruginosa_cefepime",
+    "description": "MechID should carry Pseudomonas aeruginosa into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Pseudomonas aeruginosa bloodstream isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_acinetobacter_baumannii_complex_ampicillin_sulbactam",
+    "description": "MechID should carry Acinetobacter baumannii complex into DoseID for Ampicillin/Sulbactam.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Acinetobacter baumannii complex bloodstream isolate. Ampicillin-sulbactam susceptible, meropenem resistant, ciprofloxacin resistant, trimethoprim-sulfamethoxazole susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:ampicillin_sulbactam"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:ampicillin_sulbactam"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin/Sulbactam"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_enterococcus_faecalis_ampicillin",
+    "description": "MechID should carry Enterococcus faecalis into DoseID for Ampicillin.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecalis bloodstream isolate. Ampicillin susceptible, vancomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecalis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:ampicillin"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:ampicillin"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_enterococcus_faecium_daptomycin",
+    "description": "MechID should carry Enterococcus faecium into DoseID for Daptomycin.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Enterococcus faecium bloodstream isolate. Ampicillin resistant, vancomycin resistant, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecium"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:daptomycin"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:daptomycin"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Daptomycin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
+    "description": "MechID should carry Staphylococcus aureus into DoseID for Vancomycin IV.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus aureus bloodstream isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:vancomycin_iv"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:vancomycin_iv"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_staphylococcus_lugdunensis_cefazolin",
+    "description": "MechID should carry Staphylococcus lugdunensis into DoseID for Cefazolin.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Staphylococcus lugdunensis bloodstream isolate. Oxacillin susceptible, cefazolin susceptible, vancomycin susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus lugdunensis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefazolin"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefazolin"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefazolin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_no",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:no"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:no"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "no"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_yes",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:yes"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:yes"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "yes"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_unknown",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:unknown"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:unknown"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "unknown"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_immediate_penicillin_cefepime",
+    "description": "AllergyID should stay stable when a vague prompt is followed by concrete allergy details.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Immediate hives and throat tightness after penicillin, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_vanco_infusion_ceftriaxone",
+    "description": "AllergyID should stay stable when a vague prompt is followed by concrete allergy details.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Vancomycin infusion reaction only, can I still use ceftriaxone?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

@@ -206,6 +206,7 @@ EXPLICIT_SYNDROME_REQUEST_TOKENS = (
     "assess",
     "assessment",
     "can you help with",
+    "concerned about",
     "concern for",
     "diagnose",
     "diagnosis",
@@ -222,6 +223,8 @@ EXPLICIT_SYNDROME_REQUEST_TOKENS = (
     "please help with",
     "probability",
     "question of",
+    "route me to",
+    "route to",
     "rule out",
     "r/o",
     "screen for",
@@ -231,6 +234,7 @@ EXPLICIT_SYNDROME_REQUEST_TOKENS = (
     "suspect",
     "suspected",
     "take me to",
+    "worried about",
     "think about",
     "walk me through",
     "work up",
@@ -281,6 +285,8 @@ EXPLICIT_NON_SYNDROME_WORKFLOW_ALIASES: Dict[str, tuple[str, ...]] = {
 CONSULT_INTENT_TREATMENT_START_TOKENS = (
     "should i start",
     "should we start",
+    "whether to start",
+    "whether we should start",
     "should id start",
     "should i treat",
     "should we treat",
@@ -319,12 +325,17 @@ CONSULT_INTENT_TREATMENT_START_TOKENS = (
     "can we wait",
 )
 CONSULT_INTENT_THERAPY_SELECTION_TOKENS = (
+    "what antibiotics would you start",
+    "what antibiotics you would start",
     "what would you use",
+    "what would you reach for",
     "what should i use",
     "what should we use",
     "what would you start",
+    "which drug would you reach for",
     "what should i start",
     "what regimen would you use",
+    "what drug would you reach for",
     "which treatment would you use",
     "which therapy would you use",
     "which antifungal would you use",
@@ -2561,12 +2572,16 @@ def _assistant_reply_introduces_candidate_agents(reply: str) -> bool:
     normalized = _normalize_choice(reply)
     candidate_markers = (
         "can i use",
+        "can i still use",
         "could i use",
+        "could i still use",
         "can we use",
         "what can i use",
         "what about",
         "would you use",
         "is it safe to use",
+        "is it okay to use",
+        "is it ok to use",
         "best antibiotic",
         "candidate antibiotic",
         "candidate antibiotics",
@@ -2575,6 +2590,15 @@ def _assistant_reply_introduces_candidate_agents(reply: str) -> bool:
         "should i use",
         "considering",
         "instead use",
+        "safe to give",
+        "still fine",
+        "still okay",
+        "still ok",
+        "thinking about",
+        "we are thinking about",
+        "may need",
+        "now needs",
+        "needs",
     )
     return any(marker in normalized for marker in candidate_markers)
 
@@ -7404,7 +7428,18 @@ def _assistant_explicit_syndrome_module_request(message_text: str) -> str | None
     normalized = _normalize_choice(message_text)
     if not normalized:
         return None
-    if not any(token in normalized for token in EXPLICIT_SYNDROME_REQUEST_TOKENS):
+    if not any(_assistant_text_has_phrase(normalized, token) for token in EXPLICIT_SYNDROME_REQUEST_TOKENS):
+        return None
+    if any(token in normalized for token in CONSULT_INTENT_FUNGAL_TOKENS) and _assistant_has_ambiguous_fungal_lane_request(normalized):
+        return None
+    if _assistant_explicit_non_syndrome_workflow_request(message_text) is not None:
+        return None
+    if (
+        _assistant_is_doseid_intent(message_text)
+        or _assistant_is_mechid_intent(message_text)
+        or _assistant_is_immunoid_intent(message_text)
+        or _assistant_is_allergyid_intent(message_text)
+    ):
         return None
 
     parsed = parse_text_to_request(
@@ -7458,6 +7493,18 @@ def _assistant_detect_consult_intent(message_text: str) -> str | None:
     has_medication_signal = bool(_assistant_detect_doseid_medication_ids(message_text))
     has_treatment_start_signal = any(token in normalized for token in CONSULT_INTENT_TREATMENT_START_TOKENS)
     has_therapy_selection_signal = any(token in normalized for token in CONSULT_INTENT_THERAPY_SELECTION_TOKENS)
+    if not has_treatment_start_signal:
+        has_treatment_start_signal = bool(
+            re.search(r"\bwhether\b.*\bstart\b", normalized)
+            or re.search(r"\bshould\b.*\bstart\b", normalized)
+            or re.search(r"\bhold\b.*\bantibiotic", normalized)
+        )
+    if not has_therapy_selection_signal:
+        has_therapy_selection_signal = bool(
+            re.search(r"\b(what|which)\b.*\breach for\b", normalized)
+            or re.search(r"\b(what|which)\b.*\bwould you use\b", normalized)
+            or re.search(r"\b(what|which)\b.*\bwould you start\b", normalized)
+        )
     has_antimicrobial_signal = any(token in normalized for token in CONSULT_INTENT_ANTIMICROBIAL_TOKENS)
     if has_therapy_selection_signal and (has_antimicrobial_signal or has_syndrome_signal or has_medication_signal):
         return "therapy_selection"
@@ -7466,7 +7513,28 @@ def _assistant_detect_consult_intent(message_text: str) -> str | None:
     return None
 
 
+def _assistant_has_ambiguous_fungal_lane_request(normalized: str) -> bool:
+    candida_signal = any(token in normalized for token in CONSULT_INTENT_CANDIDA_TOKENS)
+    mold_signal = any(token in normalized for token in CONSULT_INTENT_MOLD_TOKENS)
+    fungal_uncertainty = any(
+        token in normalized
+        for token in (
+            "not sure",
+            "not even sure",
+            "uncertain",
+            "candida or mold",
+            "mold or candida",
+            "whether this is candida or mold",
+        )
+    )
+    return candida_signal and mold_signal and fungal_uncertainty
+
+
 def _assistant_consult_treatment_module_hint(message_text: str) -> str | None:
+    normalized = _normalize_choice(message_text)
+    if any(token in normalized for token in CONSULT_INTENT_FUNGAL_TOKENS) and _assistant_has_ambiguous_fungal_lane_request(normalized):
+        return None
+
     parsed = parse_text_to_request(
         store=store,
         text=message_text,
@@ -7476,7 +7544,6 @@ def _assistant_consult_treatment_module_hint(message_text: str) -> str | None:
     if module_id and store.get(module_id) is not None:
         return module_id
 
-    normalized = _normalize_choice(message_text)
     if not any(token in normalized for token in CONSULT_INTENT_FUNGAL_TOKENS):
         return None
     if any(token in normalized for token in CONSULT_INTENT_MOLD_TOKENS):
@@ -8071,8 +8138,8 @@ def _is_duration_request(text: str) -> bool:
 
 
 def _is_followup_test_request(text: str) -> bool:
-    normalized = text.lower().strip()
-    return any(trigger in normalized for trigger in _FOLLOWUP_TEST_TRIGGERS)
+    normalized = _normalize_choice(text)
+    return any(_assistant_text_has_phrase(normalized, trigger) for trigger in _FOLLOWUP_TEST_TRIGGERS)
 
 
 _ORAL_THERAPY_TRIGGERS: tuple[str, ...] = (
@@ -8229,6 +8296,8 @@ _PROPHYLAXIS_TRIGGERS: tuple[str, ...] = (
 
 
 def _is_prophylaxis_request(text: str) -> bool:
+    if _assistant_is_immunoid_intent(text):
+        return False
     normalized = text.lower().strip()
     return any(trigger in normalized for trigger in _PROPHYLAXIS_TRIGGERS)
 
@@ -8346,6 +8415,8 @@ _BIOMARKER_TRIGGERS: tuple[str, ...] = (
 def _is_biomarker_request(text: str) -> bool:
     if _assistant_detect_consult_intent(text) in {"treatment_decision", "therapy_selection"}:
         return False
+    if _assistant_is_immunoid_intent(text):
+        return False
     normalized = text.lower().strip()
     return any(trigger in normalized for trigger in _BIOMARKER_TRIGGERS)
 
@@ -8416,7 +8487,31 @@ _ALLERGY_DELABELING_TRIGGERS: tuple[str, ...] = (
 
 def _is_allergy_delabeling_request(text: str) -> bool:
     normalized = text.lower().strip()
-    return any(trigger in normalized for trigger in _ALLERGY_DELABELING_TRIGGERS)
+    explicit_triggers = (
+        "is the allergy real",
+        "true allergy",
+        "allergy delabel",
+        "delabeling",
+        "rechallenge",
+        "oral challenge",
+        "skin test",
+        "penicillin skin test",
+        "red man syndrome",
+    )
+    if any(trigger in normalized for trigger in explicit_triggers):
+        return True
+    label_trigger = any(
+        trigger in normalized
+        for trigger in (
+            "penicillin allergy",
+            "penicillin allergic",
+            "allergic to penicillin",
+            "beta-lactam allergy",
+            "beta lactam allergy",
+            "cephalosporin allergy",
+        )
+    )
+    return label_trigger and any(trigger in normalized for trigger in explicit_triggers)
 
 
 _FUNGAL_MANAGEMENT_TRIGGERS: tuple[str, ...] = (
@@ -12119,13 +12214,19 @@ def _assistant_mechid_intent_profile(message: str | None) -> Dict[str, bool]:
             or tx_context.get("carbapenemaseClass") not in {None, "", "Not specified"}
         )
     )
-    has_explicit_mechid_words = any(token in text for token in MECHID_INTENT_TOKENS)
-    has_explicit_therapy_words = any(token in text for token in MECHID_THERAPY_INTENT_TOKENS)
+    has_explicit_mechid_words = any(_assistant_text_has_phrase(text, token) for token in MECHID_INTENT_TOKENS)
+    has_isolate_context_words = any(token in text for token in ("isolate", "culture", "cultures", "organism", "bug"))
+    has_explicit_therapy_words = any(_assistant_text_has_phrase(text, token) for token in MECHID_THERAPY_INTENT_TOKENS) and (
+        has_isolate
+        or has_ast
+        or has_resistance_signal
+        or has_isolate_context_words
+        or any(token in text for token in ("susceptibility", "susceptible", "resistant", "culture", "cultures", "organism", "isolate", "ast"))
+    )
     has_treatment_question = (
         ("treat" in text or "therapy" in text or "antibiotic" in text or "manage" in text or "cover" in text)
         and ("how" in text or "what" in text or "which" in text or "recommend" in text or "choice" in text)
     )
-    has_isolate_context_words = any(token in text for token in ("isolate", "culture", "cultures", "organism", "bug"))
     strong_mechid_trigger = (
         has_ast
         or has_resistance_signal
@@ -12557,6 +12658,20 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
     normalized = _normalize_choice(message_text)
     if not normalized:
         return False
+    reaction_tokens = (
+        "allergy",
+        "allergic",
+        "anaphylaxis",
+        "hives",
+        "urticaria",
+        "angioedema",
+        "rash",
+        "reaction",
+        "throat tightness",
+        "sjs",
+        "ten",
+        "dress",
+    )
     if any(
         token in normalized
         for token in (
@@ -12588,6 +12703,9 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
         return False
     if any(token in normalized for token in ALLERGYID_INTENT_TOKENS):
         return True
+    medication_count = len(_assistant_detect_doseid_medication_ids(message_text))
+    if medication_count >= 2 and any(token in normalized for token in reaction_tokens):
+        return True
     return any(
         phrase in normalized
         for phrase in (
@@ -12595,6 +12713,13 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
             "can i still use",
             "can i use again",
             "can they use",
+            "could i use",
+            "could they use",
+            "we are thinking about",
+            "thinking about",
+            "wondering about",
+            "may need",
+            "now needs",
             "what can i use",
             "what can they use",
             "best antibiotic with",
@@ -12603,12 +12728,7 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
     ) and any(
         token in normalized
         for token in (
-            "allergy",
-            "allergic",
-            "anaphylaxis",
-            "hives",
-            "rash",
-            "reaction",
+            *reaction_tokens,
             "caused",
             "headache",
             "nausea",
@@ -12616,10 +12736,6 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
             "diarrhea",
             "gi upset",
             "gastrointestinal",
-            "sjs",
-            "ten",
-            "dress",
-            "angioedema",
             "unknown",
         )
     )
@@ -13352,19 +13468,38 @@ def _assistant_doseid_alias_map() -> Dict[str, List[str]]:
 
 
 def _assistant_detect_doseid_medication_ids(message_text: str) -> List[str]:
-    normalized = f" {_assistant_doseid_normalize(message_text)} "
+    normalized = _assistant_doseid_normalize(message_text)
     medication_ids: List[str] = []
-    if any(token in normalized for token in (" ripe ", " rhze ")):
+    if _assistant_text_has_phrase(normalized, "ripe") or _assistant_text_has_phrase(normalized, "rhze"):
         medication_ids.extend(["rifampin", "isoniazid", "pyrazinamide", "ethambutol"])
     for med_id, aliases in _assistant_doseid_alias_map().items():
         if med_id in medication_ids:
             continue
         for alias in aliases:
-            alias_norm = f" {alias} "
-            if alias and alias_norm in normalized:
+            if alias and _assistant_text_has_phrase(normalized, alias):
                 medication_ids.append(med_id)
                 break
     return medication_ids
+
+
+def _assistant_text_mentions_doseid_schedule(normalized: str) -> bool:
+    return bool(re.search(r"\bq\d{1,2}(?:-\d{1,2})?(?:h|hr|hrs)\b|\b(?:bid|tid|qid|qod)\b", normalized))
+
+
+def _assistant_has_doseid_context_signal(normalized: str) -> bool:
+    if _assistant_text_mentions_doseid_age(normalized):
+        return True
+    if _assistant_text_mentions_doseid_crcl(normalized):
+        return True
+    if _assistant_text_mentions_doseid_scr(normalized):
+        return True
+    if _assistant_text_mentions_doseid_ihd(normalized):
+        return True
+    if _assistant_text_mentions_doseid_crrt(normalized):
+        return True
+    if re.search(r"\b\d+(?:\.\d+)?\s*(kg|kgs|kilograms?|kilos?|lb|lbs|pounds?|cm)\b", normalized):
+        return True
+    return any(token in normalized for token in ("renal function", "kidneys are normal", "kidney function"))
 
 
 def _assistant_is_doseid_intent(message_text: str) -> bool:
@@ -13392,7 +13527,11 @@ def _assistant_is_doseid_intent(message_text: str) -> bool:
         if not any(phrase in normalized for phrase in explicit_dose_phrases):
             return False
     if _assistant_detect_doseid_medication_ids(message_text):
-        return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS) or " q" in normalized
+        if any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS):
+            return True
+        if _assistant_text_mentions_doseid_schedule(normalized):
+            return True
+        return _assistant_has_doseid_context_signal(normalized)
     return any(f" {token} " in normalized for token in DOSEID_INTENT_TOKENS)
 
 
@@ -15163,9 +15302,6 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
     msg = (req.message or "").strip()
     if not msg:
         return None
-    explicit_syndrome_module_id = _assistant_explicit_syndrome_module_request(msg)
-    if explicit_syndrome_module_id is not None:
-        return explicit_syndrome_module_id
     explicit_workflow_id = _assistant_explicit_non_syndrome_workflow_request(msg)
     if explicit_workflow_id is not None:
         return explicit_workflow_id
@@ -15177,6 +15313,9 @@ def _select_module_from_turn(req: AssistantTurnRequest) -> str | None:
         return DOSEID_ASSISTANT_ID
     if _assistant_is_immunoid_intent(msg):
         return IMMUNOID_ASSISTANT_ID
+    explicit_syndrome_module_id = _assistant_explicit_syndrome_module_request(msg)
+    if explicit_syndrome_module_id is not None:
+        return explicit_syndrome_module_id
     if msg in {"syndrome", "probability", "clinical syndrome probability", "probid", "syndrome probability"}:
         return PROBID_ASSISTANT_ID
 
@@ -15502,6 +15641,27 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     if state.stage == "select_module":
         message_text = (req.message or "").strip()
         if message_text:
+            explicit_workflow_id = _assistant_explicit_non_syndrome_workflow_request(message_text)
+            if explicit_workflow_id is not None:
+                workflow_label = next(
+                    (
+                        option.label
+                        for option in _assistant_module_options()
+                        if option.value == explicit_workflow_id
+                    ),
+                    explicit_workflow_id,
+                )
+                return _assistant_begin_selected_workflow(
+                    state,
+                    explicit_workflow_id,
+                    lead_in=f"This reads like an explicit request for {workflow_label}, so I’ll start in that pathway. ",
+                )
+            direct_doseid_response = _assistant_start_doseid_from_text(message_text, state)
+            if direct_doseid_response is not None:
+                return direct_doseid_response
+            direct_allergy_response = _assistant_start_allergyid_from_text(message_text, state)
+            if direct_allergy_response is not None:
+                return direct_allergy_response
             explicit_syndrome_module_id = _assistant_explicit_syndrome_module_request(message_text)
             if explicit_syndrome_module_id is not None:
                 explicit_module = store.get(explicit_syndrome_module_id)
@@ -15529,21 +15689,6 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                             f"This reads like an explicit request to assess {_assistant_module_label(explicit_module)}, so I’ll start in that syndrome pathway. "
                         ),
                     )
-            explicit_workflow_id = _assistant_explicit_non_syndrome_workflow_request(message_text)
-            if explicit_workflow_id is not None:
-                workflow_label = next(
-                    (
-                        option.label
-                        for option in _assistant_module_options()
-                        if option.value == explicit_workflow_id
-                    ),
-                    explicit_workflow_id,
-                )
-                return _assistant_begin_selected_workflow(
-                    state,
-                    explicit_workflow_id,
-                    lead_in=f"This reads like an explicit request for {workflow_label}, so I’ll start in that pathway. ",
-                )
             if _is_impression_plan_request(message_text):
                 return _assistant_impression_plan_response(message_text, state)
             if _is_consult_summary_request(message_text):
@@ -15712,11 +15857,6 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         "For syndrome help, a useful reply would be: 'fever, flank pain, pyuria, and positive urine culture'.",
                     ],
                 )
-
-        direct_allergy_response = _assistant_start_allergyid_from_text(req.message or "", state)
-        if direct_allergy_response is not None:
-            return direct_allergy_response
-
         direct_mechid_response = _assistant_intake_mechid_from_text(req, state)
         if direct_mechid_response is not None:
             return direct_mechid_response
@@ -15940,11 +16080,6 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 "If you choose both, I will carry the same text forward so you do not need to paste it again.",
             ],
         )
-
-    if req.message and req.message.strip() and state.workflow != "allergyid":
-        direct_allergy_response = _assistant_start_allergyid_from_text(req.message.strip(), state)
-        if direct_allergy_response is not None:
-            return direct_allergy_response
 
     if state.stage == "mechid_describe":
         message_text = (req.message or "").strip()

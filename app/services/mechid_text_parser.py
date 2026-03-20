@@ -188,23 +188,31 @@ def _normalize_text(text: str) -> str:
 
 
 def _find_organisms(text_norm: str) -> List[str]:
-    matches: List[tuple[int, str]] = []
-    seen: set[str] = set()
+    matches: List[tuple[int, int, str]] = []
 
     def _record(term: str, canonical: str) -> None:
         pattern = re.compile(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])")
         match = pattern.search(text_norm)
-        if match and canonical not in seen:
-            seen.add(canonical)
-            matches.append((match.start(), canonical))
+        if match:
+            matches.append((match.start(), match.end(), canonical))
 
     for alias, canonical in sorted(ORGANISM_ALIASES.items(), key=lambda entry: len(entry[0]), reverse=True):
         _record(alias, canonical)
     for organism in list_mechid_organisms():
         _record(organism.lower(), organism)
 
-    matches.sort(key=lambda item: item[0])
-    return [canonical for _, canonical in matches]
+    selected: List[tuple[int, int, str]] = []
+    seen_canonicals: set[str] = set()
+    for start, end, canonical in sorted(matches, key=lambda item: (-(item[1] - item[0]), item[0], item[2])):
+        if canonical in seen_canonicals:
+            continue
+        if any(not (end <= existing_start or start >= existing_end) for existing_start, existing_end, _ in selected):
+            continue
+        seen_canonicals.add(canonical)
+        selected.append((start, end, canonical))
+
+    selected.sort(key=lambda item: item[0])
+    return [canonical for _, _, canonical in selected]
 
 
 def _find_organism(text_norm: str) -> str | None:

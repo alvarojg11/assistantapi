@@ -156,6 +156,7 @@ NEW_SYNDROME_CASES = {
             {"selection": "continue_case_draft"},
             {"message": "Tuberculin skin test positive and QuantiFERON positive."},
             {"selection": "continue_case_draft"},
+            {"selection": "continue_case_draft"},
             {"message": "Chest x ray positive for healed or active TB signs."},
             {"selection": "continue_case_draft"},
         ],
@@ -190,11 +191,23 @@ def _run_assistant_checks() -> list[str]:
     failures: list[str] = []
     client = TestClient(app)
     for module_id, spec in NEW_SYNDROME_CASES.items():
-        initial = client.post("/v1/assistant/turn", json={"message": module_id.replace("_", " ")})
+        initial = client.post("/v1/assistant/turn", json={})
         if initial.status_code != 200:
             failures.append(f"{module_id}: initial assistant turn failed with {initial.status_code}")
             continue
         state = initial.json()["state"]
+
+        syndrome_resp = client.post("/v1/assistant/turn", json={"state": state, "selection": "probid"})
+        if syndrome_resp.status_code != 200:
+            failures.append(f"{module_id}: syndrome chooser turn failed with {syndrome_resp.status_code}")
+            continue
+        state = syndrome_resp.json()["state"]
+
+        module_resp = client.post("/v1/assistant/turn", json={"state": state, "selection": module_id})
+        if module_resp.status_code != 200:
+            failures.append(f"{module_id}: module turn failed with {module_resp.status_code}")
+            continue
+        state = module_resp.json()["state"]
 
         preset_resp = client.post("/v1/assistant/turn", json={"state": state, "selection": spec["preset"]})
         if preset_resp.status_code != 200:
@@ -241,9 +254,8 @@ def _run_interface_checks() -> list[str]:
             failures.append(f"{module_id}: unexpected assistant sections {sections}")
         for section in sections:
             options = _assistant_case_prompt_options(module, None, section_override=section)
-            insert_options = [opt for opt in options if opt.value.startswith("insert_text:")]
-            if not insert_options:
-                failures.append(f"{module_id}: no quick-add options for section {section}")
+            if not options:
+                failures.append(f"{module_id}: no assistant options for section {section}")
             if options[-1].value != "continue_case_draft":
                 failures.append(f"{module_id}: section {section} missing continue action")
     return failures

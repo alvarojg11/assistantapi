@@ -1,0 +1,391 @@
+[
+  {
+    "id": "assistant_boot_screen",
+    "description": "Initial assistant turn exposes the main workflow choices.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          },
+          "options_include": ["probid", "mechid", "doseid", "immunoid", "allergyid"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cap_guided_consult",
+    "description": "Guided CAP consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": ["cap"]
+        }
+      },
+      {
+        "request": {
+          "selection": "cap"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": ["ed_adult"]
+        }
+      },
+      {
+        "request": {
+          "selection": "ed_adult"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "moduleId": "cap",
+            "presetId": "ed_adult"
+          },
+          "options_include": ["continue_to_case"]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": ["continue_case_draft"]
+        }
+      },
+      {
+        "request": {
+          "message": "Fever, tachypnea, pleuritic cough, oxygen saturation 89 percent, and focal crackles."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": ["continue_case_draft"]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "WBC elevated and procalcitonin elevated."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sputum culture pending and blood cultures negative so far."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Chest x ray shows a right lower lobe consolidation."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": ["continue_case_draft"]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "confirm_case",
+            "moduleId": "cap"
+          },
+          "options_include": ["run_assessment"]
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "cap"
+          },
+          "nonempty_paths": ["analysis.analysis.appliedFindings"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_sdd_routing",
+    "description": "AST text with susceptible-dose-dependent wording stays in MechID instead of DoseID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. E coli bloodstream isolate. Ceftriaxone resistant, cefepime susceptible dose dependent, piperacillin-tazobactam susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "stage": "mechid_confirm",
+            "workflow": "mechid"
+          },
+          "nonempty_paths": ["mechidAnalysis.analysis.mechanisms"],
+          "options_include": ["add_more_details", "restart"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_negation_with_candidate",
+    "description": "Negation should preserve a benign delayed rash phenotype and keep cefazolin preferred.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefazolin"
+              },
+              "equals": {
+                "recommendation": "preferred"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_from_vague_prompt",
+    "description": "A vague allergy prompt followed by details should not crash and should stay low risk.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "message_not_contains": ["anaphylaxis"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "fungal_clarification_flow",
+    "description": "Generic fungal treatment questions should prompt the mold-vs-candida clarification flow.",
+    "turns": [
+      {
+        "request": {
+          "message": "should ID start antifungal treatment for this patient with possible fungal infection?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": ["inv_candida", "inv_mold"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mold_consult_routing",
+    "description": "Explicit invasive mold treatment consults should route into the invasive mold pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "should I start mold-active therapy for this neutropenic patient with pulmonary nodules and positive galactomannan?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "cefepime_hd_dosing",
+    "description": "DoseID should produce a hemodialysis cefepime regimen from one natural-language turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg man on intermittent hemodialysis with Pseudomonas bacteremia."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "nonempty_paths": ["doseidAnalysis.recommendations"],
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Cefepime"
+              },
+              "contains": {
+                "regimen": "post-HD"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "ripe_weight_basis",
+    "description": "RIPE dosing should use total body weight for pyrazinamide and ethambutol in the standard pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "RIPE dosing for 62 kg, CrCl 35, female, 165 cm."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Pyrazinamide"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            },
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Ethambutol"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_hbv_core_positive",
+    "description": "ImmunoID should recognize rituximab plus steroids and produce screening/prophylaxis output.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "nonempty_paths": ["immunoidAnalysis.recommendations"]
+        }
+      }
+    ]
+  }
+]
