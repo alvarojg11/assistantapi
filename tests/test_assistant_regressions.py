@@ -201,6 +201,80 @@ class AssistantRegressionTests(unittest.TestCase):
         self.assertEqual(response.state.stage, "immunoid_collect_context")
         self.assertIsNotNone(response.immunoid_analysis)
 
+    def test_ultra_hold_antibiotics_route_prompt_stays_in_probid_clarification(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "Here is the actual curbside version from rounds: "
+                    "This may be a clumsy way to ask it, but can I hold antibiotics for now? "
+                    "If this needs a narrower syndrome frame first, do that."
+                )
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "probid")
+        self.assertEqual(response.state.stage, "select_syndrome_module")
+        self.assertIn("cap", {option.value for option in response.options})
+
+    def test_ultra_septic_arthritis_route_prompt_not_hijacked_by_stewardship(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "Here is the actual curbside version from rounds: "
+                    "This may be a clumsy way to ask it, but septic arthritis "
+                    "If this needs a narrower syndrome frame first, do that."
+                )
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "probid")
+        self.assertEqual(response.state.module_id, "septic_arthritis")
+        self.assertEqual(response.state.stage, "select_preset")
+        self.assertIn("sa_low", {option.value for option in response.options})
+
+    def test_right_lane_tb_uveitis_prompt_routes_to_active_tb(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message="The team question keeps getting rephrased, but this is what they mean: Need the right lane first: tb uveitis"
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "probid")
+        self.assertEqual(response.state.module_id, "active_tb")
+        self.assertEqual(response.state.stage, "select_preset")
+        self.assertIn("tb_low", {option.value for option in response.options})
+
+    def test_immunoid_prompt_with_complexity_word_not_hijacked(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "This patient has enough immunosuppression complexity that I would rather over-ask than miss something. "
+                    "Trying to sort this before chemo starts: Trying to think ahead on infection prevention before we give "
+                    "rituximab plus prednisone 20 mg a day for 6 weeks. "
+                    "HBV surface Ag negative, core Ab positive, surface Ab negative, Quant gold negative."
+                )
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "immunoid")
+        self.assertEqual(response.state.stage, "immunoid_collect_context")
+        self.assertIsNotNone(response.immunoid_analysis)
+
+    def test_immunoid_prompt_with_latent_infection_text_not_hijacked_by_allergyid(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message=(
+                    "Trying to sort prophylaxis and latent infection screening without overshooting. "
+                    "Messy pre-treatment note says: Can you help me sort prophylaxis for rituximab plus prednisone 20 mg daily for 6 weeks? "
+                    "Hep B surface antigen negative, core antibody positive, surface antibody negative, Quantiferon negative."
+                )
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "immunoid")
+        self.assertEqual(response.state.stage, "immunoid_collect_context")
+        self.assertIsNotNone(response.immunoid_analysis)
+
     def test_generic_allergy_history_request_routes_to_allergyid_not_delabeling(self) -> None:
         response = assistant_turn(
             AssistantTurnRequest(

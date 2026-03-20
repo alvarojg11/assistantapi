@@ -25,6 +25,7 @@ OUTPUT_DATASETS = {
     "expanded": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_160.json",
     "humanized": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_humanized_260.json",
     "noisy": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_noisy_360.json",
+    "ultra": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_ultra_510.json",
     "production_smoke": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_production_smoke.json",
     "production_complex": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_production_complex.json",
 }
@@ -996,6 +997,83 @@ def _noisy_guided_message(message: str, variant_index: int) -> str:
     return f"{prefix}{message}"
 
 
+def _ultra_doseid_prompt(medication_id: str, medication_name: str, prompt: str, variant_index: int) -> str:
+    base = _noisy_doseid_prompt(medication_id, medication_name, prompt, variant_index)
+    templates = [
+        "Copying my actual signout because the chart is chaos: {base} Please tell me the safest dosing plan and what missing detail would truly change it.",
+        "This is basically what I would message the ID pharmacist at 6 pm: {base} If I am anchoring on the wrong renal detail, fix me.",
+        "Real-world curbside version: {base} I need the dose, but I also want to know if anything here makes the usual answer wrong.",
+        "The bedside question is simple but the patient is not. {base} Walk me through the dose you would actually click.",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
+def _ultra_followup_text(update: str, variant_index: int) -> str:
+    cleaned = update.rstrip(".")
+    templates = [
+        "Actually the piece I left out, and it probably matters, is this: {update}. Re-run it with that in mind.",
+        "One correction from the bedside before you lock this in: {update}.",
+        "I was just called back and one important detail changed: {update}.",
+        "Sorry, the initial message was incomplete. Add this before you answer fully: {update}.",
+    ]
+    return templates[variant_index % len(templates)].format(update=cleaned)
+
+
+def _ultra_mechid_prompt(organism: str, prompt: str, variant_index: int) -> str:
+    base = _noisy_mechid_prompt(organism, prompt, variant_index)
+    templates = [
+        "This is pasted from micro plus my rushed note, so apologies in advance: {base} The real question is what resistance story this most likely fits.",
+        "Trying to make morning signout less embarrassing. {base} Please tell me what mechanism pattern you think this is pointing toward.",
+        "Here is the blood culture susceptibility text exactly the way it was relayed to me: {base} I care most about the likely phenotype and what drug options stay alive.",
+        "Messy micro handoff: {base} If this pattern implies a mechanism, spell that part out.",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
+def _ultra_route_message(message: str, variant_index: int) -> str:
+    base = _noisy_route_message(message, variant_index)
+    templates = [
+        "Need a quick consultant-style read on this. {base} I am less interested in textbook background and more in what lane this belongs in.",
+        "The team question keeps getting rephrased, but this is what they mean: {base}",
+        "Here is the actual curbside version from rounds: {base} If this needs a narrower syndrome frame first, do that.",
+        "Trying to route this cleanly instead of free-texting nonsense: {base}",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
+def _ultra_allergy_message(message: str, variant_index: int) -> str:
+    base = _noisy_allergy_message(message, variant_index)
+    templates = [
+        "I am trying to untangle an allergy list that looks worse than the real story. {base} Please be blunt about what is actually high risk versus historical noise.",
+        "This is one of those med rec histories where the headline is scarier than the details: {base}",
+        "Need help translating the chart allergy section into something clinically usable. {base}",
+        "Practical allergy question from the floor: {base} If this sounds low-risk, say that clearly.",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
+def _ultra_immunoid_message(message: str, variant_index: int) -> str:
+    base = _noisy_immunoid_message(message, variant_index)
+    templates = [
+        "I want the prophylaxis answer the way you would say it on consult rounds. {base}",
+        "This patient has enough immunosuppression complexity that I would rather over-ask than miss something. {base}",
+        "Trying to sort prophylaxis and latent infection screening without overshooting. {base}",
+        "The heme team asked a broad question, but I need a concrete prevention checklist. {base}",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
+def _ultra_guided_message(message: str, variant_index: int) -> str:
+    base = _noisy_guided_message(message, variant_index)
+    templates = [
+        "Here is the relevant fragment, not the whole SOAP note: {base}",
+        "Most of the chart is noise, but this is the clinically useful part: {base}",
+        "Pulling only the piece I would actually say out loud on rounds: {base}",
+        "If I strip away the clutter, this is the part that matters: {base}",
+    ]
+    return templates[variant_index % len(templates)].format(base=base)
+
+
 def _nonempty_any(*paths: str) -> Dict[str, Any]:
     return {"any_of": [{"nonempty_paths": [path]} for path in paths]}
 
@@ -1491,6 +1569,75 @@ def _noisy_mechid_doseid_bridge_case(
     }
 
 
+def _ultra_doseid_followup_case(
+    medication_name: str,
+    medication_id: str,
+    prompt: str,
+    variant_index: int,
+) -> Dict[str, Any]:
+    initial_prompt = _ultra_doseid_prompt(medication_id, medication_name, prompt, variant_index)
+    follow_up = DOSEID_FOLLOWUP_UPDATES.get(medication_id, "the patient is 180 cm tall and female")
+    final_update = f"the age is {58 + (variant_index % 17)} years and the height is {165 + (variant_index % 16)} cm"
+    turns: List[Dict[str, Any]] = [
+        {
+            "request": {"message": initial_prompt},
+            "expect": {
+                "state": {"workflow": "doseid", "stage": "doseid_describe"},
+                "json_contains": {"doseidAnalysis.medications": medication_name},
+                **_nonempty_any("doseidAnalysis.recommendations", "doseidAnalysis.followUpQuestions"),
+            },
+        },
+        {
+            "request": {"message": _ultra_followup_text(follow_up, variant_index)},
+            "expect": {
+                "state": {"workflow": "doseid", "stage": "doseid_describe"},
+                "json_contains": {"doseidAnalysis.medications": medication_name},
+                "options_include": ["add_more_details"],
+                **_nonempty_any("doseidAnalysis.recommendations", "doseidAnalysis.followUpQuestions"),
+            },
+        },
+        {
+            "request": {"message": _ultra_followup_text(final_update, variant_index + 1)},
+            "expect": {
+                "state": {"workflow": "doseid", "stage": "doseid_describe"},
+                "json_contains": {"doseidAnalysis.medications": medication_name},
+                "options_include": ["add_more_details"],
+                **_nonempty_any("doseidAnalysis.recommendations", "doseidAnalysis.followUpQuestions"),
+            },
+        },
+    ]
+    return {
+        "id": f"ultra_doseid_followup_{medication_id}",
+        "description": f"Correction-heavy bedside phrasing should keep {medication_name} stable in DoseID.",
+        "turns": turns,
+    }
+
+
+def _ultra_guided_probid_case(module_id: str, spec: Dict[str, Any]) -> Dict[str, Any]:
+    case = _guided_probid_case(module_id, spec)
+    case["id"] = f"ultra_{case['id']}"
+    case["description"] = (
+        f"Guided {module_id.replace('_', ' ')} consult should survive cluttered, clinician-style case fragments."
+    )
+
+    ultra_turns: List[Dict[str, Any]] = []
+    message_index = 0
+    for turn in case["turns"]:
+        turn_copy = {
+            "request": dict(turn["request"]),
+            "expect": dict(turn["expect"]),
+        }
+        if "message" in turn_copy["request"]:
+            turn_copy["request"]["message"] = _ultra_guided_message(
+                str(turn_copy["request"]["message"]),
+                message_index,
+            )
+            message_index += 1
+        ultra_turns.append(turn_copy)
+    case["turns"] = ultra_turns
+    return case
+
+
 def _build_standard_cases() -> List[Dict[str, Any]]:
     base_cases = _load_cases(BASE_DATASET)
 
@@ -1912,11 +2059,221 @@ def _build_production_complex_cases() -> List[Dict[str, Any]]:
     return [cases_by_id[case_id] for case_id in PRODUCTION_COMPLEX_CASE_IDS]
 
 
+def _build_ultra_cases() -> List[Dict[str, Any]]:
+    generated_cases = _build_noisy_cases()
+    supported_medications = {med.id: med for med in list_medications()}
+    supported_regimens = set(IMMUNOID_REGIMENS)
+    supported_agents = set(IMMUNOID_SOURCE_AGENTS)
+    supported_organisms = set(list_mechid_organisms())
+    mechid_prompts = {organism: prompt for organism, prompt in MECHID_CASES}
+
+    for index, (medication_id, prompt) in enumerate(DOSEID_PROMPTS.items()):
+        medication = supported_medications.get(medication_id)
+        if medication is None:
+            raise SystemExit(f"Unsupported DoseID medication in ultra generator: {medication_id}")
+        generated_cases.append(
+            {
+                "id": f"ultra_doseid_{medication_id}",
+                "description": f"Highly conversational dosing phrasing should still keep {medication.name} in DoseID.",
+                "turns": [
+                    {
+                        "request": {"message": _ultra_doseid_prompt(medication_id, medication.name, prompt, index)},
+                        "expect": {
+                            "state": {"workflow": "doseid", "stage": "doseid_describe"},
+                            "json_contains": {"doseidAnalysis.medications": medication.name},
+                            **_nonempty_any("doseidAnalysis.recommendations", "doseidAnalysis.followUpQuestions"),
+                        },
+                    }
+                ],
+            }
+        )
+        generated_cases.append(_ultra_doseid_followup_case(medication.name, medication_id, prompt, index))
+
+    for index, (organism, prompt) in enumerate(MECHID_CASES):
+        if organism not in supported_organisms:
+            raise SystemExit(f"Unsupported MechID organism in ultra generator: {organism}")
+        ultra_prompt = _ultra_mechid_prompt(organism, prompt, index)
+        generated_cases.append(
+            {
+                "id": f"ultra_mechid_{_slugify(organism)}",
+                "description": f"Cluttered signout AST wording should still parse {organism} in MechID.",
+                "turns": [
+                    {
+                        "request": {"message": ultra_prompt},
+                        "expect": {
+                            "state": {"workflow": "mechid", "stage": "mechid_confirm"},
+                            "json_equals": {"mechidAnalysis.parsedRequest.organism": organism},
+                            "nonempty_paths": [
+                                "mechidAnalysis.parsedRequest.susceptibilityResults",
+                                "mechidAnalysis.analysis.rows",
+                            ],
+                            "options_include": ["add_more_details", "restart"],
+                        },
+                    }
+                ],
+            }
+        )
+        generated_cases.append(
+            {
+                "id": f"ultra_mechid_finalize_{_slugify(organism)}",
+                "description": f"Cluttered AST wording should still finish a {organism} consult cleanly after syndrome selection.",
+                "turns": [
+                    {
+                        "request": {"message": ultra_prompt},
+                        "expect": {
+                            "state": {"workflow": "mechid", "stage": "mechid_confirm"},
+                            "json_equals": {"mechidAnalysis.parsedRequest.organism": organism},
+                        },
+                    },
+                    {
+                        "request": {"selection": "mechid_set_syndrome:Bacteraemia"},
+                        "expect": {
+                            "state": {"workflow": "mechid", "stage": "done"},
+                            "json_equals": {"mechidAnalysis.parsedRequest.organism": organism},
+                            "nonempty_paths": ["mechidAnalysis.analysis.rows", "mechidAnalysis.analysis.references"],
+                            "options_include": ["add_more_details"],
+                        },
+                    },
+                ],
+            }
+        )
+
+    for index, (organism, medication_id) in enumerate(MECHID_DOSEID_BRIDGE_CASES):
+        medication = supported_medications.get(medication_id)
+        prompt = mechid_prompts.get(organism)
+        if medication is None or prompt is None:
+            raise SystemExit(f"Unsupported ultra MechID bridge case: {organism} -> {medication_id}")
+        generated_cases.append(
+            {
+                "id": f"ultra_mechid_to_doseid_{_slugify(organism)}_{medication_id}",
+                "description": f"Cluttered AST input should still bridge {organism} into DoseID for {medication.name}.",
+                "turns": [
+                    {
+                        "request": {"message": _ultra_mechid_prompt(organism, prompt, index)},
+                        "expect": {
+                            "state": {"workflow": "mechid", "stage": "mechid_confirm"},
+                            "json_equals": {"mechidAnalysis.parsedRequest.organism": organism},
+                        },
+                    },
+                    {
+                        "request": {"selection": "mechid_set_syndrome:Bacteraemia"},
+                        "expect": {
+                            "state": {"workflow": "mechid", "stage": "done"},
+                            "options_include": [f"doseid_pick:{medication_id}"],
+                        },
+                    },
+                    {
+                        "request": {"selection": f"doseid_pick:{medication_id}"},
+                        "expect": {
+                            "state": {"workflow": "doseid", "stage": "doseid_describe"},
+                            "json_contains": {"doseidAnalysis.medications": medication.name},
+                            **_nonempty_any("doseidAnalysis.recommendations", "doseidAnalysis.followUpQuestions"),
+                        },
+                    },
+                ],
+            }
+        )
+
+    for index, case in enumerate(ALLERGY_CASES):
+        ultra_case = dict(case)
+        ultra_case["id"] = f"ultra_{case['id']}"
+        ultra_case["description"] = f"Human-style allergy storytelling should still preserve {case['agent'] or 'allergy'} guidance."
+        ultra_case["message"] = _ultra_allergy_message(str(case["message"]), index)
+        generated_cases.append(_allergy_case(ultra_case))
+
+    for index, case in enumerate(ALLERGY_FOLLOWUP_CASES):
+        generated_cases.append(
+            {
+                "id": f"ultra_{case['id']}",
+                "description": "Correction-heavy allergy clarification should stay stable after a vague first turn.",
+                "turns": [
+                    {
+                        "request": {
+                            "message": _ultra_allergy_message(
+                                "Can you help me clean up an antibiotic allergy section? The chart mostly just says penicillin allergy.",
+                                index,
+                            )
+                        },
+                        "expect": {
+                            "state": {"workflow": "allergyid", "stage": "done"},
+                        },
+                    },
+                    {
+                        "request": {"message": _ultra_allergy_message(case["detail"], index + 1)},
+                        "expect": {
+                            "state": {"workflow": "allergyid", "stage": "done"},
+                            "list_item_checks": [
+                                {
+                                    "path": "allergyidAnalysis.recommendations",
+                                    "where": {"agent": case["agent"]},
+                                    "nonempty_paths": ["recommendation"],
+                                }
+                            ],
+                        },
+                    },
+                ],
+            }
+        )
+
+    for index, case in enumerate(PROBID_ROUTE_CASES):
+        generated_cases.append(
+            {
+                "id": f"ultra_{case['id']}",
+                "description": f"Longer consultant-style wording should still route correctly for {case['id']}.",
+                "turns": [
+                    {
+                        "request": {"message": _ultra_route_message(str(case["message"]), index)},
+                        "expect": case["expect"],
+                    }
+                ],
+            }
+        )
+
+    for index, case in enumerate(HUMANIZED_IMMUNOID_CONTEXT_CASES):
+        ultra_case = dict(case)
+        ultra_case["id"] = f"ultra_{case['id']}"
+        ultra_case["prompt"] = _ultra_immunoid_message(str(case["prompt"]), index)
+        generated_cases.append(_immunoid_context_case(ultra_case))
+
+    for index, agent_id in enumerate(IMMUNOID_AGENT_IDS):
+        agent = IMMUNOID_SOURCE_AGENTS.get(agent_id)
+        if agent is None or agent_id not in supported_agents:
+            raise SystemExit(f"Unsupported ultra ImmunoID agent in generator: {agent_id}")
+        generated_cases.append(
+            _immunoid_agent_case(
+                agent_id,
+                str(agent["name"]),
+                initial_prompt=_ultra_immunoid_message(HUMANIZED_IMMUNOID_CHOOSER_PROMPT, index),
+                case_id_prefix="ultra_immunoid_agent",
+                description=f"Longer prophylaxis wording should still allow selecting {agent['name']}.",
+            )
+        )
+
+    for index, regimen_id in enumerate(IMMUNOID_REGIMEN_IDS):
+        regimen = IMMUNOID_REGIMENS.get(regimen_id)
+        if regimen is None or regimen_id not in supported_regimens:
+            raise SystemExit(f"Unsupported ultra ImmunoID regimen in generator: {regimen_id}")
+        generated_cases.append(
+            _immunoid_regimen_case(
+                regimen_id,
+                str(regimen["name"]),
+                initial_prompt=_ultra_immunoid_message(HUMANIZED_IMMUNOID_CHOOSER_PROMPT, index + 1),
+                case_id_prefix="ultra_immunoid_regimen",
+                description=f"Longer prophylaxis wording should still allow selecting {regimen['name']}.",
+            )
+        )
+
+    for module_id, spec in NEW_SYNDROME_CASES.items():
+        generated_cases.append(_ultra_guided_probid_case(module_id, spec))
+
+    return generated_cases
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate assistant evaluation datasets.")
     parser.add_argument(
         "--profile",
-        choices=["standard", "expanded", "humanized", "noisy", "production_smoke", "production_complex"],
+        choices=["standard", "expanded", "humanized", "noisy", "ultra", "production_smoke", "production_complex"],
         default="standard",
         help="Dataset profile to generate.",
     )
@@ -1934,6 +2291,9 @@ def main() -> int:
     elif args.profile == "production_smoke":
         generated_cases = _build_production_smoke_cases()
         expected_count = 40
+    elif args.profile == "ultra":
+        generated_cases = _build_ultra_cases()
+        expected_count = 510
     elif args.profile == "noisy":
         generated_cases = _build_noisy_cases()
         expected_count = 360

@@ -95,6 +95,15 @@ class CaseFailure:
 
 
 @dataclass
+class CaseRunResult:
+    passed: bool
+    turn_count: int
+    failures: List[CaseFailure] = field(default_factory=list)
+    transcript: List[str] = field(default_factory=list)
+    stability_snapshots: List[str] = field(default_factory=list)
+
+
+@dataclass
 class EvalStats:
     total_cases: int = 0
     passed_cases: int = 0
@@ -294,19 +303,103 @@ def _render_body_for_transcript(body: Any, raw_text: str, limit: int = 600) -> s
     return rendered[: limit - 3] + "..."
 
 
+_STABILITY_IGNORED_KEYS = {
+    "assistantContract",
+    "assistantMessage",
+    "assistantName",
+    "assistantNarrationRefined",
+    "description",
+    "displayText",
+    "helperText",
+    "hint",
+    "label",
+    "message",
+    "note",
+    "prompt",
+    "question",
+    "subtitle",
+    "title",
+}
+
+
+def _normalize_body_for_stability(value: Any, *, key: str | None = None) -> Any:
+    if isinstance(value, dict):
+        normalized: Dict[str, Any] = {}
+        for child_key in sorted(value):
+            if child_key in _STABILITY_IGNORED_KEYS:
+                continue
+            child_value = value[child_key]
+            if child_key == "options" and isinstance(child_value, list):
+                option_values = sorted(
+                    str(option.get("value"))
+                    for option in child_value
+                    if isinstance(option, dict) and option.get("value") is not None
+                )
+                normalized[child_key] = option_values
+                continue
+            normalized[child_key] = _normalize_body_for_stability(child_value, key=child_key)
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_body_for_stability(item, key=key) for item in value]
+    if isinstance(value, str):
+        return " ".join(value.split())
+    return value
+
+
+def _body_stability_snapshot(body: Dict[str, Any]) -> str:
+    normalized = _normalize_body_for_stability(body)
+    return json.dumps(normalized, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+
+
+def _build_stability_failures(
+    *,
+    case_id: str,
+    baseline_run: CaseRunResult,
+    current_run: CaseRunResult,
+    baseline_label: str,
+    current_label: str,
+) -> List[CaseFailure]:
+    failures: List[CaseFailure] = []
+    baseline_snapshots = baseline_run.stability_snapshots
+    current_snapshots = current_run.stability_snapshots
+    max_turns = max(len(baseline_snapshots), len(current_snapshots))
+
+    for turn_index in range(1, max_turns + 1):
+        baseline_snapshot = baseline_snapshots[turn_index - 1] if turn_index <= len(baseline_snapshots) else None
+        current_snapshot = current_snapshots[turn_index - 1] if turn_index <= len(current_snapshots) else None
+        if baseline_snapshot == current_snapshot:
+            continue
+        transcript = list(current_run.transcript[: turn_index * 2])
+        transcript.append(f"{baseline_label} normalized_response={baseline_snapshot!r}")
+        transcript.append(f"{current_label} normalized_response={current_snapshot!r}")
+        failures.append(
+            CaseFailure(
+                case_id=case_id,
+                turn_index=turn_index,
+                reason=(
+                    f"stability drift detected between {baseline_label} and {current_label}: "
+                    "normalized response changed"
+                ),
+                transcript=transcript,
+            )
+        )
+    return failures
+
+
 def _run_case(
     client: EvalClient,
     case: Dict[str, Any],
     *,
     show_transcripts: bool,
     stop_on_failure: bool,
-) -> tuple[bool, int, List[CaseFailure]]:
+) -> CaseRunResult:
     case_id = str(case.get("id") or "unnamed_case")
     turns = case.get("turns") or []
     endpoint_default = str(case.get("endpoint") or "/v1/assistant/turn")
     state: Any = None
     transcript: List[str] = []
     failures: List[CaseFailure] = []
+    stability_snapshots: List[str] = []
 
     for index, turn in enumerate(turns, start=1):
         request_payload = copy.deepcopy(turn.get("request") or {})
@@ -333,7 +426,13 @@ def _run_case(
             )
             if stop_on_failure:
                 break
-            return False, index, failures
+            return CaseRunResult(
+                passed=False,
+                turn_count=index,
+                failures=failures,
+                transcript=list(transcript),
+                stability_snapshots=stability_snapshots,
+            )
 
         if body is None:
             failures.append(
@@ -346,7 +445,13 @@ def _run_case(
             )
             if stop_on_failure:
                 break
-            return False, index, failures
+            return CaseRunResult(
+                passed=False,
+                turn_count=index,
+                failures=failures,
+                transcript=list(transcript),
+                stability_snapshots=stability_snapshots,
+            )
 
         expectation_failures = _check_expectations(body, turn.get("expect") or {})
         if expectation_failures:
@@ -361,7 +466,15 @@ def _run_case(
                 )
             if stop_on_failure:
                 break
-            return False, index, failures
+            return CaseRunResult(
+                passed=False,
+                turn_count=index,
+                failures=failures,
+                transcript=list(transcript),
+                stability_snapshots=stability_snapshots,
+            )
+
+        stability_snapshots.append(_body_stability_snapshot(body))
 
         if turn.get("save_state", True):
             state = body.get("state")
@@ -372,7 +485,13 @@ def _run_case(
         for line in transcript:
             print(f"  {line}")
         print()
-    return passed, len(turns), failures
+    return CaseRunResult(
+        passed=passed,
+        turn_count=len(turns),
+        failures=failures,
+        transcript=list(transcript),
+        stability_snapshots=stability_snapshots,
+    )
 
 
 def _build_client(args: argparse.Namespace) -> EvalClient:
@@ -451,6 +570,11 @@ def main() -> int:
         help="Print full transcripts for passing cases too.",
     )
     parser.add_argument(
+        "--check-stability",
+        action="store_true",
+        help="When used with --repeat, fail cases whose normalized non-narrative responses drift across runs.",
+    )
+    parser.add_argument(
         "--stop-on-failure",
         action="store_true",
         help="Stop at the first failed turn.",
@@ -461,6 +585,8 @@ def main() -> int:
         raise SystemExit(f"Dataset not found: {args.dataset}")
     if args.repeat < 1:
         raise SystemExit("--repeat must be at least 1")
+    if args.check_stability and args.repeat < 2:
+        raise SystemExit("--check-stability requires --repeat at least 2")
 
     cases = list(_iter_selected_cases(_load_cases(args.dataset), args.filter))
     if not cases:
@@ -468,6 +594,7 @@ def main() -> int:
 
     client = _build_client(args)
     stats = EvalStats()
+    baseline_runs: Dict[str, tuple[str, CaseRunResult]] = {}
 
     for round_index in range(args.repeat):
         for case in cases:
@@ -476,21 +603,40 @@ def main() -> int:
             case_copy = dict(case)
             case_copy["id"] = decorated_id
             stats.total_cases += 1
-            passed, turn_count, failures = _run_case(
+            run_result = _run_case(
                 client,
                 case_copy,
                 show_transcripts=args.show_transcripts,
                 stop_on_failure=args.stop_on_failure,
             )
-            stats.total_turns += turn_count
-            if passed:
+            stats.total_turns += run_result.turn_count
+            failures = list(run_result.failures)
+            if args.check_stability and run_result.passed:
+                baseline_run = baseline_runs.get(case_id)
+                current_label = f"run {round_index + 1}"
+                if baseline_run is None:
+                    baseline_runs[case_id] = ("run 1", run_result)
+                else:
+                    failures.extend(
+                        _build_stability_failures(
+                            case_id=decorated_id,
+                            baseline_run=baseline_run[1],
+                            current_run=run_result,
+                            baseline_label=baseline_run[0],
+                            current_label=current_label,
+                        )
+                    )
+            if run_result.passed and not failures:
                 stats.passed_cases += 1
-                stats.passed_turns += turn_count
+                stats.passed_turns += run_result.turn_count
                 if not args.show_transcripts:
                     print(f"PASS {decorated_id}")
             else:
                 stats.failures.extend(failures)
-                stats.passed_turns += max(0, turn_count - 1)
+                if run_result.passed:
+                    stats.passed_turns += run_result.turn_count
+                else:
+                    stats.passed_turns += max(0, run_result.turn_count - 1)
                 print(f"FAIL {decorated_id}")
                 if args.show_failures:
                     for failure in failures:

@@ -157,6 +157,20 @@ This writes:
 
 - `backend/app/data/assistant_eval_cases_noisy_360.json`
 
+Generate and run the ultra stress suite with even more human-style signout wording, correction turns, and longer multi-step conversations:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile ultra
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_ultra_510.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_ultra_510.json`
+
 Generate and run the curated production smoke pack with the highest-value 40 cases:
 
 ```bash
@@ -196,6 +210,19 @@ It checks things like:
 - key options appearing or disappearing
 - non-empty analysis payloads
 - targeted structured assertions such as regimen strings or risk categories
+
+If you want to check repeatability rather than a single pass, rerun the same dataset multiple times and fail on structured drift:
+
+```bash
+cd backend
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_production_smoke.json \
+  --repeat 3 \
+  --check-stability \
+  --show-failures
+```
+
+The stability check ignores assistant narration and option labels, then compares the normalized workflow, state, option values, and structured payloads across repeats. This is useful for catching flaky routing or parser drift without over-failing on harmless wording changes.
 
 You can also point it at a live deployment instead of the in-process app:
 

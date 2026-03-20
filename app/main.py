@@ -223,6 +223,7 @@ EXPLICIT_SYNDROME_REQUEST_TOKENS = (
     "please help with",
     "probability",
     "question of",
+    "right lane",
     "route me to",
     "route to",
     "rule out",
@@ -8427,8 +8428,8 @@ _STEWARDSHIP_REVIEW_TRIGGERS: tuple[str, ...] = (
 
 
 def _is_stewardship_request(text: str) -> bool:
-    normalized = text.lower().strip()
-    return any(trigger in normalized for trigger in _STEWARDSHIP_TRIGGERS)
+    normalized = _normalize_choice(text)
+    return any(_assistant_text_has_phrase(normalized, trigger) for trigger in _STEWARDSHIP_TRIGGERS)
 
 
 def _is_opat_request(text: str) -> bool:
@@ -9043,8 +9044,10 @@ _COMPLEXITY_TRIGGERS: tuple[str, ...] = (
 
 
 def _is_complexity_request(text: str) -> bool:
-    normalized = text.lower().strip()
-    return any(trigger in normalized for trigger in _COMPLEXITY_TRIGGERS)
+    if _assistant_is_immunoid_intent(text):
+        return False
+    normalized = _normalize_choice(text)
+    return any(_assistant_text_has_phrase(normalized, trigger) for trigger in _COMPLEXITY_TRIGGERS)
 
 
 _COURSE_TRACKER_TRIGGERS: tuple[str, ...] = (
@@ -12892,8 +12895,12 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
         "ten",
         "dress",
     )
+    has_reaction_token = any(
+        _assistant_text_has_phrase(normalized, token)
+        for token in reaction_tokens
+    )
     if any(
-        token in normalized
+        _assistant_text_has_phrase(normalized, token)
         for token in (
             "bacteremia",
             "bloodstream infection",
@@ -12905,29 +12912,15 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
             "cystitis",
             "pneumonia",
         )
-    ) and not any(
-        token in normalized
-        for token in (
-            "allergy",
-            "allergic",
-            "anaphylaxis",
-            "hives",
-            "rash",
-            "reaction",
-            "angioedema",
-            "sjs",
-            "ten",
-            "dress",
-        )
-    ):
+    ) and not has_reaction_token:
         return False
-    if any(token in normalized for token in ALLERGYID_INTENT_TOKENS):
+    if any(_assistant_text_has_phrase(normalized, token) for token in ALLERGYID_INTENT_TOKENS):
         return True
     medication_count = len(_assistant_detect_doseid_medication_ids(message_text))
-    if medication_count >= 2 and any(token in normalized for token in reaction_tokens):
+    if medication_count >= 2 and has_reaction_token:
         return True
     return any(
-        phrase in normalized
+        _assistant_text_has_phrase(normalized, phrase)
         for phrase in (
             "can i use",
             "can i still use",
@@ -12945,18 +12938,20 @@ def _assistant_is_allergyid_intent(message_text: str) -> bool:
             "best antibiotic with",
             "best antibiotic if allergic",
         )
-    ) and any(
-        token in normalized
-        for token in (
-            *reaction_tokens,
-            "caused",
-            "headache",
-            "nausea",
-            "vomiting",
-            "diarrhea",
-            "gi upset",
-            "gastrointestinal",
-            "unknown",
+    ) and (
+        has_reaction_token
+        or any(
+            _assistant_text_has_phrase(normalized, token)
+            for token in (
+                "caused",
+                "headache",
+                "nausea",
+                "vomiting",
+                "diarrhea",
+                "gi upset",
+                "gastrointestinal",
+                "unknown",
+            )
         )
     )
 
