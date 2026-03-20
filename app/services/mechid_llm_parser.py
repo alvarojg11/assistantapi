@@ -20,6 +20,7 @@ class MechIDLLMExtractionPayload(BaseModel):
     mentioned_organisms: List[str] = Field(default_factory=list, alias="mentionedOrganisms")
     resistance_phenotypes: List[str] = Field(default_factory=list, alias="resistancePhenotypes")
     susceptibility_results: Dict[str, ASTResult] = Field(default_factory=dict, alias="susceptibilityResults")
+    visible_text: str | None = Field(default=None, alias="visibleText")
     tx_context: Dict[str, Any] = Field(
         default_factory=lambda: {
             "syndrome": "Not specified",
@@ -142,6 +143,44 @@ def _embedded_carbapenemase_row(raw_name: str, raw_state: ASTResult) -> tuple[st
     return None
 
 
+def _merge_rule_fallback_into_normalized(
+    *,
+    normalized: Dict[str, object],
+    rule_fallback: Dict[str, object],
+    warning_prefix: str | None = None,
+) -> None:
+    warnings = normalized.setdefault("warnings", [])
+    prefix = f"{warning_prefix}: " if warning_prefix else ""
+
+    if normalized.get("organism") is None and rule_fallback.get("organism") is not None:
+        normalized["organism"] = rule_fallback["organism"]
+        warnings.append(prefix + "Filled organism from rule parser.")
+
+    if not normalized.get("mentionedOrganisms") and rule_fallback.get("mentionedOrganisms"):
+        normalized["mentionedOrganisms"] = rule_fallback["mentionedOrganisms"]
+
+    existing_phenotypes = list(normalized.get("resistancePhenotypes") or [])
+    extra_phenotypes = [item for item in (rule_fallback.get("resistancePhenotypes") or []) if item not in existing_phenotypes]
+    if extra_phenotypes:
+        normalized["resistancePhenotypes"] = [*existing_phenotypes, *extra_phenotypes]
+        warnings.append(prefix + "Added resistance phenotypes from rule parser.")
+
+    if not normalized.get("susceptibilityResults") and rule_fallback.get("susceptibilityResults"):
+        normalized["susceptibilityResults"] = rule_fallback["susceptibilityResults"]
+        warnings.append(prefix + "Filled susceptibility results from rule parser.")
+
+    tx_context = normalized.setdefault("txContext", {})
+    rule_tx_context = rule_fallback.get("txContext") or {}
+    if tx_context.get("carbapenemaseResult") == "Not specified" and rule_tx_context.get("carbapenemaseResult") != "Not specified":
+        tx_context["carbapenemaseResult"] = rule_tx_context["carbapenemaseResult"]
+        warnings.append(prefix + "Filled carbapenemase result from rule parser.")
+    if tx_context.get("carbapenemaseClass") == "Not specified" and rule_tx_context.get("carbapenemaseClass") != "Not specified":
+        tx_context["carbapenemaseClass"] = rule_tx_context["carbapenemaseClass"]
+        warnings.append(prefix + "Filled carbapenemase class from rule parser.")
+    if tx_context.get("carbapenemaseClass") != "Not specified" and tx_context.get("carbapenemaseResult") == "Not specified":
+        tx_context["carbapenemaseResult"] = "Positive"
+
+
 def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, object]:
     warnings: List[str] = []
     organism = payload.organism
@@ -167,6 +206,15 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
     }
     if tx_context["carbapenemaseClass"] != "Not specified" and tx_context["carbapenemaseResult"] == "Not specified":
         tx_context["carbapenemaseResult"] = "Positive"
+
+    phenotype_rule_fallback = parse_mechid_text(". ".join(resistance_phenotypes)) if resistance_phenotypes else None
+    if phenotype_rule_fallback is not None:
+        if tx_context["carbapenemaseResult"] == "Not specified" and phenotype_rule_fallback["txContext"].get("carbapenemaseResult") != "Not specified":
+            tx_context["carbapenemaseResult"] = phenotype_rule_fallback["txContext"]["carbapenemaseResult"]
+        if tx_context["carbapenemaseClass"] == "Not specified" and phenotype_rule_fallback["txContext"].get("carbapenemaseClass") != "Not specified":
+            tx_context["carbapenemaseClass"] = phenotype_rule_fallback["txContext"]["carbapenemaseClass"]
+        if tx_context["carbapenemaseClass"] != "Not specified" and tx_context["carbapenemaseResult"] == "Not specified":
+            tx_context["carbapenemaseResult"] = "Positive"
 
     if organism:
         try:
@@ -217,7 +265,7 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         warnings.append("I detected more than one organism, so I cannot run single-isolate MechID inference yet.")
         requires_confirmation = True
 
-    return {
+    normalized = {
         "organism": organism,
         "mentionedOrganisms": mentioned_organisms,
         "resistancePhenotypes": resistance_phenotypes,
@@ -226,6 +274,21 @@ def _canonicalize_extraction(payload: MechIDLLMExtractionPayload) -> Dict[str, o
         "warnings": warnings,
         "requiresConfirmation": requires_confirmation,
     }
+
+    visible_text = str(payload.visible_text or "").strip()
+    if visible_text:
+        _merge_rule_fallback_into_normalized(
+            normalized=normalized,
+            rule_fallback=parse_mechid_text(visible_text),
+            warning_prefix="Visible text fallback",
+        )
+        normalized["requiresConfirmation"] = bool(
+            normalized["requiresConfirmation"]
+            or normalized.get("organism") is None
+            or not normalized.get("susceptibilityResults")
+        )
+
+    return normalized
 
 
 def parse_mechid_text_with_openai(
@@ -270,16 +333,7 @@ def parse_mechid_text_with_openai(
     normalized = _canonicalize_extraction(extracted)
     rule_fallback = parse_mechid_text(text)
 
-    if normalized["organism"] is None and rule_fallback["organism"] is not None:
-        normalized["organism"] = rule_fallback["organism"]
-        normalized["warnings"].append("Filled organism from rule parser.")
-    if not normalized.get("mentionedOrganisms") and rule_fallback.get("mentionedOrganisms"):
-        normalized["mentionedOrganisms"] = rule_fallback["mentionedOrganisms"]
-    if not normalized.get("resistancePhenotypes") and rule_fallback.get("resistancePhenotypes"):
-        normalized["resistancePhenotypes"] = rule_fallback["resistancePhenotypes"]
-    if not normalized["susceptibilityResults"] and rule_fallback["susceptibilityResults"]:
-        normalized["susceptibilityResults"] = rule_fallback["susceptibilityResults"]
-        normalized["warnings"].append("Filled susceptibility results from rule parser.")
+    _merge_rule_fallback_into_normalized(normalized=normalized, rule_fallback=rule_fallback)
     if normalized["txContext"].get("syndrome") == "Not specified" and rule_fallback["txContext"].get("syndrome") != "Not specified":
         normalized["txContext"]["syndrome"] = rule_fallback["txContext"]["syndrome"]
     if normalized["txContext"].get("severity") == "Not specified" and rule_fallback["txContext"].get("severity") != "Not specified":
@@ -288,16 +342,6 @@ def parse_mechid_text_with_openai(
         normalized["txContext"]["focusDetail"] = rule_fallback["txContext"]["focusDetail"]
     if not normalized["txContext"].get("oralPreference") and rule_fallback["txContext"].get("oralPreference"):
         normalized["txContext"]["oralPreference"] = True
-    if (
-        normalized["txContext"].get("carbapenemaseResult") == "Not specified"
-        and rule_fallback["txContext"].get("carbapenemaseResult") != "Not specified"
-    ):
-        normalized["txContext"]["carbapenemaseResult"] = rule_fallback["txContext"]["carbapenemaseResult"]
-    if (
-        normalized["txContext"].get("carbapenemaseClass") == "Not specified"
-        and rule_fallback["txContext"].get("carbapenemaseClass") != "Not specified"
-    ):
-        normalized["txContext"]["carbapenemaseClass"] = rule_fallback["txContext"]["carbapenemaseClass"]
 
     normalized["requiresConfirmation"] = bool(
         normalized["requiresConfirmation"]
