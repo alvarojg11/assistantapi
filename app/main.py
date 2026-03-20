@@ -2966,10 +2966,10 @@ def assistant_mechid_image(req: MechIDImageAnalyzeRequest) -> AssistantTurnRespo
         assistantMessage=assistant_message,
         assistantNarrationRefined=narration_refined,
         state=state,
-        options=_assistant_mechid_review_options(mechid_result),
+        options=_assistant_mechid_review_options(mechid_result, established_syndrome=state.established_syndrome),
         mechidAnalysis=mechid_result,
         tips=[
-            "If the extraction looks right, click Give consultant impression.",
+            "If the extraction looks right, select the clinical syndrome so I can tailor the therapy recommendation.",
             "If anything is off, type the correction in plain language, for example 'meropenem resistant' or 'this is Klebsiella, not E. coli'.",
         ],
     )
@@ -4463,12 +4463,12 @@ def _assistant_ready_for_consult_message(
     if module.id == "endo" and _assistant_is_endo_imaging_question(state.case_text):
         message = (
             "I have enough to answer the imaging question from what you gave me. "
-            "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
+            "If you want to add more detail, just keep typing. If not, select the clinical syndrome to get the therapy recommendation."
         )
     else:
         message = (
             "I have enough to run the consult with what you gave me. "
-            "If you want to add more detail, just keep typing. If not, ask for my consultant impression."
+            "If you want to add more detail, just keep typing. If not, select the clinical syndrome to get the therapy recommendation."
         )
     if next_items:
         message += f" If you want to sharpen it further, the next useful detail would be {next_items[0][1]}."
@@ -4536,7 +4536,7 @@ def _assistant_concise_probid_follow_up(
         elif text_result.requires_confirmation:
             pieces.append("If anything looks off, correct it or add another detail.")
         else:
-            pieces.append("If this extraction matches the case, ask for my consultant impression.")
+            pieces.append("If this extraction matches the case, select the clinical syndrome to get the therapy recommendation.")
     return " ".join(piece.strip() for piece in pieces if piece and piece.strip())
 
 
@@ -4573,7 +4573,7 @@ def _assistant_concise_mechid_follow_up(
     elif result.analysis is None:
         pieces.append("Please add a few susceptibility calls so I can tighten the interpretation.")
     else:
-        pieces.append("If this extraction matches the case, ask for my consultant impression.")
+        pieces.append("If this extraction matches the case, select the clinical syndrome to get the therapy recommendation.")
     return " ".join(piece.strip() for piece in pieces if piece and piece.strip())
 
 
@@ -5009,10 +5009,33 @@ def _build_mechid_provisional_advice(parsed: MechIDTextParsedRequest | None) -> 
     return None
 
 
-def _assistant_mechid_review_options(result: MechIDTextAnalyzeResponse) -> List[AssistantOption]:
+_MECHID_SYNDROME_CHIPS: List[Dict[str, str]] = [
+    {"value": "mechid_set_syndrome:Bacteraemia", "label": "Bacteraemia"},
+    {"value": "mechid_set_syndrome:Urinary tract infection", "label": "UTI"},
+    {"value": "mechid_set_syndrome:Pneumonia", "label": "Pneumonia"},
+    {"value": "mechid_set_syndrome:Infective endocarditis", "label": "Endocarditis"},
+    {"value": "mechid_set_syndrome:Intra-abdominal infection", "label": "Intra-abdominal"},
+    {"value": "mechid_set_syndrome:Skin/soft tissue infection", "label": "Skin/soft tissue"},
+    {"value": "mechid_set_syndrome:Bone/joint infection", "label": "Bone/joint"},
+    {"value": "mechid_set_syndrome:CNS infection", "label": "CNS infection"},
+    {"value": "mechid_set_syndrome:Other", "label": "Other / not specified"},
+]
+
+
+def _assistant_mechid_review_options(
+    result: MechIDTextAnalyzeResponse,
+    *,
+    established_syndrome: str | None = None,
+) -> List[AssistantOption]:
     options: List[AssistantOption] = []
-    if result.analysis is not None or result.provisional_advice is not None:
-        options.append(AssistantOption(value="run_assessment", label="Give consultant impression"))
+    has_result = result.analysis is not None or result.provisional_advice is not None
+    if has_result and not established_syndrome:
+        # Ask syndrome first — no "Give consultant impression" button
+        for chip in _MECHID_SYNDROME_CHIPS:
+            options.append(AssistantOption(value=chip["value"], label=chip["label"]))
+    elif has_result and established_syndrome:
+        # Syndrome already known — offer to proceed directly
+        options.append(AssistantOption(value="run_assessment", label="Get therapy recommendation"))
     options.append(AssistantOption(value="add_more_details", label="Add case detail"))
     options.append(AssistantOption(value="restart", label="Start new consult"))
     return options
@@ -5902,7 +5925,7 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
             caution = _friendly_mechid_caution(result.analysis)
             if caution:
                 summary += f"\nImportant caution captured: {caution}"
-            summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
+            summary += "\nIf this extraction matches the case, select the clinical syndrome to get the therapy recommendation. Otherwise add or correct details."
             return summary
 
         if result.provisional_advice is not None:
@@ -5920,15 +5943,15 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
                 if follow_up:
                     summary += f"\n{follow_up}"
                 summary += "\nAlternatively, if you already have a specific antibiotic in mind, name it and I can calculate the renal-adjusted dose."
-            summary += "\nIf this extraction matches the case, ask for my consultant impression. Otherwise add or correct details."
+            summary += "\nIf this extraction matches the case, select the clinical syndrome to get the therapy recommendation. Otherwise add or correct details."
             return summary
 
         if result.warnings:
             summary += " " + _join_readable(result.warnings[:2])
         if has_no_ast and institutional_antibiogram and parsed.organism:
-            summary += " Ask for my consultant impression and I'll use your local antibiogram data to guide empiric therapy, or paste the actual AST results for targeted therapy."
+            summary += " Select the clinical syndrome and I'll use your local antibiogram data to guide empiric therapy, or paste the actual AST results for targeted therapy."
         else:
-            summary += " Add susceptibilities for targeted therapy, or ask for my impression and I'll use guideline-based empiric recommendations."
+            summary += " Add susceptibilities for targeted therapy, or select the clinical syndrome for guideline-based empiric recommendations."
         return summary
 
     if result.analysis is not None:
@@ -7218,7 +7241,7 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
                     else f"No single missing item is blocking the consult at this point.{score_note}"
                 )
             ),
-            what_i_would_do_now="If this extraction matches the case, ask for my consultant impression now. Otherwise, add another case detail.",
+            what_i_would_do_now="If this extraction matches the case, select the clinical syndrome to get the therapy recommendation now. Otherwise, add another case detail.",
             what_could_change_management=(
                 f"The next detail most likely to shift the estimate is {next_detail}."
                 if next_detail
@@ -7236,7 +7259,7 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
                     else f"A few high-yield details are still missing, but none prevents a provisional answer.{score_note}"
                 )
             ),
-            what_i_would_do_now="If this looks right, you can still ask for my consultant impression now, or add more detail first.",
+            what_i_would_do_now="If this looks right, you can still select the clinical syndrome to get the therapy recommendation now, or add more detail first.",
             what_could_change_management=(
                 f"The provisional answer could change meaningfully if you add {next_detail}."
                 if next_detail
@@ -7261,7 +7284,7 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
             bottom_line=extraction_summary,
             why="I may still have a few extraction gaps or ambiguities to clean up.",
             what_i_still_need="Any correction or missing case detail that would make the parsed case more accurate." + score_note,
-            what_i_would_do_now="If anything looks off, correct it or add more case detail. If it looks right, ask for my consultant impression.",
+            what_i_would_do_now="If anything looks off, correct it or add more case detail. If it looks right, select the clinical syndrome to get the therapy recommendation.",
             what_could_change_management="A correction to the parsed findings, setting, or microbiology could change the direction of the consult.",
         )
 
@@ -7269,7 +7292,7 @@ def _build_case_review_message(module: SyndromeModule, text_result: TextAnalyzeR
     if text_result.requires_confirmation:
         summary += " If anything looks off, correct it or add more case detail."
     else:
-        summary += " If this extraction matches the case, ask for my consultant impression. Otherwise, add more case detail."
+        summary += " If this extraction matches the case, select the clinical syndrome to get the therapy recommendation. Otherwise, add more case detail."
     summary += score_note
     return _assistant_consult_style_message(
         bottom_line=summary,
@@ -12022,7 +12045,7 @@ def _assistant_start_case_from_text(
                 else []
             ),
             "Reply with the single follow-up detail I asked for, in normal words, and I will keep the case moving.",
-            "If the extraction already looks right, ask for my consultant impression.",
+            "If the extraction already looks right, select the clinical syndrome to get the therapy recommendation.",
         ],
     )
 
@@ -12182,11 +12205,11 @@ def _assistant_start_mechid_from_text(
         assistantMessage=review_message,
         assistantNarrationRefined=narration_refined,
         state=state,
-        options=_assistant_mechid_review_options(mechid_result),
+        options=_assistant_mechid_review_options(mechid_result, established_syndrome=state.established_syndrome),
         mechidAnalysis=mechid_result,
         tips=[
             "Reply with the next susceptibility or context detail I asked for, in normal words, and I will update the case.",
-            "If the extraction already looks right, ask for my consultant impression.",
+            "If the extraction already looks right, select the clinical syndrome to get the therapy recommendation.",
         ],
     )
 
@@ -15927,14 +15950,18 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             consult_organisms=state.consult_organisms or None,
             institutional_antibiogram=state.institutional_antibiogram or None,
         )
+        # If syndrome is already established, show extraction + offer to proceed
+        _desc_review_msg = review_message
+        if state.established_syndrome and (mechid_result.analysis is not None or mechid_result.provisional_advice is not None):
+            _desc_review_msg += f"\n\nSyndrome context: **{state.established_syndrome}**. Select 'Get therapy recommendation' when the extraction looks right, or add more details."
         return AssistantTurnResponse(
-            assistantMessage=review_message,
+            assistantMessage=_desc_review_msg,
             assistantNarrationRefined=narration_refined,
             state=state,
-            options=_assistant_mechid_review_options(mechid_result),
+            options=_assistant_mechid_review_options(mechid_result, established_syndrome=state.established_syndrome),
             mechidAnalysis=mechid_result,
             tips=[
-                "Answer the single follow-up question in one line if that is faster than using the buttons.",
+                "Select the clinical syndrome so I can tailor the therapy recommendation.",
                 "Add more AST details, syndrome context, or severity if anything is missing or wrong.",
             ],
         )
@@ -15973,6 +16000,97 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 ],
             )
 
+        # ── Syndrome selection → auto-run therapy recommendation ──
+        _sel = (req.selection or "").strip()
+        if _sel.startswith("mechid_set_syndrome:"):
+            _syndrome_label = _sel.split(":", 1)[1].strip()
+            if _syndrome_label and _syndrome_label != "Other":
+                state.established_syndrome = _syndrome_label
+            # Auto-proceed to therapy recommendation (same as run_assessment path)
+            if mechid_result.analysis is not None or mechid_result.provisional_advice is not None:
+                state.stage = "done"
+                _accumulate_consult_organisms(state, mechid_result)
+                _snapshot_mechid_result(state, mechid_result)
+                poly_analyses = _build_polymicrobial_analyses(
+                    state.mechid_text or "",
+                    mechid_result,
+                    parser_strategy=state.parser_strategy,
+                    parser_model=state.parser_model,
+                    allow_fallback=state.allow_fallback,
+                )
+                narrated_message, narration_refined = _assistant_mechid_review_message(
+                    mechid_result,
+                    final=True,
+                    established_syndrome=state.established_syndrome,
+                    consult_organisms=state.consult_organisms or None,
+                    polymicrobial_analyses=poly_analyses or None,
+                    institutional_antibiogram=state.institutional_antibiogram or None,
+                )
+                done_options = [
+                    AssistantOption(value="duration", label="How long to treat?"),
+                    AssistantOption(value="add_more_details", label="Update this case"),
+                ]
+                if _is_mid_consult(state):
+                    done_options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+                else:
+                    done_options.append(AssistantOption(value="restart", label="Start new consult"))
+                syndrome_opts = _syndrome_next_step_options(state, exclude={"source_control"})
+                for opt in reversed(syndrome_opts):
+                    done_options.insert(0, opt)
+                done_tips = [
+                    "Add another susceptibility, test result, or clinical detail anytime and I will update the same case.",
+                    "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
+                ]
+                doseid_options = _assistant_mechid_doseid_options(mechid_result)
+                if doseid_options:
+                    narrated_message = _assistant_append_dosing_invitation(narrated_message)
+                    for option in reversed(doseid_options):
+                        done_options.insert(0, option)
+                    done_tips.insert(
+                        0,
+                        "If you want, pick one of the suggested antibiotics and I can carry it into DoseID using the same case context.",
+                    )
+                    _mechid_meds = _assistant_doseid_medications_by_id()
+                    _mechid_candidate_names = [
+                        _mechid_meds[opt.value.split(":", 1)[1]].name
+                        for opt in doseid_options
+                        if opt.value.startswith("doseid_pick:") and opt.value.split(":", 1)[1] in _mechid_meds
+                    ]
+                    allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_mechid_candidate_names)
+                    if allergy_opt:
+                        done_options.append(allergy_opt)
+                else:
+                    dose_bridge = _mechid_doseid_bridge_option(state)
+                    if dose_bridge:
+                        done_options.insert(0, dose_bridge)
+                        done_tips.insert(0, "For this syndrome, precise renal-adjusted dosing is important — I can calculate it now.")
+                return AssistantTurnResponse(
+                    assistantMessage=narrated_message,
+                    assistantNarrationRefined=narration_refined,
+                    state=state,
+                    options=done_options,
+                    mechidAnalysis=mechid_result,
+                    tips=done_tips,
+                )
+            # No analysis/provisional_advice yet — ask for more data
+            review_message, narration_refined = _assistant_mechid_review_message(
+                mechid_result,
+                established_syndrome=state.established_syndrome,
+                consult_organisms=state.consult_organisms or None,
+                institutional_antibiogram=state.institutional_antibiogram or None,
+            )
+            return AssistantTurnResponse(
+                assistantMessage=review_message + "\n\nI need more susceptibility data before I can give a therapy recommendation. Paste additional AST results.",
+                assistantNarrationRefined=narration_refined,
+                state=state,
+                options=[
+                    AssistantOption(value="add_more_details", label="Add case detail"),
+                    AssistantOption(value="restart", label="Start new consult"),
+                ],
+                mechidAnalysis=mechid_result,
+                tips=["Add more susceptibility calls so I can refine the therapy recommendation."],
+            )
+
         if _is_ready_to_assess(req):
             if mechid_result.analysis is None and mechid_result.provisional_advice is None:
                 review_message, narration_refined = _assistant_mechid_review_message(
@@ -15985,7 +16103,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     assistantMessage=review_message,
                     assistantNarrationRefined=narration_refined,
                     state=state,
-                    options=_assistant_mechid_review_options(mechid_result),
+                    options=_assistant_mechid_review_options(mechid_result, established_syndrome=state.established_syndrome),
                     mechidAnalysis=mechid_result,
                     tips=[
                         "I still need a clearer organism and susceptibility pattern before I can finalize the interpretation.",
@@ -16069,11 +16187,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             ),
             assistantNarrationRefined=False,
             state=state,
-            options=_assistant_mechid_review_options(mechid_result),
+            options=_assistant_mechid_review_options(mechid_result, established_syndrome=state.established_syndrome),
             mechidAnalysis=mechid_result,
             tips=[
                 "Keep replying in normal words and I will keep the case moving one question at a time.",
-                "If the extraction looks right already, ask for my consultant impression.",
+                "If the extraction looks right, select the clinical syndrome to get the therapy recommendation.",
             ],
         )
 
@@ -16507,7 +16625,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             analysis=text_result,
             tips=[
                 "Answer the single next question in normal words if that is faster than using the Add buttons.",
-                "If the extraction looks right already, ask for my consultant impression.",
+                "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
             ],
         )
 
@@ -16542,7 +16660,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     "Keep replying in normal words and I will keep the case moving one question at a time.",
-                    "If the extraction looks right already, ask for my consultant impression.",
+                    "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
                 ],
             )
         if selection.startswith("add_missing:"):
@@ -16581,7 +16699,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     "Keep replying in normal words and I will keep the case moving one question at a time.",
-                    "If the extraction looks right already, ask for my consultant impression.",
+                    "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
                 ],
             )
 
@@ -16608,7 +16726,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     "Keep replying in normal words and I will keep the case moving one question at a time.",
-                    "If the extraction looks right already, ask for my consultant impression.",
+                    "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
                 ],
             )
 
@@ -16750,7 +16868,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 analysis=text_result,
                 tips=[
                     "Keep replying in normal words and I will keep the case moving one question at a time.",
-                    "If the extraction looks right already, ask for my consultant impression.",
+                    "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
                 ],
             )
 
@@ -17009,7 +17127,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                             analysis=updated_result,
                             tips=[
                                 "Keep replying in normal words and I will keep the case moving one question at a time.",
-                                "If the extraction looks right already, ask for my consultant impression.",
+                                "If the extraction looks right already, select the clinical syndrome to get the therapy recommendation.",
                             ],
                         )
                     missing_suggestions = _top_missing_tests(module, updated_result.parsed_request, limit=3, state=state)
