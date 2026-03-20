@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -548,6 +548,7 @@ class AssistantState(BaseModel):
         Literal["exam_vitals", "lab", "micro", "imaging"]
     ] = Field(default=None, alias="caseSection")
     case_text: Optional[str] = Field(default=None, alias="caseText")
+    probid_cached_case_result: Optional[Dict[str, Any]] = Field(default=None, alias="probidCachedCaseResult")
     mechid_text: Optional[str] = Field(default=None, alias="mechidText")
     doseid_text: Optional[str] = Field(default=None, alias="doseidText")
     allergyid_text: Optional[str] = Field(default=None, alias="allergyidText")

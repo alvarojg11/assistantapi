@@ -146,7 +146,7 @@ from .services.mechid_text_parser import parse_mechid_text
 from .services.mechid_trainer_guidance import MechIDTrainerGuidanceError, generate_mechid_trainer_targets
 from .services.mechid_trainer_parser import MechIDTrainerParseError, parse_mechid_trainer_correction
 from .services.llm_text_parser import LLMParserError, parse_text_with_openai
-from .services.text_parser import COMMON_FINDING_ALIASES, MODULE_ALIASES, parse_text_to_request
+from .services.text_parser import COMMON_FINDING_ALIASES, MODULE_ALIASES, parse_text_to_request, summarize_parsed_request
 from .services.tb_uveitis_cots import analyze_tb_uveitis
 
 
@@ -4428,6 +4428,220 @@ def _assistant_sanitize_endo_imaging_question_parse(
     text_result.parsed_request.findings = findings
 
 
+def _assistant_case_text_for_parser(
+    module: SyndromeModule,
+    case_text: str | None,
+) -> str:
+    text = (case_text or "").strip()
+    if not text:
+        return ""
+
+    normalized = f" {re.sub(r'[^a-z0-9]+', ' ', text.lower()).strip()} "
+    augmented = text
+
+    if module.id == "spinal_epidural_abscess":
+        mentions_shorthand_mri_positive = any(
+            token in normalized
+            for token in (
+                " mri positive ",
+                " spine mri positive ",
+            )
+        )
+        has_explicit_sea_mri_result = any(
+            token in normalized
+            for token in (
+                " epidural abscess ",
+                " epidural phlegmon ",
+                " spinal epidural abscess ",
+                " mri shows epidural abscess ",
+            )
+        )
+        if mentions_shorthand_mri_positive and not has_explicit_sea_mri_result:
+            augmented = _append_case_text(augmented, "MRI spine shows epidural abscess or phlegmon")
+
+    return augmented
+
+
+def _assistant_append_unique_warning(text_result: TextAnalyzeResponse, warning: str) -> None:
+    if warning and warning not in text_result.warnings:
+        text_result.warnings.append(warning)
+
+
+def _assistant_anchor_guided_case_parse(
+    module: SyndromeModule,
+    state: AssistantState,
+    text_result: TextAnalyzeResponse,
+) -> None:
+    parsed_request = text_result.parsed_request
+    if parsed_request is None:
+        return
+
+    valid_item_ids = {item.id for item in module.items}
+    findings = dict(parsed_request.findings or {})
+    filtered_findings = {item_id: item_state for item_id, item_state in findings.items() if item_id in valid_item_ids}
+
+    module_changed = parsed_request.module_id != module.id
+    preset_changed = bool(state.preset_id and parsed_request.preset_id != state.preset_id)
+    filtered_any = len(filtered_findings) != len(findings)
+
+    parsed_request.module_id = module.id
+    parsed_request.module = None
+    if state.preset_id:
+        parsed_request.preset_id = state.preset_id
+    parsed_request.findings = filtered_findings
+
+    ordered_ids = [item_id for item_id in parsed_request.ordered_finding_ids if item_id in filtered_findings]
+    for item_id in filtered_findings:
+        if item_id not in ordered_ids:
+            ordered_ids.append(item_id)
+    parsed_request.ordered_finding_ids = ordered_ids
+
+    if module_changed:
+        _assistant_append_unique_warning(
+            text_result,
+            "Kept the guided consult anchored to the syndrome you already selected.",
+        )
+    if preset_changed:
+        _assistant_append_unique_warning(
+            text_result,
+            "Kept the guided consult anchored to the pretest setting you already selected.",
+        )
+    if filtered_any:
+        _assistant_append_unique_warning(
+            text_result,
+            "Ignored extracted findings that do not belong to the selected syndrome.",
+        )
+
+
+def _assistant_backfill_guided_case_rule_findings(
+    module: SyndromeModule,
+    state: AssistantState,
+    text_result: TextAnalyzeResponse,
+    case_text: str,
+) -> None:
+    if not case_text.strip():
+        return
+
+    rule_result = parse_text_to_request(
+        store=store,
+        text=case_text,
+        module_hint=module.id,
+        preset_hint=state.preset_id,
+        include_explanation=True,
+    )
+    rule_request = rule_result.parsed_request
+    if rule_request is None:
+        return
+
+    if text_result.parsed_request is None:
+        text_result.parsed_request = rule_request
+        text_result.requires_confirmation = text_result.requires_confirmation or rule_result.requires_confirmation
+        for warning in rule_result.warnings:
+            _assistant_append_unique_warning(text_result, warning)
+        _assistant_append_unique_warning(
+            text_result,
+            "Recovered the guided consult parse using deterministic rule-based extraction.",
+        )
+        return
+
+    parsed_request = text_result.parsed_request
+    parsed_findings = dict(parsed_request.findings or {})
+    added_ids: List[str] = []
+    for item_id, item_state in (rule_request.findings or {}).items():
+        existing_state = parsed_findings.get(item_id)
+        if existing_state in {"present", "absent"}:
+            continue
+        parsed_findings[item_id] = item_state
+        added_ids.append(item_id)
+
+    if not added_ids:
+        return
+
+    parsed_request.findings = parsed_findings
+    for item_id in rule_request.ordered_finding_ids:
+        if item_id in added_ids and item_id not in parsed_request.ordered_finding_ids:
+            parsed_request.ordered_finding_ids.append(item_id)
+
+    added_labels = [item.label for item in module.items if item.id in added_ids]
+    if added_labels:
+        _assistant_append_unique_warning(
+            text_result,
+            "Added deterministic rule-based clues from the guided case text: " + ", ".join(added_labels),
+        )
+
+
+def _assistant_refresh_case_parse_summary(text_result: TextAnalyzeResponse) -> None:
+    parsed_request = text_result.parsed_request
+    if parsed_request is None:
+        return
+
+    understood, summary_warnings, summary_requires_confirmation = summarize_parsed_request(store, parsed_request)
+    text_result.understood = understood
+    text_result.requires_confirmation = text_result.requires_confirmation or summary_requires_confirmation
+    for warning in summary_warnings:
+        _assistant_append_unique_warning(text_result, warning)
+
+
+def _assistant_cache_probid_case_result(
+    state: AssistantState,
+    text_result: TextAnalyzeResponse,
+) -> None:
+    if state.workflow != "probid" or not state.module_id or not (state.case_text or "").strip():
+        state.probid_cached_case_result = None
+        return
+
+    state.probid_cached_case_result = {
+        "moduleId": state.module_id,
+        "presetId": state.preset_id,
+        "caseText": state.case_text,
+        "pretestFactorIds": list(state.pretest_factor_ids),
+        "endoScoreFactorIds": list(state.endo_score_factor_ids),
+        "textResult": {
+            "parser": text_result.parser,
+            "text": text_result.text,
+            "parserFallbackUsed": text_result.parser_fallback_used,
+            "parsedRequest": (
+                text_result.parsed_request.model_dump(by_alias=True, mode="json")
+                if text_result.parsed_request is not None
+                else None
+            ),
+            "understood": text_result.understood.model_dump(by_alias=True, mode="json"),
+            "warnings": list(text_result.warnings),
+            "requiresConfirmation": text_result.requires_confirmation,
+            "references": [reference.model_dump(by_alias=True, mode="json") for reference in text_result.references],
+            "analysis": (
+                text_result.analysis.model_dump(by_alias=True, mode="json")
+                if text_result.analysis is not None
+                else None
+            ),
+        },
+    }
+
+
+def _assistant_cached_probid_case_result(state: AssistantState) -> TextAnalyzeResponse | None:
+    payload = state.probid_cached_case_result
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("moduleId") != state.module_id:
+        return None
+    if payload.get("presetId") != state.preset_id:
+        return None
+    if payload.get("caseText") != state.case_text:
+        return None
+    if payload.get("pretestFactorIds") != list(state.pretest_factor_ids):
+        return None
+    if payload.get("endoScoreFactorIds") != list(state.endo_score_factor_ids):
+        return None
+
+    text_result_payload = payload.get("textResult")
+    if not isinstance(text_result_payload, dict):
+        return None
+    try:
+        return TextAnalyzeResponse.model_validate(text_result_payload)
+    except Exception:
+        return None
+
+
 def _assistant_populate_case_review_analysis(
     module: SyndromeModule,
     text_result: TextAnalyzeResponse,
@@ -7345,9 +7559,10 @@ def _assistant_probid_review_message(
 
 
 def _assistant_parse_case_text(module: SyndromeModule, state: AssistantState) -> TextAnalyzeResponse:
+    case_text_for_parser = _assistant_case_text_for_parser(module, state.case_text)
     text_result = analyze_text(
         TextAnalyzeRequest(
-            text=state.case_text or "",
+            text=case_text_for_parser,
             moduleHint=state.module_id,
             presetHint=state.preset_id,
             parserStrategy=state.parser_strategy,
@@ -7357,13 +7572,17 @@ def _assistant_parse_case_text(module: SyndromeModule, state: AssistantState) ->
             includeExplanation=True,
         )
     )
+    _assistant_anchor_guided_case_parse(module, state, text_result)
+    _assistant_backfill_guided_case_rule_findings(module, state, text_result, case_text_for_parser)
     _assistant_sanitize_endo_imaging_question_parse(text_result, state.case_text)
+    _assistant_refresh_case_parse_summary(text_result)
     _apply_pretest_factors_to_parsed_request(module=module, state=state, parsed_request=text_result.parsed_request)
     _sync_text_result_references(
         text_result=text_result,
         module=module,
         selected_pretest_factor_ids=state.pretest_factor_ids,
     )
+    _assistant_cache_probid_case_result(state, text_result)
     return text_result
 
 
@@ -12126,6 +12345,7 @@ def _assistant_start_case_from_text(
         module=module,
         selected_pretest_factor_ids=state.pretest_factor_ids,
     )
+    _assistant_cache_probid_case_result(state, text_result)
     state.stage = "confirm_case"
     review_message, narration_refined = _assistant_probid_review_message(
         module,
@@ -16906,13 +17126,16 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             )
 
         if _is_ready_to_assess(req):
-            text_result = _assistant_parse_case_text(module, state)
-            if text_result.parsed_request is not None:
+            text_result = _assistant_cached_probid_case_result(state)
+            if text_result is None:
+                text_result = _assistant_parse_case_text(module, state)
+            if text_result.parsed_request is not None and text_result.analysis is None:
                 try:
                     text_result.analysis = _analyze_internal(text_result.parsed_request)
                 except HTTPException as exc:
                     text_result.warnings.append(f"Parsed request could not be analyzed yet: {exc.detail}")
                     text_result.requires_confirmation = True
+            _assistant_cache_probid_case_result(state, text_result)
             if text_result.analysis is None:
                 return AssistantTurnResponse(
                     assistantMessage=(
@@ -17036,7 +17259,9 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 ],
             )
 
-        text_result = _assistant_parse_case_text(module, state)
+        text_result = _assistant_cached_probid_case_result(state)
+        if text_result is None:
+            text_result = _assistant_parse_case_text(module, state)
         review_message, narration_refined = _assistant_probid_review_message(module, text_result, state)
         return AssistantTurnResponse(
             assistantMessage=review_message,

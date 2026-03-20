@@ -157,6 +157,38 @@ This writes:
 
 - `backend/app/data/assistant_eval_cases_noisy_360.json`
 
+Generate and run the curated production smoke pack with the highest-value 40 cases:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile production_smoke
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_production_smoke.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_production_smoke.json`
+
+Use this pack for deploy verification when you want a fast, lower-flake signal across the most important routes and multi-turn workflows.
+
+Generate and run the larger production complex pack with 90 harder multi-turn, humanized, and noisy cases:
+
+```bash
+cd backend
+.venv/bin/python scripts/generate_assistant_eval_cases.py --profile production_complex
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --dataset app/data/assistant_eval_cases_production_complex.json \
+  --show-failures
+```
+
+This writes:
+
+- `backend/app/data/assistant_eval_cases_production_complex.json`
+
+Use this pack when you want a deeper live soak test than the smoke suite, but still something more Railway-friendly than the full 360-case noisy run.
+
 It checks things like:
 
 - route selection (`probid`, `mechid`, `doseid`, `immunoid`, `allergyid`)
@@ -172,6 +204,30 @@ cd backend
 .venv/bin/python scripts/evaluate_assistant_cases.py \
   --target remote \
   --base-url https://assistantapi-production.up.railway.app \
+  --show-failures
+```
+
+For live deploy smoke checks, prefer the production pack:
+
+```bash
+cd backend
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --target remote \
+  --base-url https://assistantapi-production.up.railway.app \
+  --insecure \
+  --dataset app/data/assistant_eval_cases_production_smoke.json \
+  --show-failures
+```
+
+For a deeper live run, switch to the production complex pack:
+
+```bash
+cd backend
+.venv/bin/python scripts/evaluate_assistant_cases.py \
+  --target remote \
+  --base-url https://assistantapi-production.up.railway.app \
+  --insecure \
+  --dataset app/data/assistant_eval_cases_production_complex.json \
   --show-failures
 ```
 

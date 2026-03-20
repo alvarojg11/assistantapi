@@ -1,0 +1,6158 @@
+[
+  {
+    "id": "assistant_boot_screen",
+    "description": "Initial assistant turn exposes the main workflow choices.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "probid",
+            "mechid",
+            "doseid",
+            "immunoid",
+            "allergyid"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "cap_guided_consult",
+    "description": "Guided CAP consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "cap"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "cap"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "ed_adult"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ed_adult"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "moduleId": "cap",
+            "presetId": "ed_adult"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "message": "Fever, tachypnea, pleuritic cough, oxygen saturation 89 percent, and focal crackles."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "WBC elevated and procalcitonin elevated."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sputum culture pending and blood cultures negative so far."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Chest x ray shows a right lower lobe consolidation."
+        },
+        "expect": {
+          "state": {
+            "stage": "describe_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "continue_case_draft"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "stage": "confirm_case",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "run_assessment"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "cap"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_sdd_routing",
+    "description": "AST text with susceptible-dose-dependent wording stays in MechID instead of DoseID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. E coli bloodstream isolate. Ceftriaxone resistant, cefepime susceptible dose dependent, piperacillin-tazobactam susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "stage": "mechid_confirm",
+            "workflow": "mechid"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.analysis.mechanisms"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_negation_with_candidate",
+    "description": "Negation should preserve a benign delayed rash phenotype and keep cefazolin preferred.",
+    "turns": [
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefazolin"
+              },
+              "equals": {
+                "recommendation": "preferred"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_from_vague_prompt",
+    "description": "A vague allergy prompt followed by details should not crash and should stay low risk.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Remote childhood amoxicillin rash only, no anaphylaxis, now needs cefazolin."
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "allergyid"
+          },
+          "json_equals": {
+            "allergyidAnalysis.overallRisk": "low"
+          },
+          "message_not_contains": [
+            "anaphylaxis"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "fungal_clarification_flow",
+    "description": "Generic fungal treatment questions should prompt the mold-vs-candida clarification flow.",
+    "turns": [
+      {
+        "request": {
+          "message": "should ID start antifungal treatment for this patient with possible fungal infection?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "inv_candida",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mold_consult_routing",
+    "description": "Explicit invasive mold treatment consults should route into the invasive mold pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "should I start mold-active therapy for this neutropenic patient with pulmonary nodules and positive galactomannan?"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "cefepime_hd_dosing",
+    "description": "DoseID should produce a hemodialysis cefepime regimen from one natural-language turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg man on intermittent hemodialysis with Pseudomonas bacteremia."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "nonempty_paths": [
+            "doseidAnalysis.recommendations"
+          ],
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Cefepime"
+              },
+              "contains": {
+                "regimen": "post-HD"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "ripe_weight_basis",
+    "description": "RIPE dosing should use total body weight for pyrazinamide and ethambutol in the standard pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "RIPE dosing for 62 kg, CrCl 35, female, 165 cm."
+        },
+        "expect": {
+          "state": {
+            "stage": "doseid_describe",
+            "workflow": "doseid"
+          },
+          "list_item_checks": [
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Pyrazinamide"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            },
+            {
+              "path": "doseidAnalysis.recommendations",
+              "where": {
+                "medicationName": "Ethambutol"
+              },
+              "equals": {
+                "regimen": "1200 mg PO daily",
+                "doseWeight.basis": "tbw",
+                "doseWeight.kg": 62.0
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_hbv_core_positive",
+    "description": "ImmunoID should recognize rituximab plus steroids and produce screening/prophylaxis output.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_septic_arthritis",
+    "description": "Guided septic arthritis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "septic_arthritis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "septic_arthritis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sa_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "presetId": "sa_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "monoarthritis, fever, painful range of motion, unable to bear weight"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ESR elevated, CRP elevated, synovial WBC over 50000"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ultrasound effusion present"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_bacterial_meningitis",
+    "description": "Guided bacterial meningitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "bacterial_meningitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bacterial_meningitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "options_include": [
+            "bm_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bm_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "presetId": "bm_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "fever, headache, neck stiffness, altered mental status"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF pleocytosis, CSF neutrophil predominance, CSF protein elevated, CSF glucose low"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CT not done"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_encephalitis",
+    "description": "Guided encephalitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "encephalitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "encephalitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "options_include": [
+            "enc_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "enc_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "presetId": "enc_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "fever, altered mental status, behavioral change, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CSF pleocytosis, CSF lymphocytic predominance, CSF protein elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "HSV PCR positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI temporal lobe positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_spinal_epidural_abscess",
+    "description": "Guided spinal epidural abscess consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "spinal_epidural_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "spinal_epidural_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "options_include": [
+            "sea_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sea_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "presetId": "sea_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "back pain, fever, spinal tenderness, neurologic deficit"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "ESR elevated, CRP elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_brain_abscess",
+    "description": "Guided brain abscess consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "brain_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "brain_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "options_include": [
+            "ba_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ba_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "presetId": "ba_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "headache, fever, focal deficit, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CRP elevated, WBC elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "MRI with diffusion restriction"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_necrotizing_soft_tissue_infection",
+    "description": "Guided necrotizing soft tissue infection consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "necrotizing_soft_tissue_infection"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "necrotizing_soft_tissue_infection"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "nsti_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "presetId": "nsti_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "pain out of proportion, rapid progression, hypotension, bullae, crepitus"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "WBC elevated, CRP elevated, LRINEC high"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "CT compatible with NSTI"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "probid_guided_tb_uveitis",
+    "description": "Guided tb uveitis consult reaches a final ProbID analysis.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "tb_uveitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "tb_uveitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "options_include": [
+            "ophthalmology_visit"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ophthalmology_visit"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "presetId": "ophthalmology_visit"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "This is an ophthalmology visit for choroidal tuberculoma in a patient from a TB endemic region."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Tuberculin skin test positive and QuantiFERON positive."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Chest x ray positive for healed or active TB signs."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_septic_arthritis",
+    "description": "Guided septic arthritis consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "septic_arthritis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "septic_arthritis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sa_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "presetId": "sa_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: monoarthritis, fever, painful range of motion, unable to bear weight"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: ESR elevated, CRP elevated, synovial WBC over 50000"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, ultrasound effusion present"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "septic_arthritis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_bacterial_meningitis",
+    "description": "Guided bacterial meningitis consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "bacterial_meningitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bacterial_meningitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "options_include": [
+            "bm_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bm_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "presetId": "bm_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: fever, headache, neck stiffness, altered mental status"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: CSF pleocytosis, CSF neutrophil predominance, CSF protein elevated, CSF glucose low"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: CSF gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, CT not done"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_encephalitis",
+    "description": "Guided encephalitis consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "encephalitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "encephalitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "options_include": [
+            "enc_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "enc_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "presetId": "enc_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: fever, altered mental status, behavioral change, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: CSF pleocytosis, CSF lymphocytic predominance, CSF protein elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: HSV PCR positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, MRI temporal lobe positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_spinal_epidural_abscess",
+    "description": "Guided spinal epidural abscess consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "spinal_epidural_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "spinal_epidural_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "options_include": [
+            "sea_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sea_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "presetId": "sea_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: back pain, fever, spinal tenderness, neurologic deficit"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: ESR elevated, CRP elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, MRI positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_brain_abscess",
+    "description": "Guided brain abscess consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "brain_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "brain_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "options_include": [
+            "ba_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ba_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "presetId": "ba_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: headache, fever, focal deficit, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: CRP elevated, WBC elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, MRI with diffusion restriction"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "brain_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_necrotizing_soft_tissue_infection",
+    "description": "Guided necrotizing soft tissue infection consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "necrotizing_soft_tissue_infection"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "necrotizing_soft_tissue_infection"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "nsti_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "presetId": "nsti_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: pain out of proportion, rapid progression, hypotension, bullae, crepitus"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: WBC elevated, CRP elevated, LRINEC high"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Micro-wise, CT compatible with NSTI"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_guided_tb_uveitis",
+    "description": "Guided tb uveitis consult stays stable with conversational case fragments.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "tb_uveitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "tb_uveitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "options_include": [
+            "ophthalmology_visit"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ophthalmology_visit"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "presetId": "ophthalmology_visit"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Let me give the case in chunks: This is an ophthalmology visit for choroidal tuberculoma in a patient from a TB endemic region."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "A little more color: Tuberculin skin test positive and QuantiFERON positive."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry, another detail I should have mentioned: Chest x ray positive for healed or active TB signs."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_probid_guided_bacterial_meningitis",
+    "description": "Guided bacterial meningitis consult stays stable with messy real-world phrasing.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "bacterial_meningitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bacterial_meningitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "options_include": [
+            "bm_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "bm_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "presetId": "bm_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, typing fast from the room: fever, headache, neck stiffness, altered mental status"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "adding more bc the signout was messy: CSF pleocytosis, CSF neutrophil predominance, CSF protein elevated, CSF glucose low"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "one more chunk from the chart: CSF gram stain positive, blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "copying the key detail here: CT not done"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "bacterial_meningitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_probid_guided_encephalitis",
+    "description": "Guided encephalitis consult stays stable with messy real-world phrasing.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "encephalitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "encephalitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "options_include": [
+            "enc_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "enc_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "presetId": "enc_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, typing fast from the room: fever, altered mental status, behavioral change, seizure"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "adding more bc the signout was messy: CSF pleocytosis, CSF lymphocytic predominance, CSF protein elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "one more chunk from the chart: HSV PCR positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "copying the key detail here: MRI temporal lobe positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "encephalitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_probid_guided_spinal_epidural_abscess",
+    "description": "Guided spinal epidural abscess consult stays stable with messy real-world phrasing.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "spinal_epidural_abscess"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "spinal_epidural_abscess"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "options_include": [
+            "sea_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "sea_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "presetId": "sea_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, typing fast from the room: back pain, fever, spinal tenderness, neurologic deficit"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "adding more bc the signout was messy: ESR elevated, CRP elevated"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "one more chunk from the chart: blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "copying the key detail here: MRI positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "spinal_epidural_abscess"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_probid_guided_necrotizing_soft_tissue_infection",
+    "description": "Guided necrotizing soft tissue infection consult stays stable with messy real-world phrasing.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "necrotizing_soft_tissue_infection"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "necrotizing_soft_tissue_infection"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "nsti_low"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "presetId": "nsti_low"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, typing fast from the room: pain out of proportion, rapid progression, hypotension, bullae, crepitus"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "adding more bc the signout was messy: WBC elevated, CRP elevated, LRINEC high"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "one more chunk from the chart: blood cultures positive"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "copying the key detail here: CT compatible with NSTI"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_probid_guided_tb_uveitis",
+    "description": "Guided tb uveitis consult stays stable with messy real-world phrasing.",
+    "turns": [
+      {
+        "request": {},
+        "expect": {
+          "state": {
+            "stage": "select_module",
+            "workflow": "probid"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "probid"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_syndrome_module",
+            "workflow": "probid"
+          },
+          "options_include": [
+            "tb_uveitis"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "tb_uveitis"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_preset",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "options_include": [
+            "ophthalmology_visit"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "ophthalmology_visit"
+        },
+        "expect": {
+          "state": {
+            "stage": "select_pretest_factors",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "presetId": "ophthalmology_visit"
+          },
+          "options_include": [
+            "continue_to_case"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_to_case"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis",
+            "stage": "describe_case"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, typing fast from the room: This is an ophthalmology visit for choroidal tuberculoma in a patient from a TB endemic region."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "adding more bc the signout was messy: Tuberculin skin test positive and QuantiFERON positive."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "one more chunk from the chart: Chest x ray positive for healed or active TB signs."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "continue_case_draft"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "run_assessment"
+        },
+        "expect": {
+          "state": {
+            "stage": "done",
+            "workflow": "probid",
+            "moduleId": "tb_uveitis"
+          },
+          "nonempty_paths": [
+            "analysis.analysis.appliedFindings"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_cap_therapy_selection",
+    "description": "A conversational pneumonia treatment question should still route into CAP presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "Could you help me think through what antibiotics you would start for what looks like pneumonia?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "pc_adult",
+            "ed_adult"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_vancomycin_clarification",
+    "description": "A conversational vancomycin question should still ask for syndrome/source.",
+    "turns": [
+      {
+        "request": {
+          "message": "Team keeps asking whether we should just start vancomycin, but I feel like I need the syndrome framework first."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "cap",
+            "endo",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_hold_antibiotics_clarification",
+    "description": "A conversational hold-antibiotics question should still ask for syndrome/source.",
+    "turns": [
+      {
+        "request": {
+          "message": "Before I keep broad coverage going, can I safely hold antibiotics for a bit or is that a bad idea here?"
+        },
+        "expect": {
+          "any_of": [
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_syndrome_module"
+              },
+              "options_include": [
+                "cap",
+                "endo",
+                "uti"
+              ]
+            },
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_module"
+              },
+              "options_include": [
+                "empiric_therapy"
+              ],
+              "message_contains": [
+                "Which clinical syndrome?"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_endocarditis",
+    "description": "Conversational endocarditis wording should still land on endocarditis presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "I am worried this bacteremia story could be endocarditis. Can you walk me through that pathway?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "endo"
+          },
+          "options_include": [
+            "endo_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_generic_fungal_consult",
+    "description": "A conversational antifungal decision prompt should still ask Candida versus mold.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need help deciding whether ID should start antifungal therapy at all here. I am not even sure if we are in Candida or mold territory."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "inv_candida",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_mold_therapy_selection",
+    "description": "Conversational mold-therapy wording should still route into the invasive mold pathway.",
+    "turns": [
+      {
+        "request": {
+          "message": "Neutropenic patient, chest CT with nodules, galactomannan came back positive. What mold-active drug would you reach for?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_septic_arthritis",
+    "description": "Conversational septic-arthritis wording should still route into the septic arthritis presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "This might be a septic joint. Can you put me in the right consult flow for septic arthritis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_spinal_epidural_abscess",
+    "description": "Conversational SEA wording should still route into the spinal epidural abscess presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "Back pain plus fever plus new weakness, and I am worried about a spinal epidural abscess."
+        },
+        "expect": {
+          "any_of": [
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_preset",
+                "moduleId": "spinal_epidural_abscess"
+              },
+              "options_include": [
+                "sea_low"
+              ]
+            },
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "confirm_case",
+                "moduleId": "spinal_epidural_abscess"
+              },
+              "options_include": [
+                "run_assessment"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_nsti",
+    "description": "Conversational NSTI wording should still route into the necrotizing soft tissue presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "This soft tissue infection is moving way too fast and the pain seems out of proportion. I need the NSTI pathway."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_probid_route_tb_uveitis",
+    "description": "Conversational TB-uveitis wording should still route into the TB presets.",
+    "turns": [
+      {
+        "request": {
+          "message": "Ophthalmology is asking whether this uveitis picture could be TB-related. Can you route me to the TB uveitis workflow?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "active_tb"
+          },
+          "options_include": [
+            "tb_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_cap_therapy_selection",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_cap_therapy_selection.",
+    "turns": [
+      {
+        "request": {
+          "message": "Sorry, typing from my phone. Could you help me think through what antibiotics you would start for what looks like pneumonia?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "cap"
+          },
+          "options_include": [
+            "pc_adult",
+            "ed_adult"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_vancomycin_clarification",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_vancomycin_clarification.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need the right lane first: Team keeps asking whether we should just start vancomycin, but I feel like I need the syndrome framework first."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "cap",
+            "endo",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_hold_antibiotics_clarification",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_hold_antibiotics_clarification.",
+    "turns": [
+      {
+        "request": {
+          "message": "This may be a clumsy way to ask it, but Before I keep broad coverage going, can I safely hold antibiotics for a bit or is that a bad idea here?"
+        },
+        "expect": {
+          "any_of": [
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_syndrome_module"
+              },
+              "options_include": [
+                "cap",
+                "endo",
+                "uti"
+              ]
+            },
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_module"
+              },
+              "options_include": [
+                "empiric_therapy"
+              ],
+              "message_contains": [
+                "Which clinical syndrome?"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_endocarditis",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_endocarditis.",
+    "turns": [
+      {
+        "request": {
+          "message": "Quick steer before rounds: I am worried this bacteremia story could be endocarditis. Can you walk me through that pathway?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "endo"
+          },
+          "options_include": [
+            "endo_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_generic_fungal_consult",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_generic_fungal_consult.",
+    "turns": [
+      {
+        "request": {
+          "message": "Sorry, typing from my phone. Need help deciding whether ID should start antifungal therapy at all here. I am not even sure if we are in Candida or mold territory."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_syndrome_module"
+          },
+          "options_include": [
+            "inv_candida",
+            "inv_mold"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_mold_therapy_selection",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_mold_therapy_selection.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need the right lane first: Neutropenic patient, chest CT with nodules, galactomannan came back positive. What mold-active drug would you reach for?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "inv_mold"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_septic_arthritis",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_septic_arthritis.",
+    "turns": [
+      {
+        "request": {
+          "message": "This may be a clumsy way to ask it, but This might be a septic joint. Can you put me in the right consult flow for septic arthritis?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "septic_arthritis"
+          },
+          "options_include": [
+            "sa_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_spinal_epidural_abscess",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_spinal_epidural_abscess.",
+    "turns": [
+      {
+        "request": {
+          "message": "Quick steer before rounds: Back pain plus fever plus new weakness, and I am worried about a spinal epidural abscess."
+        },
+        "expect": {
+          "any_of": [
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "select_preset",
+                "moduleId": "spinal_epidural_abscess"
+              },
+              "options_include": [
+                "sea_low"
+              ]
+            },
+            {
+              "state": {
+                "workflow": "probid",
+                "stage": "confirm_case",
+                "moduleId": "spinal_epidural_abscess"
+              },
+              "options_include": [
+                "run_assessment"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_nsti",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_nsti.",
+    "turns": [
+      {
+        "request": {
+          "message": "Sorry, typing from my phone. This soft tissue infection is moving way too fast and the pain seems out of proportion. I need the NSTI pathway."
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "necrotizing_soft_tissue_infection"
+          },
+          "options_include": [
+            "nsti_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_probid_route_tb_uveitis",
+    "description": "Messy route-selection wording should still behave for humanized_probid_route_tb_uveitis.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need the right lane first: Ophthalmology is asking whether this uveitis picture could be TB-related. Can you route me to the TB uveitis workflow?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "probid",
+            "stage": "select_preset",
+            "moduleId": "active_tb"
+          },
+          "options_include": [
+            "tb_low"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_no",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:no"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:no"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "no"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_yes",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:yes"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:yes"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "yes"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "immunoid_context_rituximab_strongy_unknown",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you review immunosuppression prophylaxis? Rituximab plus prednisone 20 mg daily planned for 6 weeks. HBsAg negative, anti-HBc positive, anti-HBs negative. QuantiFERON negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:unknown"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:unknown"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "unknown"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_context_rituximab_strongy_no",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need a prophylaxis sanity check. Planning rituximab with prednisone 20 mg daily for about 6 weeks. Hep B surface antigen is negative, core antibody is positive, surface antibody is negative, and Quantiferon is negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:no"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:no"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "no"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_context_rituximab_strongy_yes",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Trying to think ahead on infection prevention before we give rituximab plus prednisone 20 mg a day for 6 weeks. HBV surface Ag negative, core Ab positive, surface Ab negative, Quant gold negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:yes"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:yes"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "yes"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_context_rituximab_strongy_unknown",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help me sort prophylaxis for rituximab plus prednisone 20 mg daily for 6 weeks? Hep B surface antigen negative, core antibody positive, surface antibody negative, Quantiferon negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:unknown"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:unknown"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "unknown"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_immunoid_context_rituximab_strongy_no",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Sorry, this is copied from the onc note: Need a prophylaxis sanity check. Planning rituximab with prednisone 20 mg daily for about 6 weeks. Hep B surface antigen is negative, core antibody is positive, surface antibody is negative, and Quantiferon is negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:no"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:no"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "no"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_immunoid_context_rituximab_strongy_yes",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Trying to sort this before chemo starts: Trying to think ahead on infection prevention before we give rituximab plus prednisone 20 mg a day for 6 weeks. HBV surface Ag negative, core Ab positive, surface Ab negative, Quant gold negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:yes"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:yes"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "yes"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_immunoid_context_rituximab_strongy_unknown",
+    "description": "ImmunoID should keep the checklist context after a structured follow-up answer.",
+    "turns": [
+      {
+        "request": {
+          "message": "Messy pre-treatment note says: Can you help me sort prophylaxis for rituximab plus prednisone 20 mg daily for 6 weeks? Hep B surface antigen negative, core antibody positive, surface antibody negative, Quantiferon negative."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_collect_context"
+          },
+          "options_include": [
+            "immunoid_answer:strongyloides_exposure:unknown"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_answer:strongyloides_exposure:unknown"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "nonempty_paths": [
+            "immunoidAnalysis.recommendations",
+            "immunoidAnalysis.exposureSummary"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.exposureSummary",
+              "where": {
+                "id": "strongyloides_exposure"
+              },
+              "equals": {
+                "value": "unknown"
+              }
+            }
+          ],
+          "any_of": [
+            {
+              "state": {
+                "stage": "immunoid_collect_context"
+              }
+            },
+            {
+              "state": {
+                "stage": "done"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_agent_rituximab",
+    "description": "Conversational prophylaxis wording should still allow selecting Rituximab.",
+    "turns": [
+      {
+        "request": {
+          "message": "I need help figuring out infection prophylaxis before we start some pretty meaningful immunosuppression."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:rituximab"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "rituximab"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_agent_prednisone_20",
+    "description": "Conversational prophylaxis wording should still allow selecting Prednisone >= 20 mg/day.",
+    "turns": [
+      {
+        "request": {
+          "message": "I need help figuring out infection prophylaxis before we start some pretty meaningful immunosuppression."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_agent:prednisone_20"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedAgents",
+              "where": {
+                "id": "prednisone_20"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_immunoid_regimen_r_chop",
+    "description": "Conversational prophylaxis wording should still allow selecting R-CHOP.",
+    "turns": [
+      {
+        "request": {
+          "message": "I need help figuring out infection prophylaxis before we start some pretty meaningful immunosuppression."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:r_chop"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "r_chop"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_immunoid_regimen_cybord",
+    "description": "Messy chooser wording should still allow selecting CyBorD.",
+    "turns": [
+      {
+        "request": {
+          "message": "Sorry, this is copied from the onc note: I need help figuring out infection prophylaxis before we start some pretty meaningful immunosuppression."
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid",
+            "stage": "immunoid_select_agents"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "immunoid_regimen:cybord"
+        },
+        "expect": {
+          "state": {
+            "workflow": "immunoid"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "immunoidAnalysis.selectedRegimens",
+              "where": {
+                "id": "cybord"
+              },
+              "nonempty_paths": [
+                "name"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_cefepime",
+    "description": "DoseID should keep Cefepime in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with cefepime dosing? 72 kg adult, CrCl 45 mL/min, severe infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "actually the patient is on intermittent hemodialysis"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_vancomycin_iv",
+    "description": "DoseID should keep Vancomycin IV in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with vancomycin dosing? 90 kg adult, serum creatinine 1.4 mg/dL, serious MRSA infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "63 year old male, 180 cm"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_ertapenem",
+    "description": "DoseID should keep Ertapenem in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with ertapenem dosing? 79 kg adult, CrCl 29 mL/min, ESBL urinary infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "doseid_followup_fluconazole",
+    "description": "DoseID should keep Fluconazole in the dosing lane after a follow-up update.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with fluconazole dosing? 80 kg adult, CrCl 35 mL/min, candidemia."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fluconazole"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "the patient is 180 cm tall and female"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Fluconazole"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_doseid_followup_cefepime",
+    "description": "Conversational updates should keep Cefepime in DoseID after the first turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Quick dosing gut-check on Cefepime. 72 kg adult patient, creatinine clearance 45 mL/min, severe infection. What would you do?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Actually, one correction: actually the patient is on intermittent hemodialysis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_doseid_followup_ertapenem",
+    "description": "Conversational updates should keep Ertapenem in DoseID after the first turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Probably a basic one, but can you help me dose Ertapenem? 79 kg adult patient, creatinine clearance 29 mL/min, ESBL urinary infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Quick update before you answer: the patient is 180 cm tall and female."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ertapenem"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_doseid_followup_voriconazole",
+    "description": "Conversational updates should keep Voriconazole in DoseID after the first turn.",
+    "turns": [
+      {
+        "request": {
+          "message": "Trying not to underdose Voriconazole here. 75 kg adult patient, creatinine clearance 48 mL/min, invasive mold infection."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Voriconazole"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Actually, one correction: the patient is 180 cm tall and female."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Voriconazole"
+          },
+          "options_include": [
+            "add_more_details"
+          ],
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_doseid_followup_acyclovir_iv",
+    "description": "DoseID should stay stable across rough correction turns for Acyclovir IV.",
+    "turns": [
+      {
+        "request": {
+          "message": "Need IV acyclovir dose. 78 kg pt, HSV encephalitis."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Acyclovir IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "request": {
+          "message": "sorry, missed this earlier: crcl 41."
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Acyclovir IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_immediate_penicillin_cefepime",
+    "description": "AllergyID should stay stable when a vague prompt is followed by concrete allergy details.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Immediate hives and throat tightness after penicillin, now needs cefepime."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "allergy_followup_vanco_infusion_ceftriaxone",
+    "description": "AllergyID should stay stable when a vague prompt is followed by concrete allergy details.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help with antibiotic allergy compatibility? The patient says they had a penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Vancomycin infusion reaction only, can I still use ceftriaxone?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "description": "Vancomycin infusion-reaction wording should still preserve ceftriaxone guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "The chart says vancomycin allergy, but the story sounds like flushing and itching during the infusion rather than a real allergy. Is ceftriaxone still fine?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_allergy_immediate_amoxicillin_cefepime",
+    "description": "Immediate amoxicillin wording should still surface cefepime guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "This one sounds more convincing for IgE: amoxicillin caused hives and throat tightness pretty quickly. We are thinking about cefepime now."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Cefepime"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_allergy_generic_entry_prompt",
+    "description": "A messy allergy-history request should still enter AllergyID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you help me untangle an antibiotic allergy list? The chart just says penicillin allergy and I do not really trust it."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "description": "Messy chart-style allergy wording should still preserve Ceftriaxone guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Phone call summary from family was basically: The chart says vancomycin allergy, but the story sounds like flushing and itching during the infusion rather than a real allergy. Is ceftriaxone still fine?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ],
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_humanized_allergy_generic_entry_prompt",
+    "description": "Messy chart-style allergy wording should still preserve allergy guidance.",
+    "turns": [
+      {
+        "request": {
+          "message": "Phone call summary from family was basically: Can you help me untangle an antibiotic allergy list? The chart just says penicillin allergy and I do not really trust it."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "options_include": [
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_allergy_followup_vanco_infusion_ceftriaxone",
+    "description": "AllergyID should stay stable when a messy allergy prompt is followed by clarified details.",
+    "turns": [
+      {
+        "request": {
+          "message": "Trying to clean up a probably-wrong allergy label before rounds. Can you help me sort an antibiotic allergy list? The chart mostly just says penicillin allergy."
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          }
+        }
+      },
+      {
+        "request": {
+          "message": "Sorry this is copied straight from signout. Vancomycin infusion reaction only, can I still use ceftriaxone?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "allergyid",
+            "stage": "done"
+          },
+          "list_item_checks": [
+            {
+              "path": "allergyidAnalysis.recommendations",
+              "where": {
+                "agent": "Ceftriaxone"
+              },
+              "nonempty_paths": [
+                "recommendation"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_klebsiella_oxytoca",
+    "description": "MechID should parse and hold state for Klebsiella oxytoca.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella oxytoca bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella oxytoca"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_klebsiella_aerogenes",
+    "description": "MechID should parse and hold state for Klebsiella aerogenes.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Klebsiella aerogenes bloodstream isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Klebsiella aerogenes"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_mechid_pseudomonas_aeruginosa",
+    "description": "Conversational AST wording should still parse Pseudomonas aeruginosa in MechID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you sanity-check this blood culture susceptibility report for me? Pseudomonas aeruginosa blood isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_mechid_acinetobacter_baumannii_complex",
+    "description": "Conversational AST wording should still parse Acinetobacter baumannii complex in MechID.",
+    "turns": [
+      {
+        "request": {
+          "message": "Trying to make sense of this AST from a blood culture. Acinetobacter baumannii complex blood isolate. Ampicillin-sulbactam susceptible, meropenem resistant, ciprofloxacin resistant, trimethoprim-sulfamethoxazole susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          },
+          "nonempty_paths": [
+            "mechidAnalysis.parsedRequest.susceptibilityResults",
+            "mechidAnalysis.analysis.rows"
+          ],
+          "options_include": [
+            "add_more_details",
+            "restart"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_pseudomonas_aeruginosa_cefepime",
+    "description": "MechID should carry Pseudomonas aeruginosa into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Pseudomonas aeruginosa bloodstream isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "mechid_to_doseid_acinetobacter_baumannii_complex_ampicillin_sulbactam",
+    "description": "MechID should carry Acinetobacter baumannii complex into DoseID for Ampicillin/Sulbactam.",
+    "turns": [
+      {
+        "request": {
+          "message": "Please interpret this susceptibility pattern. Acinetobacter baumannii complex bloodstream isolate. Ampicillin-sulbactam susceptible, meropenem resistant, ciprofloxacin resistant, trimethoprim-sulfamethoxazole susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Acinetobacter baumannii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:ampicillin_sulbactam"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:ampicillin_sulbactam"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Ampicillin/Sulbactam"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_mechid_to_doseid_enterobacter_cloacae_complex_cefepime",
+    "description": "Conversational AST input should still bridge Enterobacter cloacae complex into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "Mind helping me interpret this blood isolate? Enterobacter cloacae complex blood isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterobacter cloacae complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "humanized_mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
+    "description": "Conversational AST input should still bridge Staphylococcus aureus into DoseID for Vancomycin IV.",
+    "turns": [
+      {
+        "request": {
+          "message": "Can you sanity-check this blood culture susceptibility report for me? Staphylococcus aureus blood isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:vancomycin_iv"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:vancomycin_iv"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_mechid_to_doseid_citrobacter_freundii_complex_cefepime",
+    "description": "Messy AST input should still carry Citrobacter freundii complex into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "micro note from overnight: Citrobacter freundii complex blood culture isolate. Ceftriaxone resistant, cefepime susceptible, piperacillin-tazobactam resistant, meropenem susceptible. can you sanity-check that pattern?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Citrobacter freundii complex"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_mechid_to_doseid_pseudomonas_aeruginosa_cefepime",
+    "description": "Messy AST input should still carry Pseudomonas aeruginosa into DoseID for Cefepime.",
+    "turns": [
+      {
+        "request": {
+          "message": "micro note from overnight: Pseudomonas aeruginosa blood culture isolate. Piperacillin-tazobactam resistant, cefepime susceptible, meropenem susceptible, ciprofloxacin resistant. can you sanity-check that pattern?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Pseudomonas aeruginosa"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:cefepime"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:cefepime"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Cefepime"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_mechid_to_doseid_enterococcus_faecium_daptomycin",
+    "description": "Messy AST input should still carry Enterococcus faecium into DoseID for Daptomycin.",
+    "turns": [
+      {
+        "request": {
+          "message": "from the culture report: Enterococcus faecium blood culture isolate. Ampicillin resistant, vancomycin resistant, linezolid susceptible. pls help interpret."
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Enterococcus faecium"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:daptomycin"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:daptomycin"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Daptomycin"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "noisy_mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
+    "description": "Messy AST input should still carry Staphylococcus aureus into DoseID for Vancomycin IV.",
+    "turns": [
+      {
+        "request": {
+          "message": "micro note from overnight: Staphylococcus aureus blood culture isolate. Oxacillin resistant, vancomycin susceptible, daptomycin susceptible, linezolid susceptible. can you sanity-check that pattern?"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "mechid_confirm"
+          },
+          "json_equals": {
+            "mechidAnalysis.parsedRequest.organism": "Staphylococcus aureus"
+          }
+        }
+      },
+      {
+        "request": {
+          "selection": "mechid_set_syndrome:Bacteraemia"
+        },
+        "expect": {
+          "state": {
+            "workflow": "mechid",
+            "stage": "done"
+          },
+          "options_include": [
+            "doseid_pick:vancomycin_iv"
+          ]
+        }
+      },
+      {
+        "request": {
+          "selection": "doseid_pick:vancomycin_iv"
+        },
+        "expect": {
+          "state": {
+            "workflow": "doseid",
+            "stage": "doseid_describe"
+          },
+          "json_contains": {
+            "doseidAnalysis.medications": "Vancomycin IV"
+          },
+          "any_of": [
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.recommendations"
+              ]
+            },
+            {
+              "nonempty_paths": [
+                "doseidAnalysis.followUpQuestions"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

@@ -1389,7 +1389,14 @@ COMMON_FINDING_ALIASES: Dict[str, Dict[str, List[str]]] = {
         "absent": ["blood cultures completed", "blood culture completed"],
     },
     "sea_mri_positive": {
-        "present": ["mri shows epidural abscess", "spine mri positive for epidural abscess", "epidural phlegmon on mri", "mri with spinal epidural abscess"],
+        "present": [
+            "mri shows epidural abscess",
+            "spine mri positive for epidural abscess",
+            "epidural phlegmon on mri",
+            "mri with spinal epidural abscess",
+            "mri positive",
+            "spine mri positive",
+        ],
         "absent": ["mri without epidural abscess", "spine mri negative for epidural abscess"],
     },
     "sea_mri_na": {

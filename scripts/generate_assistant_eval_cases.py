@@ -25,6 +25,8 @@ OUTPUT_DATASETS = {
     "expanded": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_160.json",
     "humanized": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_humanized_260.json",
     "noisy": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_noisy_360.json",
+    "production_smoke": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_production_smoke.json",
+    "production_complex": BACKEND_ROOT / "app" / "data" / "assistant_eval_cases_production_complex.json",
 }
 
 
@@ -728,6 +730,142 @@ NOISY_IMMUNOID_MESSAGE_PREFIXES = [
     "Sorry, this is copied from the onc note: ",
     "Trying to sort this before chemo starts: ",
     "Messy pre-treatment note says: ",
+]
+
+PRODUCTION_SMOKE_CASE_IDS = [
+    "assistant_boot_screen",
+    "cap_guided_consult",
+    "mechid_sdd_routing",
+    "allergy_negation_with_candidate",
+    "allergy_followup_from_vague_prompt",
+    "fungal_clarification_flow",
+    "mold_consult_routing",
+    "cefepime_hd_dosing",
+    "ripe_weight_basis",
+    "immunoid_hbv_core_positive",
+    "probid_guided_septic_arthritis",
+    "probid_guided_bacterial_meningitis",
+    "probid_guided_spinal_epidural_abscess",
+    "probid_guided_necrotizing_soft_tissue_infection",
+    "probid_guided_tb_uveitis",
+    "humanized_probid_route_cap_therapy_selection",
+    "humanized_probid_route_endocarditis",
+    "humanized_probid_route_generic_fungal_consult",
+    "humanized_probid_route_mold_therapy_selection",
+    "humanized_probid_route_spinal_epidural_abscess",
+    "immunoid_agent_rituximab",
+    "immunoid_agent_prednisone_20",
+    "immunoid_regimen_r_chop",
+    "humanized_immunoid_context_rituximab_strongy_yes",
+    "doseid_cefepime",
+    "doseid_levofloxacin",
+    "doseid_ertapenem",
+    "doseid_fluconazole",
+    "doseid_acyclovir_iv",
+    "doseid_followup_cefepime",
+    "humanized_doseid_followup_ertapenem",
+    "noisy_doseid_followup_acyclovir_iv",
+    "allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "humanized_allergy_immediate_amoxicillin_cefepime",
+    "noisy_humanized_allergy_generic_entry_prompt",
+    "noisy_allergy_followup_vanco_infusion_ceftriaxone",
+    "mechid_klebsiella_oxytoca",
+    "mechid_klebsiella_aerogenes",
+    "humanized_mechid_pseudomonas_aeruginosa",
+    "noisy_mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
+]
+
+PRODUCTION_COMPLEX_CASE_IDS = [
+    "assistant_boot_screen",
+    "cap_guided_consult",
+    "mechid_sdd_routing",
+    "allergy_negation_with_candidate",
+    "allergy_followup_from_vague_prompt",
+    "fungal_clarification_flow",
+    "mold_consult_routing",
+    "cefepime_hd_dosing",
+    "ripe_weight_basis",
+    "immunoid_hbv_core_positive",
+    "probid_guided_septic_arthritis",
+    "probid_guided_bacterial_meningitis",
+    "probid_guided_encephalitis",
+    "probid_guided_spinal_epidural_abscess",
+    "probid_guided_brain_abscess",
+    "probid_guided_necrotizing_soft_tissue_infection",
+    "probid_guided_tb_uveitis",
+    "humanized_probid_guided_septic_arthritis",
+    "humanized_probid_guided_bacterial_meningitis",
+    "humanized_probid_guided_encephalitis",
+    "humanized_probid_guided_spinal_epidural_abscess",
+    "humanized_probid_guided_brain_abscess",
+    "humanized_probid_guided_necrotizing_soft_tissue_infection",
+    "humanized_probid_guided_tb_uveitis",
+    "noisy_probid_guided_bacterial_meningitis",
+    "noisy_probid_guided_encephalitis",
+    "noisy_probid_guided_spinal_epidural_abscess",
+    "noisy_probid_guided_necrotizing_soft_tissue_infection",
+    "noisy_probid_guided_tb_uveitis",
+    "humanized_probid_route_cap_therapy_selection",
+    "humanized_probid_route_vancomycin_clarification",
+    "humanized_probid_route_hold_antibiotics_clarification",
+    "humanized_probid_route_endocarditis",
+    "humanized_probid_route_generic_fungal_consult",
+    "humanized_probid_route_mold_therapy_selection",
+    "humanized_probid_route_septic_arthritis",
+    "humanized_probid_route_spinal_epidural_abscess",
+    "humanized_probid_route_nsti",
+    "humanized_probid_route_tb_uveitis",
+    "noisy_humanized_probid_route_cap_therapy_selection",
+    "noisy_humanized_probid_route_vancomycin_clarification",
+    "noisy_humanized_probid_route_hold_antibiotics_clarification",
+    "noisy_humanized_probid_route_endocarditis",
+    "noisy_humanized_probid_route_generic_fungal_consult",
+    "noisy_humanized_probid_route_mold_therapy_selection",
+    "noisy_humanized_probid_route_septic_arthritis",
+    "noisy_humanized_probid_route_spinal_epidural_abscess",
+    "noisy_humanized_probid_route_nsti",
+    "noisy_humanized_probid_route_tb_uveitis",
+    "immunoid_context_rituximab_strongy_no",
+    "immunoid_context_rituximab_strongy_yes",
+    "immunoid_context_rituximab_strongy_unknown",
+    "humanized_immunoid_context_rituximab_strongy_no",
+    "humanized_immunoid_context_rituximab_strongy_yes",
+    "humanized_immunoid_context_rituximab_strongy_unknown",
+    "noisy_humanized_immunoid_context_rituximab_strongy_no",
+    "noisy_humanized_immunoid_context_rituximab_strongy_yes",
+    "noisy_humanized_immunoid_context_rituximab_strongy_unknown",
+    "humanized_immunoid_agent_rituximab",
+    "humanized_immunoid_agent_prednisone_20",
+    "humanized_immunoid_regimen_r_chop",
+    "noisy_immunoid_regimen_cybord",
+    "doseid_followup_cefepime",
+    "doseid_followup_vancomycin_iv",
+    "doseid_followup_ertapenem",
+    "doseid_followup_fluconazole",
+    "humanized_doseid_followup_cefepime",
+    "humanized_doseid_followup_ertapenem",
+    "humanized_doseid_followup_voriconazole",
+    "noisy_doseid_followup_acyclovir_iv",
+    "allergy_followup_immediate_penicillin_cefepime",
+    "allergy_followup_vanco_infusion_ceftriaxone",
+    "humanized_allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "humanized_allergy_immediate_amoxicillin_cefepime",
+    "humanized_allergy_generic_entry_prompt",
+    "noisy_humanized_allergy_vancomycin_infusion_reaction_ceftriaxone",
+    "noisy_humanized_allergy_generic_entry_prompt",
+    "noisy_allergy_followup_vanco_infusion_ceftriaxone",
+    "mechid_klebsiella_oxytoca",
+    "mechid_klebsiella_aerogenes",
+    "humanized_mechid_pseudomonas_aeruginosa",
+    "humanized_mechid_acinetobacter_baumannii_complex",
+    "mechid_to_doseid_pseudomonas_aeruginosa_cefepime",
+    "mechid_to_doseid_acinetobacter_baumannii_complex_ampicillin_sulbactam",
+    "humanized_mechid_to_doseid_enterobacter_cloacae_complex_cefepime",
+    "humanized_mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
+    "noisy_mechid_to_doseid_citrobacter_freundii_complex_cefepime",
+    "noisy_mechid_to_doseid_pseudomonas_aeruginosa_cefepime",
+    "noisy_mechid_to_doseid_enterococcus_faecium_daptomycin",
+    "noisy_mechid_to_doseid_staphylococcus_aureus_vancomycin_iv",
 ]
 
 
@@ -1752,11 +1890,33 @@ def _build_noisy_cases() -> List[Dict[str, Any]]:
     return generated_cases
 
 
+def _build_production_smoke_cases() -> List[Dict[str, Any]]:
+    noisy_cases = _build_noisy_cases()
+    cases_by_id = {str(case.get("id")): case for case in noisy_cases}
+
+    missing_ids = [case_id for case_id in PRODUCTION_SMOKE_CASE_IDS if case_id not in cases_by_id]
+    if missing_ids:
+        raise SystemExit(f"Missing production smoke case ids: {missing_ids}")
+
+    return [cases_by_id[case_id] for case_id in PRODUCTION_SMOKE_CASE_IDS]
+
+
+def _build_production_complex_cases() -> List[Dict[str, Any]]:
+    noisy_cases = _build_noisy_cases()
+    cases_by_id = {str(case.get("id")): case for case in noisy_cases}
+
+    missing_ids = [case_id for case_id in PRODUCTION_COMPLEX_CASE_IDS if case_id not in cases_by_id]
+    if missing_ids:
+        raise SystemExit(f"Missing production complex case ids: {missing_ids}")
+
+    return [cases_by_id[case_id] for case_id in PRODUCTION_COMPLEX_CASE_IDS]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate assistant evaluation datasets.")
     parser.add_argument(
         "--profile",
-        choices=["standard", "expanded", "humanized", "noisy"],
+        choices=["standard", "expanded", "humanized", "noisy", "production_smoke", "production_complex"],
         default="standard",
         help="Dataset profile to generate.",
     )
@@ -1768,7 +1928,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.profile == "noisy":
+    if args.profile == "production_complex":
+        generated_cases = _build_production_complex_cases()
+        expected_count = 90
+    elif args.profile == "production_smoke":
+        generated_cases = _build_production_smoke_cases()
+        expected_count = 40
+    elif args.profile == "noisy":
         generated_cases = _build_noisy_cases()
         expected_count = 360
     elif args.profile == "humanized":

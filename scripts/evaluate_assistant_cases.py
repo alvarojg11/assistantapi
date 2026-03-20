@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import socket
 import ssl
 import sys
 import urllib.error
@@ -80,6 +81,9 @@ class RemoteEvalClient(EvalClient):
                 except Exception:
                     body = None
             return err.code, body, raw_text
+        except (urllib.error.URLError, TimeoutError, socket.timeout) as err:
+            raw_text = f"Remote request failed: {type(err).__name__}: {err}"
+            return 599, {"error": raw_text}, raw_text
 
 
 @dataclass

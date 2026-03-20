@@ -1,10 +1,13 @@
 import unittest
+from unittest import mock
 
 from backend.app.main import (
+    _assistant_case_text_for_parser,
     _assistant_build_doseid_analysis,
     _assistant_detect_doseid_medication_ids,
     _assistant_is_doseid_intent,
     assistant_turn,
+    store,
 )
 from backend.app.schemas import AssistantTurnRequest, AntibioticAllergyTextAnalyzeRequest
 from backend.app.services.antibiotic_allergy_service import parse_antibiotic_allergy_text
@@ -291,6 +294,62 @@ class AssistantRegressionTests(unittest.TestCase):
         self.assertEqual(response.state.module_id, "spinal_epidural_abscess")
         self.assertIn(response.state.stage, {"select_preset", "confirm_case"})
         self.assertNotIn("TEE", response.assistant_message)
+
+    def test_spinal_epidural_abscess_mri_positive_shorthand_is_normalized_for_guided_parse(self) -> None:
+        module = store.get("spinal_epidural_abscess")
+        self.assertIsNotNone(module)
+
+        normalized = _assistant_case_text_for_parser(
+            module,
+            "Let me give the case in chunks.\nMicro-wise, MRI positive",
+        )
+
+        self.assertIn("MRI spine shows epidural abscess or phlegmon", normalized)
+
+    def test_humanized_guided_spinal_epidural_abscess_case_reaches_done(self) -> None:
+        request = AssistantTurnRequest()
+        response = assistant_turn(request)
+        response = assistant_turn(AssistantTurnRequest(state=response.state, selection="probid"))
+        response = assistant_turn(AssistantTurnRequest(state=response.state, selection="spinal_epidural_abscess"))
+        response = assistant_turn(AssistantTurnRequest(state=response.state, selection="sea_low"))
+        response = assistant_turn(AssistantTurnRequest(state=response.state, selection="continue_to_case"))
+
+        for message in (
+            "Let me give the case in chunks: back pain, fever, spinal tenderness, neurologic deficit",
+            "A little more color: ESR elevated, CRP elevated",
+            "Sorry, another detail I should have mentioned: blood cultures positive",
+            "Micro-wise, MRI positive",
+        ):
+            response = assistant_turn(AssistantTurnRequest(state=response.state, message=message))
+            if response.state.stage == "describe_case":
+                response = assistant_turn(AssistantTurnRequest(state=response.state, selection="continue_case_draft"))
+
+        response = assistant_turn(AssistantTurnRequest(state=response.state, selection="run_assessment"))
+
+        self.assertEqual(response.state.workflow, "probid")
+        self.assertEqual(response.state.module_id, "spinal_epidural_abscess")
+        self.assertEqual(response.state.stage, "done")
+        self.assertIsNotNone(response.analysis)
+        self.assertTrue(response.analysis.analysis.applied_findings)
+
+    def test_run_assessment_uses_cached_probid_parse_instead_of_reparsing(self) -> None:
+        response = assistant_turn(
+            AssistantTurnRequest(
+                message="ED patient with fever, cough, hypoxemia, and chest xray consolidation. Please help me assess pneumonia."
+            )
+        )
+
+        self.assertEqual(response.state.workflow, "probid")
+        self.assertEqual(response.state.stage, "confirm_case")
+        self.assertIsNotNone(response.state.probid_cached_case_result)
+
+        with mock.patch("backend.app.main._assistant_parse_case_text", side_effect=AssertionError("should not reparse")):
+            final = assistant_turn(AssistantTurnRequest(state=response.state, selection="run_assessment"))
+
+        self.assertEqual(final.state.workflow, "probid")
+        self.assertEqual(final.state.stage, "done")
+        self.assertIsNotNone(final.analysis)
+        self.assertIsNotNone(final.analysis.analysis)
 
 
 class AllergyParserRegressionTests(unittest.TestCase):
