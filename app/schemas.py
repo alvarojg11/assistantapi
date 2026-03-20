@@ -586,6 +586,9 @@ class AssistantState(BaseModel):
     institutional_antibiogram: Optional[Dict] = Field(default=None, alias="institutionalAntibiogram")
     # HIV consult context — carries ART, viral load, CD4, resistance, and special population data
     hiv_context: Optional[Dict] = Field(default=None, alias="hivContext")
+    # Clarifying question follow-up — saves intent + original message so the answer routes back correctly
+    pending_intent: Optional[str] = Field(default=None, alias="pendingIntent")
+    pending_intent_context: Optional[str] = Field(default=None, alias="pendingIntentContext")
 
     model_config = {"populate_by_name": True}
 

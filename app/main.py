@@ -9718,14 +9718,29 @@ def _needs_clarifying_question(
             )
 
         # Gap 2: Nosocomial-relevant syndrome without HA/CA clarity, no cultures yet
+        # Use word-boundary matching to avoid false positives like "pneumoniae" → "pneumonia"
+        import re as _re_clarify
         _is_nosocomial_relevant = any(
-            k in msg_lower for k in ("pneumonia", "pna", "bacteraemia", "bacteremia", "sepsis", "uti", "urosepsis")
+            _re_clarify.search(rf'\b{_re_clarify.escape(k)}\b', msg_lower)
+            for k in ("pneumonia", "pna", "bacteraemia", "bacteremia", "sepsis", "uti", "urosepsis")
         ) or any(
             k in (state.established_syndrome or "").lower()
             for k in ("pneumonia", "bacteraemia", "bacteremia", "sepsis", "uti")
         )
         _has_acquisition = any(k in msg_lower for k in _HA_KEYWORDS + _CA_KEYWORDS)
-        if _is_nosocomial_relevant and not _has_acquisition and not state.consult_organisms:
+        # If the message already names a specific organism from cultures, HA/CA is
+        # clinically irrelevant — this is directed therapy, not truly empiric.
+        _has_organism_in_msg = any(
+            k in msg_lower for k in (
+                "klebsiella", "e. coli", "escherichia", "pseudomonas", "enterobacter",
+                "serratia", "proteus", "citrobacter", "morganella", "acinetobacter",
+                "stenotrophomonas", "burkholderia", "staphylococcus", "s. aureus",
+                "mssa", "mrsa", "enterococcus", "streptococcus", "candida",
+                "blood culture", "blood cultures", "culture grew", "cultures growing",
+                "cultures grew", "culture growing", "culture positive", "cultures positive",
+            )
+        )
+        if _is_nosocomial_relevant and not _has_acquisition and not state.consult_organisms and not _has_organism_in_msg:
             return (
                 "Healthcare-associated or community-acquired? "
                 "This changes my first-line choice — I'd broaden for hospital-acquired "
@@ -9767,8 +9782,19 @@ def _build_clarifying_question_response(
     question: str,
     options: list[AssistantOption],
     state: AssistantState,
+    intent: str | None = None,
+    original_text: str | None = None,
 ) -> AssistantTurnResponse:
-    """Build an assistant response that asks a single targeted clarifying question."""
+    """Build an assistant response that asks a single targeted clarifying question.
+
+    When *intent* and *original_text* are provided, they are saved in the state
+    so that the user's answer (click or free-text) routes back to the same
+    intent handler with the original context preserved.
+    """
+    if intent:
+        state.pending_intent = intent
+    if original_text:
+        state.pending_intent_context = original_text
     return AssistantTurnResponse(
         assistantMessage=question,
         state=state,
@@ -9847,7 +9873,10 @@ def _assistant_empiric_therapy_response(
     """Answer an empiric therapy question — best regimen before cultures return."""
     clarifying = _needs_clarifying_question("empiric_therapy", message_text, state)
     if clarifying is not None:
-        return _build_clarifying_question_response(clarifying[0], clarifying[1], state)
+        return _build_clarifying_question_response(
+            clarifying[0], clarifying[1], state,
+            intent="empiric_therapy", original_text=message_text,
+        )
 
     patient_summary = _consult_prior_context_summary(state)
     fallback_message = (
@@ -10547,7 +10576,10 @@ def _assistant_treatment_failure_response(
     """Structured differential for treatment failure — patient not improving on antibiotics."""
     clarifying = _needs_clarifying_question("treatment_failure", message_text, state)
     if clarifying is not None:
-        return _build_clarifying_question_response(clarifying[0], clarifying[1], state)
+        return _build_clarifying_question_response(
+            clarifying[0], clarifying[1], state,
+            intent="treatment_failure", original_text=message_text,
+        )
 
     patient_summary = _consult_prior_context_summary(state)
     fallback_message = (
@@ -15367,6 +15399,53 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     # Extract patient demographics from every incoming message and accumulate into session context
     if (req.message or "").strip():
         _update_session_patient_context(state, req.message or "")
+
+    # Handle follow-up to a clarifying question — route back to the saved intent
+    # with original context + the user's answer combined.
+    if state.pending_intent and not restart_requested:
+        _pi_intent = state.pending_intent
+        _pi_original = state.pending_intent_context or ""
+        _pi_follow_up = (req.message or "").strip()
+        if not _pi_follow_up:
+            # User clicked an option — use the label / insertText (sent as selection)
+            _pi_follow_up = (req.selection or "").strip()
+        _pi_combined = f"{_pi_original} {_pi_follow_up}".strip() if _pi_original else _pi_follow_up
+        # Clear pending state before routing to avoid infinite loops
+        state.pending_intent = None
+        state.pending_intent_context = None
+        return _assistant_route_by_intent(_pi_intent, req, state, _pi_combined)
+
+    # Route option clicks whose value is a known intent name.
+    # When the user clicks a chip like "Calculate dosing" (value="doseid") or
+    # "IV-to-oral step-down" (value="iv_to_oral"), the frontend sends
+    # selection=<value> with no message.  Module IDs (probid, mechid, etc.)
+    # are caught later by _select_module_from_turn, but intent names
+    # (empiric_therapy, duration, opat, ...) would otherwise fall through
+    # to the default welcome screen.
+    _ROUTABLE_INTENT_SELECTIONS: frozenset[str] = frozenset({
+        "empiric_therapy", "iv_to_oral", "duration", "followup_tests",
+        "stewardship", "stewardship_review", "opat", "oral_therapy",
+        "discharge_counselling", "drug_interaction", "prophylaxis",
+        "source_control", "treatment_failure", "biomarker_interpretation",
+        "fluid_interpretation", "allergy_delabeling", "fungal_management",
+        "sepsis_management", "cns_infection", "mycobacterial",
+        "pregnancy_antibiotics", "travel_medicine", "impression_plan",
+        "duke_criteria", "ast_meaning", "complexity_flag", "course_tracker",
+        "consult_summary", "general_id",
+        "hiv_initial_art", "hiv_monitoring", "hiv_prep", "hiv_pep",
+        "hiv_pregnancy", "hiv_oi_art_timing", "hiv_treatment_failure",
+        "hiv_resistance", "hiv_switch",
+    })
+    _sel_value = (req.selection or "").strip()
+    if _sel_value in _ROUTABLE_INTENT_SELECTIONS and not restart_requested:
+        # Use req.message if present (user typed + clicked), otherwise
+        # build a minimal message from the intent name for the handler.
+        _sel_msg = (req.message or "").strip()
+        if not _sel_msg:
+            _sel_msg = _sel_value.replace("_", " ")
+        _sel_routed = _assistant_route_by_intent(_sel_value, req, state, _sel_msg)
+        if _sel_routed is not None:
+            return _sel_routed
 
     if state.stage == "select_module":
         message_text = (req.message or "").strip()
