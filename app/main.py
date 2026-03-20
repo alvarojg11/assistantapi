@@ -2978,7 +2978,7 @@ def assistant_mechid_image(req: MechIDImageAnalyzeRequest) -> AssistantTurnRespo
 @app.post("/v1/assistant/antibiogram-upload", response_model=AssistantTurnResponse)
 def assistant_antibiogram_upload(req: AntibiogramUploadRequest) -> AssistantTurnResponse:
     """Load an institutional antibiogram image into the session state for antibiogram-aware empiric therapy."""
-    state = _get_or_init_state(req.state)
+    state = req.state if req.state is not None else AssistantState()
     try:
         antibiogram = parse_antibiogram_image_with_openai(
             image_data_url=req.image_data_url,
@@ -3004,25 +3004,48 @@ def assistant_antibiogram_upload(req: AntibiogramUploadRequest) -> AssistantTurn
     ambiguities = antibiogram.get("ambiguities", [])
     ambiguity_note = f" Flagged ambiguities: {'; '.join(ambiguities[:3])}." if ambiguities else ""
 
+    # Build context-aware message — mention the active syndrome if one is established
+    syndrome_note = ""
+    if state.established_syndrome:
+        syndrome_note = (
+            f" Since we're working up **{state.established_syndrome}**, "
+            "I can immediately give you empiric coverage recommendations using your local resistance data."
+        )
+    elif not state.consult_organisms:
+        syndrome_note = (
+            " Ask me 'What's the best empiric coverage for HAP?' or start a syndrome workup "
+            "and I'll tailor recommendations to your local data."
+        )
+
     assistant_message = (
-        f"I've loaded {institution}{year_str}'s antibiogram covering {org_count} organism{'s' if org_count != 1 else ''}{confidence_note}. "
-        f"Organisms on file: {org_names}.{ambiguity_note} "
-        "From now on, when you ask for empiric therapy recommendations, I'll incorporate your local resistance rates — "
-        "flagging any agent where local susceptibility is below 80% and suggesting alternatives with higher coverage at your institution."
+        f"Antibiogram loaded — {institution}{year_str}, {org_count} organism{'s' if org_count != 1 else ''}{confidence_note}. "
+        f"Organisms on file: {org_names}.{ambiguity_note}"
+        f"{syndrome_note} "
+        "I'll flag any agent where local susceptibility is below 80% and suggest alternatives with better coverage at your institution."
     )
+
+    # Offer empiric therapy first if syndrome is known; otherwise offer workup options
+    antibiogram_options: list[AssistantOption] = []
+    if state.established_syndrome:
+        antibiogram_options.append(AssistantOption(value="empiric_therapy", label=f"Empiric therapy for {state.established_syndrome}"))
+    else:
+        antibiogram_options.append(AssistantOption(value="empiric_therapy", label="Ask about empiric therapy"))
+    if not state.consult_organisms:
+        antibiogram_options.append(AssistantOption(value="mechid", label="Paste culture results"))
+    if not state.established_syndrome:
+        antibiogram_options.append(AssistantOption(value="probid", label="Start syndrome workup"))
+    if _is_mid_consult(state):
+        antibiogram_options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+
     tips = [
-        "Ask 'What's the best empiric coverage for HAP at our institution?' and I'll use your antibiogram.",
-        "You can upload a new antibiogram at any time to update the local data.",
+        "I'll flag agents with <80% local susceptibility and recommend alternatives — ask about any syndrome or organism.",
+        "You can upload a new antibiogram at any time to update the local resistance data.",
     ]
     return AssistantTurnResponse(
         assistantMessage=assistant_message,
         assistantNarrationRefined=False,
         state=state,
-        options=[
-            AssistantOption(value="empiric_therapy", label="Ask about empiric therapy"),
-            AssistantOption(value="mechid", label="Paste culture results"),
-            AssistantOption(value="probid", label="Start syndrome workup"),
-        ],
+        options=antibiogram_options,
         tips=tips,
     )
 
@@ -5728,7 +5751,107 @@ def _friendly_mechid_bottom_line(
     return "The main takeaway is that this pattern needs organism-specific interpretation before choosing therapy."
 
 
-def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False, established_syndrome: str | None = None) -> str:
+# ---------------------------------------------------------------------------
+# Antibiogram organism lookup helpers
+# ---------------------------------------------------------------------------
+
+_ANTIBIOGRAM_ORG_ALIASES: Dict[str, List[str]] = {
+    "e. coli": ["escherichia coli", "e coli", "ecoli"],
+    "k. pneumoniae": ["klebsiella pneumoniae", "klebsiella", "k pneumoniae", "kpneumoniae"],
+    "k. oxytoca": ["klebsiella oxytoca"],
+    "p. aeruginosa": ["pseudomonas aeruginosa", "pseudomonas", "p aeruginosa"],
+    "s. aureus": ["staphylococcus aureus", "s aureus", "staph aureus"],
+    "s. aureus (mssa)": ["mssa", "methicillin-susceptible s. aureus"],
+    "s. aureus (mrsa)": ["mrsa", "methicillin-resistant s. aureus"],
+    "e. faecalis": ["enterococcus faecalis", "enterococcus"],
+    "e. faecium": ["enterococcus faecium", "vre"],
+    "s. pneumoniae": ["streptococcus pneumoniae", "strep pneumoniae", "pneumococcus"],
+    "acinetobacter baumannii": ["acinetobacter", "a. baumannii"],
+    "enterobacter cloacae": ["enterobacter", "e. cloacae"],
+    "proteus mirabilis": ["proteus", "p. mirabilis"],
+    "serratia marcescens": ["serratia", "s. marcescens"],
+    "candida albicans": ["c. albicans"],
+    "candida glabrata": ["c. glabrata", "nakaseomyces glabrata"],
+    "candida tropicalis": ["c. tropicalis"],
+    "candida parapsilosis": ["c. parapsilosis"],
+    "candida krusei": ["c. krusei", "pichia kudriavzevii"],
+}
+
+
+def _antibiogram_lookup_organism(
+    antibiogram: Dict[str, Any],
+    organism_name: str,
+) -> Dict[str, float] | None:
+    """Fuzzy-match organism_name against antibiogram organism keys.
+
+    Returns the antibiotic→%susceptible dict for the best match, or None.
+    Matching is case-insensitive with alias expansion.
+    """
+    if not antibiogram:
+        return None
+    organisms: Dict[str, Dict[str, float]] = antibiogram.get("organisms") or {}
+    if not organisms:
+        return None
+
+    needle = organism_name.lower().strip()
+
+    # Direct match first
+    for key, abx_map in organisms.items():
+        if key.lower() == needle:
+            return abx_map
+
+    # Alias expansion: needle → canonical key
+    for canonical, aliases in _ANTIBIOGRAM_ORG_ALIASES.items():
+        if needle == canonical or needle in aliases:
+            for key, abx_map in organisms.items():
+                if key.lower() == canonical:
+                    return abx_map
+            # also check if any alias matches a key
+            for key, abx_map in organisms.items():
+                if key.lower() in aliases:
+                    return abx_map
+
+    # Partial substring match (e.g. "klebsiella" matches "K. pneumoniae")
+    for key, abx_map in organisms.items():
+        key_lower = key.lower()
+        if needle in key_lower or key_lower in needle:
+            return abx_map
+        # genus match (first word)
+        if needle.split()[0] in key_lower.split()[0] if needle.split() else False:
+            return abx_map
+
+    return None
+
+
+def _antibiogram_provisional_note(
+    antibiogram: Dict[str, Any],
+    organism_name: str,
+    top_n: int = 8,
+) -> str | None:
+    """Return a one-sentence summary of local susceptibility data for organism_name.
+
+    Returns None if organism not found in antibiogram.
+    """
+    abx_map = _antibiogram_lookup_organism(antibiogram, organism_name)
+    if not abx_map:
+        return None
+    # Sort descending by susceptibility so best options are first
+    sorted_abx = sorted(abx_map.items(), key=lambda x: -x[1])[:top_n]
+    institution = antibiogram.get("institution") or "your institution"
+    year = antibiogram.get("year")
+    src = f"{institution}{', ' + year if year else ''}"
+    pairs = ", ".join(f"{abx} {int(pct)}%" for abx, pct in sorted_abx)
+    good = [abx for abx, pct in sorted_abx if pct >= 80]
+    poor = [abx for abx, pct in sorted_abx if pct < 60]
+    note = f"Local antibiogram ({src}) for {organism_name}: {pairs}."
+    if good:
+        note += f" Reliable empirically (≥80%): {', '.join(good[:3])}."
+    if poor:
+        note += f" Unreliable empirically (<60%): {', '.join(poor[:3])}."
+    return note
+
+
+def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bool = False, established_syndrome: str | None = None, institutional_antibiogram: Dict[str, Any] | None = None) -> str:
     parsed = result.parsed_request
     if parsed is None:
         message = (
@@ -5760,6 +5883,13 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
         if parsed.tx_context.carbapenemase_class != "Not specified":
             carbapenemase_summary += f" ({parsed.tx_context.carbapenemase_class})"
         summary += f" Carbapenemase testing: {carbapenemase_summary}."
+
+    # Inject local antibiogram data when organism is identified but AST is absent/sparse
+    has_no_ast = not parsed.susceptibility_results
+    if has_no_ast and institutional_antibiogram and parsed.organism:
+        local_note = _antibiogram_provisional_note(institutional_antibiogram, parsed.organism)
+        if local_note:
+            summary += f"\n\nLocal susceptibility data (no AST provided): {local_note}"
 
     if not final:
         if result.analysis is not None:
@@ -5795,7 +5925,10 @@ def _build_mechid_review_message(result: MechIDTextAnalyzeResponse, *, final: bo
 
         if result.warnings:
             summary += " " + _join_readable(result.warnings[:2])
-        summary += " Add or correct susceptibility details so I can infer a mechanism and therapy plan."
+        if has_no_ast and institutional_antibiogram and parsed.organism:
+            summary += " Ask for my consultant impression and I'll use your local antibiogram data to guide empiric therapy, or paste the actual AST results for targeted therapy."
+        else:
+            summary += " Add susceptibilities for targeted therapy, or ask for my impression and I'll use guideline-based empiric recommendations."
         return summary
 
     if result.analysis is not None:
@@ -5854,8 +5987,9 @@ def _assistant_mechid_review_message(
     established_syndrome: str | None = None,
     consult_organisms: List[str] | None = None,
     polymicrobial_analyses: List[Dict[str, Any]] | None = None,
+    institutional_antibiogram: Dict[str, Any] | None = None,
 ) -> tuple[str, bool]:
-    fallback = _build_mechid_review_message(result, final=final, established_syndrome=established_syndrome)
+    fallback = _build_mechid_review_message(result, final=final, established_syndrome=established_syndrome, institutional_antibiogram=institutional_antibiogram)
     if final:
         return narrate_mechid_assistant_message(
             mechid_result=result,
@@ -7452,10 +7586,16 @@ def _assistant_consult_generic_antimicrobial_clarification_response(
     return response
 
 
-def _assistant_llm_triage_intent(message_text: str) -> str | None:
+def _assistant_llm_triage_intent(message_text: str, state: "AssistantState | None" = None) -> "dict | None":
     """
-    Use the LLM to classify a free-text message into one of the known workflow intents.
-    Returns one of: 'probid', 'mechid', 'doseid', 'immunoid', 'allergyid', 'general_id', 'unclear'.
+    Use the LLM to classify a free-text message into a known workflow intent AND extract
+    any clinical data embedded in the message (age, weight, creatinine, organisms, allergy, etc.).
+
+    Context-aware: passes the current consult state so routing accounts for what is already known.
+
+    Returns a dict with:
+      - 'intent': one of the known intent strings
+      - 'extracted': dict of clinical data found in the message (may be partially filled)
     Returns None if the LLM is unavailable or the call fails, so the caller can fall through.
     """
     from .services.consult_narrator import consult_narration_enabled
@@ -7477,46 +7617,100 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
         client = OpenAI(**client_kwargs)
         model = _os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
+        _VALID_INTENTS = {
+            "probid", "mechid", "doseid", "immunoid", "allergyid",
+            "empiric_therapy", "iv_to_oral", "duration", "followup_tests",
+            "stewardship", "stewardship_review", "opat", "oral_therapy",
+            "discharge_counselling", "drug_interaction", "prophylaxis",
+            "source_control", "treatment_failure", "biomarker_interpretation",
+            "fluid_interpretation", "allergy_delabeling", "fungal_management",
+            "sepsis_management", "cns_infection", "mycobacterial",
+            "pregnancy_antibiotics", "travel_medicine", "impression_plan",
+            "duke_criteria", "ast_meaning", "complexity_flag", "course_tracker",
+            "general_id", "consult_summary",
+            "hiv_initial_art", "hiv_monitoring",
+            "hiv_prep", "hiv_pep", "hiv_pregnancy", "hiv_oi_art_timing",
+            "hiv_treatment_failure", "hiv_resistance", "hiv_switch",
+            "unclear",
+        }
+
+        # Build a compact context block from current consult state
+        context_block = ""
+        if state is not None:
+            ctx = _consult_prior_context_summary(state)
+            if ctx:
+                context_block = f"CURRENT CONSULT CONTEXT (already known): {ctx}\n\n"
+
         triage_prompt = (
-            "You are routing an infectious diseases clinical assistant query to the correct analysis module.\n"
-            "Read the clinician's message and classify it into exactly one of these intents:\n"
-            "- probid: Syndrome workup — describes patient findings (symptoms, vitals, labs, cultures, imaging) suggesting an infectious syndrome\n"
-            "- mechid: Resistance/AST interpretation — mentions an organism plus susceptibility results or asks about resistance mechanisms\n"
-            "- doseid: Antimicrobial dosing — asks about drug dose, renal adjustment, dialysis dosing, or regimen calculation\n"
-            "- immunoid: Prophylaxis or immunosuppression — mentions biologic therapy, chemotherapy, steroids, transplant, or asks about pre-treatment infection screening\n"
-            "- allergyid: Antibiotic allergy or cross-reactivity — describes an antibiotic allergy and asks what is safe to use\n"
-            "- empiric_therapy: Asks what antibiotic to start empirically — before cultures return, or what to cover given a syndrome without yet knowing the organism\n"
-            "- iv_to_oral: Asks whether to switch from IV to oral antibiotics, or what the oral equivalent is for a given regimen\n"
-            "- duration: Asks how long to treat, when to stop antibiotics, or what the duration of therapy should be\n"
-            "- followup_tests: Asks about follow-up investigations — TEE, repeat blood cultures, inflammatory markers, drug levels, imaging, or lung biopsy\n"
-            "- stewardship: Asks about de-escalation, narrowing antibiotics, streamlining therapy after cultures return, or stopping unnecessary agents\n"
-            "- stewardship_review: Asks to review a specific list of current antibiotics and advise stop/narrow/continue for each agent\n"
-            "- opat: Asks about OPAT (outpatient parenteral antibiotic therapy), discharging on IV antibiotics, home IV therapy, or PICC line suitability\n"
-            "- oral_therapy: Asks about oral antibiotic options for a syndrome — whether oral is appropriate, which oral agent to use, OVIVA/POET trial applicability\n"
-            "- discharge_counselling: Asks what to tell the patient at discharge — treatment plan, monitoring schedule, red flag symptoms, follow-up instructions\n"
-            "- drug_interaction: Asks about a drug-drug interaction involving an antimicrobial — safety of combining two drugs, CYP interactions, additive toxicity, dose adjustment needed\n"
-            "- prophylaxis: Asks about antimicrobial prophylaxis dosing for an immunosuppressed patient — PCP, MAC, antifungal, CMV, toxoplasma, or HBV reactivation prophylaxis\n"
-            "- source_control: Asks about source control — whether to remove a line, drain an abscess, perform debridement, retain or exchange a prosthetic joint or cardiac device\n"
-            "- treatment_failure: Patient is not improving on antibiotics — asks why treatment is failing, what to do, differential for persistent fever or bacteraemia\n"
-            "- biomarker_interpretation: Asks what a specific lab value means — procalcitonin, beta-D-glucan, galactomannan, cryptococcal antigen, IGRA, histoplasma antigen\n"
-            "- fluid_interpretation: Asks about the meaning of CSF, pleural, ascitic, peritoneal, or synovial fluid results — cell count, glucose, protein, opening pressure\n"
-            "- allergy_delabeling: Asks whether a reported antibiotic allergy is genuine, whether it is safe to rechallenge, cross-reactivity between beta-lactams, oral challenge or skin test decision\n"
-            "- fungal_management: Asks about invasive fungal infection treatment — candidaemia, invasive Aspergillosis, cryptococcal meningitis, mucormycosis, antifungal choice and duration\n"
-            "- sepsis_management: Asks about sepsis recognition, the Hour-1 bundle, vasopressors, lactate, or PCT-guided antibiotic stopping in a septic patient\n"
-            "- cns_infection: Asks about CNS infection management — bacterial meningitis empiric therapy, dexamethasone timing, HSV encephalitis acyclovir, brain abscess drainage, Listeria coverage\n"
-            "- mycobacterial: Asks about TB treatment (HRZE), LTBI treatment (3HP/6H), MAC pulmonary disease, MDR-TB, TB drug monitoring\n"
-            "- pregnancy_antibiotics: Asks about antibiotic safety in pregnancy — which antibiotics are safe, which to avoid, trimester-specific guidance, GBS prophylaxis\n"
-            "- travel_medicine: Asks about fever or illness in a returned traveller — malaria workup and treatment, dengue, typhoid, rickettsiae, eosinophilia, tropical infections\n"
-            "- impression_plan: Clinician asks for a structured impression and plan suitable for the medical record — 'write a consult note', 'give me the impression and plan', 'write up the case'\n"
-            "- duke_criteria: Asks about applying Modified Duke Criteria for endocarditis classification — major/minor criteria, definite/possible/rejected IE classification\n"
-            "- ast_meaning: Asks what an AST resistance phenotype means clinically — ESBL, AmpC, MRSA beta-lactam reliability, vancomycin MIC, D-zone, daptomycin-lung, hVISA\n"
-            "- complexity_flag: Asks whether a case is complex, whether to escalate, whether it needs MDT review, or flags high-risk features\n"
-            "- course_tracker: Asks about day-of-therapy milestones — what to check on day X, when to switch to oral, when treatment is complete, SAB/IE/candidaemia duration\n"
-            "- general_id: General ID knowledge question — educational or conceptual ID question without specific patient findings for formal analysis\n"
-            "- consult_summary: The clinician is asking for a summary, full picture, or recap of everything discussed in this consult\n"
-            "- unclear: Cannot be classified as an infectious diseases question\n"
-            "Reply with ONLY a JSON object on one line: {\"intent\": \"<one of the above>\"}\n"
-            "No explanation, no markdown, no extra keys."
+            "You are the intake layer of an infectious diseases clinical AI assistant.\n"
+            "Your job is TWO things simultaneously:\n"
+            "1. Identify what the clinician is ACTUALLY ASKING (the clinical question), "
+            "not just what clinical data they are providing.\n"
+            "2. Extract any patient or clinical data embedded in the message.\n\n"
+            + context_block
+            + "AVAILABLE INTENTS:\n"
+            "- probid: Syndrome workup — describes patient findings suggesting an infectious syndrome\n"
+            "- mechid: Resistance/AST interpretation — organism + susceptibility results or resistance mechanisms\n"
+            "- doseid: Antimicrobial dosing — dose, renal adjustment, dialysis dosing, weight-based calculation\n"
+            "- immunoid: Prophylaxis/immunosuppression — biologic therapy, chemotherapy, steroids, transplant, pre-treatment screening\n"
+            "- allergyid: Antibiotic allergy or cross-reactivity — allergy history + what is safe to use\n"
+            "- empiric_therapy: What antibiotic to start empirically before cultures return\n"
+            "- iv_to_oral: Whether/how to switch from IV to oral antibiotics\n"
+            "- duration: How long to treat or when to stop antibiotics\n"
+            "- followup_tests: Follow-up investigations — TEE, repeat cultures, drug levels, imaging\n"
+            "- stewardship: De-escalation, narrowing, streamlining after cultures return\n"
+            "- stewardship_review: Review a named list of current antibiotics and advise stop/narrow/continue\n"
+            "- opat: OPAT eligibility, home IV therapy, PICC line, discharge on IV antibiotics\n"
+            "- oral_therapy: Oral antibiotic options for a syndrome — OVIVA/POET applicability\n"
+            "- discharge_counselling: What to tell the patient at discharge\n"
+            "- drug_interaction: Drug-drug interaction involving an antimicrobial\n"
+            "- prophylaxis: Antimicrobial prophylaxis dosing for an immunosuppressed patient\n"
+            "- source_control: Line removal, abscess drainage, debridement, prosthetic joint/device decision\n"
+            "- treatment_failure: Patient not improving — why is treatment failing, persistent fever/bacteraemia\n"
+            "- biomarker_interpretation: What a specific lab value means (PCT, BDG, galactomannan, IGRA, CrAg)\n"
+            "- fluid_interpretation: CSF, pleural, ascitic, or synovial fluid result interpretation\n"
+            "- allergy_delabeling: Is a reported antibiotic allergy genuine, rechallenge decision, oral challenge\n"
+            "- fungal_management: Candidaemia, invasive aspergillosis, cryptococcal meningitis, mucormycosis\n"
+            "- sepsis_management: Sepsis bundle, Hour-1, vasopressors, PCT stopping rule\n"
+            "- cns_infection: Bacterial meningitis, HSV encephalitis, brain abscess, Listeria coverage\n"
+            "- mycobacterial: TB treatment, LTBI, MAC pulmonary, MDR-TB\n"
+            "- pregnancy_antibiotics: Antibiotic safety in pregnancy, trimester-specific guidance, GBS\n"
+            "- travel_medicine: Returned traveller with fever — malaria, dengue, typhoid, tropical infections\n"
+            "- impression_plan: Write a structured ID consult note with impression and numbered plan\n"
+            "- duke_criteria: Apply Modified Duke Criteria for endocarditis classification\n"
+            "- ast_meaning: What a resistance phenotype means clinically (ESBL, AmpC, MRSA, hVISA, D-zone)\n"
+            "- complexity_flag: Whether a case is complex, whether to escalate or needs MDT review\n"
+            "- course_tracker: Day-of-therapy milestones, what to check on day X, when treatment is complete\n"
+            "- hiv_initial_art: Start ART, new HIV diagnosis, recommend antiretroviral regimen, Biktarvy, Dovato, dolutegravir\n"
+            "- hiv_monitoring: HIV lab monitoring schedule, when to check viral load, CD4 monitoring, ART labs\n"
+            "- hiv_prep: PrEP, pre-exposure prophylaxis, HIV prevention, Truvada, Descovy, cabotegravir, Apretude, doxyPEP\n"
+            "- hiv_pep: PEP, post-exposure prophylaxis, needlestick, HIV exposure, occupational exposure\n"
+            "- hiv_pregnancy: HIV in pregnancy, ART in pregnancy, PMTCT, neonatal prophylaxis, HIV delivery planning\n"
+            "- hiv_oi_art_timing: When to start ART with an active OI, IRIS risk, defer ART for crypto/TB meningitis\n"
+            "- hiv_treatment_failure: HIV virological failure, detectable viral load on ART, adherence assessment, ART not working\n"
+            "- hiv_resistance: HIV resistance mutations, genotype interpretation, drug resistance testing, M184V, K65R, INSTI mutations\n"
+            "- hiv_switch: Simplify ART, switch regimen, 2-drug regimen eligibility, injectable ART, Cabenuva, lenacapavir\n"
+            "- general_id: General ID knowledge question without specific patient findings for formal analysis\n"
+            "- consult_summary: Summary, full picture, or recap of this entire consult\n"
+            "- unclear: Cannot be classified as an infectious diseases question\n\n"
+            "CRITICAL ROUTING RULES — read carefully:\n"
+            "- Classify by the QUESTION being asked, not by the clinical data being provided. "
+            "A message that gives age/weight/creatinine + asks about a dose → doseid. "
+            "A message that gives organism/AST + asks 'what do I treat with?' → mechid. "
+            "A message that gives all patient info + asks 'what to start?' with no cultures → empiric_therapy.\n"
+            "- If consult context shows an established syndrome AND the message says 'still febrile', "
+            "'not improving', 'cultures still positive after 48h', 'persistent bacteraemia' → treatment_failure.\n"
+            "- If the message lists current antibiotics by name and asks to review or optimise → stewardship_review.\n"
+            "- If cultures are back (organism mentioned) but question is 'what's the best drug?' → mechid.\n"
+            "- If no organism yet and question is about what to start → empiric_therapy.\n"
+            "- If patient demographics + drug name + renal data → doseid.\n\n"
+            "Reply with ONLY a JSON object on one line — no markdown, no explanation:\n"
+            "{\"intent\": \"<one of the above>\", \"extracted\": {\"age_years\": <int|null>, "
+            "\"sex\": <\"male\"|\"female\"|null>, \"weight_kg\": <float|null>, "
+            "\"height_cm\": <float|null>, \"creatinine\": <float|null>, "
+            "\"renal_mode\": <\"ihd\"|\"crrt\"|null>, \"organisms\": [<strings>], "
+            "\"allergy\": <str|null>, \"syndrome_hint\": <str|null>}}\n"
+            "Set null for any extracted field not mentioned. organisms is [] if none mentioned."
         )
 
         response = client.responses.create(
@@ -7527,11 +7721,73 @@ def _assistant_llm_triage_intent(message_text: str) -> str | None:
         output_text = getattr(response, "output_text", None) or ""
         data = _json.loads(output_text.strip())
         intent = data.get("intent", "unclear")
-        if intent not in {"probid", "mechid", "doseid", "immunoid", "allergyid", "empiric_therapy", "iv_to_oral", "duration", "followup_tests", "stewardship", "stewardship_review", "opat", "oral_therapy", "discharge_counselling", "drug_interaction", "prophylaxis", "source_control", "treatment_failure", "biomarker_interpretation", "fluid_interpretation", "allergy_delabeling", "fungal_management", "sepsis_management", "cns_infection", "mycobacterial", "pregnancy_antibiotics", "travel_medicine", "impression_plan", "duke_criteria", "ast_meaning", "complexity_flag", "course_tracker", "general_id", "consult_summary", "unclear"}:
-            return "unclear"
-        return intent
+        if intent not in _VALID_INTENTS:
+            intent = "unclear"
+        data["intent"] = intent
+        if "extracted" not in data or not isinstance(data["extracted"], dict):
+            data["extracted"] = {}
+        return data
     except Exception:
         return None
+
+
+def _apply_triage_extracted_context(state: AssistantState, extracted: dict) -> None:
+    """
+    Apply clinical data extracted by LLM triage to the session state.
+    Only fills fields that are not yet known — never overwrites existing data.
+    Called before routing so all downstream response functions benefit from the richer context.
+    """
+    if not extracted:
+        return
+
+    # Ensure patient_context exists
+    if state.patient_context is None:
+        from .schemas import SessionPatientContext as _SPC
+        state.patient_context = _SPC()
+
+    pc = state.patient_context
+
+    if pc.age_years is None and extracted.get("age_years") is not None:
+        try:
+            pc.age_years = int(extracted["age_years"])
+        except (TypeError, ValueError):
+            pass
+
+    if pc.sex is None and extracted.get("sex") in ("male", "female"):
+        pc.sex = extracted["sex"]
+
+    if pc.total_body_weight_kg is None and extracted.get("weight_kg") is not None:
+        try:
+            pc.total_body_weight_kg = float(extracted["weight_kg"])
+        except (TypeError, ValueError):
+            pass
+
+    if pc.height_cm is None and extracted.get("height_cm") is not None:
+        try:
+            pc.height_cm = float(extracted["height_cm"])
+        except (TypeError, ValueError):
+            pass
+
+    if pc.serum_creatinine_mg_dl is None and extracted.get("creatinine") is not None:
+        try:
+            pc.serum_creatinine_mg_dl = float(extracted["creatinine"])
+        except (TypeError, ValueError):
+            pass
+
+    if pc.renal_mode == "standard" and extracted.get("renal_mode") in ("ihd", "crrt"):
+        pc.renal_mode = extracted["renal_mode"]
+
+    if not pc.allergy_text and extracted.get("allergy"):
+        pc.allergy_text = str(extracted["allergy"])
+
+    # Accumulate organisms — add new ones not already tracked
+    new_orgs = [str(o).strip() for o in (extracted.get("organisms") or []) if o and str(o).strip()]
+    if new_orgs:
+        existing_lower = {o.lower() for o in (state.consult_organisms or [])}
+        for org in new_orgs:
+            if org.lower() not in existing_lower:
+                state.consult_organisms = list(state.consult_organisms or []) + [org]
+                existing_lower.add(org.lower())
 
 
 def _assistant_consult_summary_response(state: AssistantState) -> AssistantTurnResponse:
@@ -7611,7 +7867,6 @@ _CONSULT_SUMMARY_TRIGGERS: tuple[str, ...] = (
     "pull it together",
     "put it together",
     "what's the plan",
-    "the plan",
 )
 
 
@@ -8338,19 +8593,28 @@ def _is_travel_medicine_request(text: str) -> bool:
 _IMPRESSION_PLAN_TRIGGERS: tuple[str, ...] = (
     "impression and plan",
     "impression & plan",
+    "assessment and plan",
+    "assessment & plan",
+    "a&p",
+    "a & p",
     "write an impression",
+    "write the impression",
+    "write an assessment",
+    "write the assessment",
     "write a plan",
+    "write the plan",
     "id consult note",
     "consult note",
     "write up the consult",
     "generate impression",
+    "generate assessment",
     "write the note",
     "formulate a plan",
     "what's my impression",
     "what is my impression",
     "note for the chart",
-    "documentation",
     "write a note",
+    "impression_plan",
 )
 
 
@@ -8371,6 +8635,7 @@ _DUKE_CRITERIA_TRIGGERS: tuple[str, ...] = (
     "major criteria",
     "minor criteria",
     "duke classification",
+    "duke_criteria",
 )
 
 
@@ -8402,6 +8667,7 @@ _AST_MEANING_TRIGGERS: tuple[str, ...] = (
     "explain the ast",
     "what does resistant mean",
     "what does intermediate mean",
+    "ast_meaning",
 )
 
 
@@ -8426,6 +8692,7 @@ _COMPLEXITY_TRIGGERS: tuple[str, ...] = (
     "high complexity",
     "red flags",
     "flag this case",
+    "complexity_flag",
 )
 
 
@@ -8450,6 +8717,7 @@ _COURSE_TRACKER_TRIGGERS: tuple[str, ...] = (
     "when do i stop",
     "course complete",
     "end of course",
+    "course_tracker",
 )
 
 
@@ -8458,11 +8726,1129 @@ def _is_course_tracker_request(text: str) -> bool:
     return any(trigger in normalized for trigger in _COURSE_TRACKER_TRIGGERS)
 
 
+# ---------------------------------------------------------------------------
+# HIVID — HIV antiretroviral therapy (Phase 1: initial ART + monitoring)
+# ---------------------------------------------------------------------------
+
+_HIV_INITIAL_ART_TRIGGERS: tuple[str, ...] = (
+    "start art",
+    "initiate art",
+    "initiate antiretroviral",
+    "start antiretroviral",
+    "what art regimen",
+    "art regimen",
+    "new hiv diagnosis",
+    "newly diagnosed hiv",
+    "hiv positive",
+    "hiv-positive",
+    "hiv+",
+    "newly diagnosed with hiv",
+    "what to start for hiv",
+    "hiv treatment",
+    "antiretroviral therapy",
+    "biktarvy",
+    "dovato",
+    "dolutegravir",
+    "bictegravir",
+    "start hiv meds",
+    "hiv medications",
+    "recommend art",
+    "first-line art",
+    "first line art",
+    "initial hiv regimen",
+    "same-day art",
+    "same day art",
+    "rapid art",
+    "rapid start",
+)
+
+_HIV_MONITORING_TRIGGERS: tuple[str, ...] = (
+    "hiv monitoring",
+    "hiv labs",
+    "hiv lab monitoring",
+    "when to check viral load",
+    "viral load monitoring",
+    "cd4 monitoring",
+    "cd4 count monitoring",
+    "hiv follow-up labs",
+    "hiv follow up labs",
+    "art monitoring",
+    "art labs",
+    "art follow-up",
+    "hiv baseline labs",
+    "baseline labs for hiv",
+    "when to repeat viral load",
+    "viral load schedule",
+    "how often check viral load",
+    "hiv lab schedule",
+)
+
+
+def _is_hiv_initial_art_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_INITIAL_ART_TRIGGERS)
+
+
+def _is_hiv_monitoring_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_MONITORING_TRIGGERS)
+
+
+def _extract_hiv_context_from_text(text: str, state: AssistantState) -> dict:
+    """Extract HIV-specific clinical data from the message text and merge with existing hiv_context."""
+    hiv_ctx: dict = dict(state.hiv_context) if state.hiv_context else {}
+    normalized = text.lower()
+
+    # Viral load
+    import re as _re
+    vl_match = _re.search(r"(?:viral\s*load|vl|hiv\s*rna)\s*(?:is|of|=|:)?\s*(\d[\d,]*)", normalized)
+    if vl_match and "viral_load" not in hiv_ctx:
+        hiv_ctx["viral_load"] = float(vl_match.group(1).replace(",", ""))
+    if "undetectable" in normalized and "viral_load" not in hiv_ctx:
+        hiv_ctx["viral_load"] = 0
+
+    # CD4
+    cd4_match = _re.search(r"(?:cd4|cd4\+?)\s*(?:count|cells?)?\s*(?:is|of|=|:)?\s*(\d+)", normalized)
+    if cd4_match and "cd4" not in hiv_ctx:
+        hiv_ctx["cd4"] = int(cd4_match.group(1))
+
+    # HBV coinfection
+    if any(k in normalized for k in ("hbv", "hepatitis b", "hep b", "hbsag positive", "hbsag+")):
+        if "hbv_coinfected" not in hiv_ctx:
+            hiv_ctx["hbv_coinfected"] = True
+
+    # HCV coinfection
+    if any(k in normalized for k in ("hcv", "hepatitis c", "hep c")):
+        if "hcv_coinfected" not in hiv_ctx:
+            hiv_ctx["hcv_coinfected"] = True
+
+    # Pregnancy
+    if any(k in normalized for k in ("pregnant", "pregnancy", "gravid", "gestation")):
+        if "pregnant" not in hiv_ctx:
+            hiv_ctx["pregnant"] = True
+        tri_match = _re.search(r"(?:t|trimester\s*)(\d)", normalized)
+        if tri_match and "trimester" not in hiv_ctx:
+            hiv_ctx["trimester"] = int(tri_match.group(1))
+
+    # Active OI keywords
+    oi_map = {
+        "cryptococcal meningitis": "cryptococcal meningitis",
+        "crypto meningitis": "cryptococcal meningitis",
+        "pcp": "PCP",
+        "pneumocystis": "PCP",
+        "tb meningitis": "TB meningitis",
+        "tuberculous meningitis": "TB meningitis",
+        "pulmonary tb": "pulmonary TB",
+        "tuberculosis": "TB",
+        "active tb": "active TB",
+        "cmv retinitis": "CMV retinitis",
+        "toxoplasmosis": "toxoplasmosis",
+        "mac": "MAC",
+        "mycobacterium avium": "MAC",
+        "kaposi": "Kaposi sarcoma",
+        "pml": "PML",
+        "histoplasmosis": "histoplasmosis",
+    }
+    for keyword, oi_name in oi_map.items():
+        if keyword in normalized and "active_oi" not in hiv_ctx:
+            hiv_ctx["active_oi"] = oi_name
+            break
+
+    # Prior CAB-LA PrEP
+    if any(k in normalized for k in ("cab-la", "cabotegravir prep", "injectable prep", "apretude")):
+        if "prior_cab_la_prep" not in hiv_ctx:
+            hiv_ctx["prior_cab_la_prep"] = True
+
+    # Currently on ART
+    art_regimens = {
+        "biktarvy": ["bictegravir/emtricitabine/TAF"],
+        "dovato": ["dolutegravir/lamivudine"],
+        "triumeq": ["dolutegravir/abacavir/lamivudine"],
+        "genvoya": ["elvitegravir/cobicistat/emtricitabine/TAF"],
+        "stribild": ["elvitegravir/cobicistat/emtricitabine/TDF"],
+        "odefsey": ["rilpivirine/emtricitabine/TAF"],
+        "complera": ["rilpivirine/emtricitabine/TDF"],
+        "symtuza": ["darunavir/cobicistat/emtricitabine/TAF"],
+        "cabenuva": ["cabotegravir/rilpivirine LA"],
+        "juluca": ["dolutegravir/rilpivirine"],
+        "descovy": ["emtricitabine/TAF"],
+        "truvada": ["emtricitabine/TDF"],
+        "tivicay": ["dolutegravir"],
+    }
+    for brand, regimen in art_regimens.items():
+        if brand in normalized and "current_regimen" not in hiv_ctx:
+            hiv_ctx["on_art"] = True
+            hiv_ctx["current_regimen"] = regimen
+            break
+
+    # CrCl
+    crcl_match = _re.search(r"(?:crcl|creatinine clearance|gfr|egfr)\s*(?:is|of|=|:)?\s*(\d+(?:\.\d+)?)", normalized)
+    if crcl_match and "creatinine_clearance" not in hiv_ctx:
+        hiv_ctx["creatinine_clearance"] = float(crcl_match.group(1))
+
+    # Resistance mutations
+    mutation_pattern = _re.findall(r"\b([A-Z]\d{2,3}[A-Z](?:/[A-Z])?)\b", text)
+    if mutation_pattern and "resistance_mutations" not in hiv_ctx:
+        hiv_ctx["resistance_mutations"] = mutation_pattern[:10]
+
+    return hiv_ctx
+
+
+def _assistant_hiv_initial_art_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Recommend an initial ART regimen based on patient factors."""
+    from .services.consult_narrator import narrate_hiv_initial_art
+
+    # Extract and update HIV context from the message
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "For most treatment-naive adults, Biktarvy (bictegravir/emtricitabine/TAF) is the recommended first-line ART regimen — "
+        "one pill daily, high barrier to resistance, well tolerated. "
+        "Key exceptions: HBV coinfection requires tenofovir-containing backbone (Dovato is contraindicated); "
+        "CrCl <30 requires adjusted backbone; VL >500,000 requires 3-drug regimen; "
+        "pregnancy prefers DTG + emtricitabine/TDF; active TB on rifampin requires DTG 50mg BID. "
+        "Same-day ART start is recommended for most patients — do not wait for genotype results. "
+        "Exceptions: defer 4-6 weeks for cryptococcal meningitis, 4-8 weeks for TB meningitis."
+    )
+    answer, narration_refined = narrate_hiv_initial_art(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        fallback_message=fallback_message,
+    )
+    options: list[AssistantOption] = [
+        AssistantOption(value="hiv_monitoring", label="Monitoring schedule"),
+    ]
+    if state.hiv_context and state.hiv_context.get("active_oi"):
+        options.append(AssistantOption(value="hiv_oi_art_timing", label="ART timing with this OI"))
+    if state.hiv_context and state.hiv_context.get("hbv_coinfected"):
+        options.append(AssistantOption(value="drug_interaction", label="HBV-ART drug interactions"))
+    # Cross-module bridges (CD4-based prophylaxis, pregnancy, etc.)
+    cross_opts = _hivid_cross_module_options(state, current_intent="hiv_initial_art")
+    for co in cross_opts:
+        if not any(o.value == co.value for o in options):
+            options.append(co)
+    options.extend([
+        AssistantOption(value="prophylaxis", label="OI prophylaxis"),
+        AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        AssistantOption(value="consult_summary", label="Full consult summary"),
+    ])
+    # Deduplicate
+    seen_vals: set[str] = set()
+    deduped_opts: list[AssistantOption] = []
+    for o in options:
+        if o.value not in seen_vals:
+            seen_vals.add(o.value)
+            deduped_opts.append(o)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=deduped_opts,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_initial_art"),
+        tips=[
+            "Same-day ART is the standard for most new HIV diagnoses — genotype results should not delay initiation.",
+            "Always check HBV serologies before ART — Dovato and other non-tenofovir regimens risk HBV flare in coinfected patients.",
+        ],
+    )
+
+
+def _assistant_hiv_monitoring_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Provide HIV lab monitoring schedule."""
+    from .services.consult_narrator import narrate_hiv_monitoring
+
+    # Extract and update HIV context
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Baseline labs for new HIV diagnosis: HIV VL, CD4, RT-protease genotype, HBV serologies, HCV Ab, "
+        "CMP, CBC, fasting lipids, glucose/HbA1c, pregnancy test if applicable, STI screening, IGRA for TB. "
+        "If CD4 <100: serum CrAg. "
+        "On-treatment: VL at 4-6 weeks, then every 4-8 weeks until undetectable, then every 3-6 months. "
+        "CD4 every 3-6 months for 2 years, then can stop if suppressed and >300. "
+        "Renal function: annually on TAF, every 3-6 months on TDF. "
+        "Note: DTG/BIC increase creatinine ~0.1 mg/dL via OCT2 — not nephrotoxicity."
+    )
+    answer, narration_refined = narrate_hiv_monitoring(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    monitoring_opts: list[AssistantOption] = [
+        AssistantOption(value="hiv_initial_art", label="Select ART regimen"),
+    ]
+    cross_opts = _hivid_cross_module_options(state, current_intent="hiv_monitoring")
+    for co in cross_opts:
+        if not any(o.value == co.value for o in monitoring_opts):
+            monitoring_opts.append(co)
+    monitoring_opts.extend([
+        AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        AssistantOption(value="prophylaxis", label="OI prophylaxis"),
+        AssistantOption(value="consult_summary", label="Full consult summary"),
+    ])
+    seen_vals2: set[str] = set()
+    deduped_mon: list[AssistantOption] = []
+    for o in monitoring_opts:
+        if o.value not in seen_vals2:
+            seen_vals2.add(o.value)
+            deduped_mon.append(o)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=deduped_mon,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_monitoring"),
+        tips=[
+            "DTG and BIC inhibit OCT2 and raise serum creatinine by ~0.1 mg/dL — this is a lab artifact, not nephrotoxicity. Do not switch regimens for this.",
+            "After 2+ years of viral suppression with CD4 >300, routine CD4 monitoring can be safely discontinued.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# HIVID Phase 2 — PrEP, PEP, pregnancy, OI-ART timing
+# ---------------------------------------------------------------------------
+
+_HIV_PREP_TRIGGERS: tuple[str, ...] = (
+    "prep",
+    "pre-exposure prophylaxis",
+    "pre exposure prophylaxis",
+    "hiv prevention",
+    "hiv prophylaxis",
+    "truvada for prevention",
+    "descovy for prevention",
+    "cabotegravir prep",
+    "cab-la prep",
+    "apretude",
+    "injectable prep",
+    "on-demand prep",
+    "2-1-1",
+    "event-driven prep",
+    "doxypep",
+    "doxy-pep",
+    "doxy pep",
+    "lenacapavir prep",
+)
+
+_HIV_PEP_TRIGGERS: tuple[str, ...] = (
+    "pep",
+    "post-exposure prophylaxis",
+    "post exposure prophylaxis",
+    "needlestick",
+    "needle stick",
+    "hiv exposure",
+    "occupational exposure",
+    "sexual exposure hiv",
+    "blood exposure",
+    "sharps injury",
+    "start pep",
+)
+
+_HIV_PREGNANCY_TRIGGERS: tuple[str, ...] = (
+    "pregnant and hiv",
+    "hiv in pregnancy",
+    "hiv pregnancy",
+    "pregnant with hiv",
+    "art in pregnancy",
+    "antiretroviral pregnancy",
+    "pmtct",
+    "mother to child",
+    "vertical transmission",
+    "neonatal prophylaxis",
+    "hiv breastfeeding",
+    "hiv delivery",
+    "hiv c-section",
+    "hiv cesarean",
+)
+
+_HIV_OI_ART_TIMING_TRIGGERS: tuple[str, ...] = (
+    "when to start art with",
+    "art timing with",
+    "art timing",
+    "when to start antiretroviral",
+    "start art with oi",
+    "start art with opportunistic",
+    "art and pcp",
+    "art and tb",
+    "art and tuberculosis",
+    "art and crypto",
+    "art and cryptococcal",
+    "iris risk",
+    "immune reconstitution",
+    "art timing tb",
+    "art timing crypto",
+    "art timing pcp",
+    "defer art",
+    "delay art",
+)
+
+
+def _is_hiv_prep_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_PREP_TRIGGERS)
+
+
+def _is_hiv_pep_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    # Avoid matching "pep" inside other words like "pepper" or "peptic"
+    if "pep" in normalized and not any(w in normalized for w in ("pepper", "peptic", "peptide", "pepsin")):
+        return True
+    return any(trigger in normalized for trigger in _HIV_PEP_TRIGGERS if trigger != "pep")
+
+
+def _is_hiv_pregnancy_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_PREGNANCY_TRIGGERS)
+
+
+def _is_hiv_oi_art_timing_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_OI_ART_TIMING_TRIGGERS)
+
+
+def _assistant_hiv_prep_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on PrEP regimen selection and monitoring."""
+    from .services.consult_narrator import narrate_hiv_prep
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "PrEP options per IAS-USA 2024: "
+        "(1) Oral TDF/FTC (Truvada) daily — all populations, requires CrCl >=60; "
+        "(2) On-demand 2-1-1 TDF/FTC — MSM with planned anal sex only; "
+        "(3) Oral TAF/FTC (Descovy) daily — cisgender men only, preferred if CrCl 30-60; "
+        "(4) Injectable cabotegravir (Apretude) 600mg IM q2 months — superior to oral, all populations; "
+        "(5) Lenacapavir SC q6 months — 100% efficacy in PURPOSE 1, FDA review pending. "
+        "Baseline: 4th-gen HIV test, CrCl, HBV serologies, HCV Ab, STI screening. "
+        "Monitor: HIV test q3 months, CrCl q6-12 months, STI q3-6 months."
+    )
+    answer, narration_refined = narrate_hiv_prep(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="hiv_pep", label="PEP guidance instead"),
+            AssistantOption(value="hiv_initial_art", label="Patient is HIV+ — start ART"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+            AssistantOption(value="consult_summary", label="Full consult summary"),
+        ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_prep"),
+        tips=[
+            "Injectable cabotegravir (Apretude) was superior to daily oral TDF/FTC in trials — consider for patients with adherence challenges.",
+            "DoxyPEP (doxycycline 200mg post-exposure) reduces chlamydia and syphilis in MSM/TGW — discuss alongside PrEP.",
+        ],
+    )
+
+
+def _assistant_hiv_pep_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on PEP regimen and follow-up."""
+    from .services.consult_narrator import narrate_hiv_pep
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "PEP must start within 72 hours of exposure (ideally within 2 hours). "
+        "Preferred regimen: dolutegravir 50mg OD + emtricitabine/TDF 200/300mg OD x 28 days. "
+        "Alternative: Biktarvy 1 pill OD x 28 days. "
+        "Baseline: 4th-gen HIV Ag/Ab, HBV serologies, HCV Ab, CMP, pregnancy test. "
+        "Follow-up: HIV test at 4-6 weeks and 3 months. "
+        "If ongoing risk: transition to PrEP without a gap."
+    )
+    answer, narration_refined = narrate_hiv_pep(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="hiv_prep", label="Transition to PrEP"),
+            AssistantOption(value="hiv_initial_art", label="Patient tested HIV+ — start ART"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_pep"),
+        tips=[
+            "If >72 hours since exposure, PEP is not recommended — offer PrEP if ongoing risk.",
+            "If the source patient is on ART with undetectable VL, transmission risk is extremely low (U=U).",
+        ],
+    )
+
+
+def _assistant_hiv_pregnancy_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on ART in pregnancy, delivery planning, and neonatal prophylaxis."""
+    from .services.consult_narrator import narrate_hiv_pregnancy
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    if "pregnant" not in (hiv_ctx or {}):
+        hiv_ctx = hiv_ctx or {}
+        hiv_ctx["pregnant"] = True
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Preferred ART in pregnancy: dolutegravir + emtricitabine/TAF (or TDF). "
+        "DTG is safe in all trimesters including the first (NTD risk ~0.2%). "
+        "Cobicistat-boosted regimens are contraindicated (low levels in T2/T3). "
+        "Delivery: VL <50 at 36 weeks = vaginal; VL 50-999 = C-section + IV AZT; VL >=1000 = C-section + IV AZT + intensified neonatal Rx. "
+        "Neonate: low risk = AZT x 4 weeks; high risk = AZT + 3TC + NVP x 6 weeks."
+    )
+    answer, narration_refined = narrate_hiv_pregnancy(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="hiv_monitoring", label="Monitoring schedule in pregnancy"),
+            AssistantOption(value="hiv_initial_art", label="Select ART regimen"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+            AssistantOption(value="consult_summary", label="Full consult summary"),
+        ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_pregnancy"),
+        tips=[
+            "DTG is now recommended in all trimesters — the NTD risk (~0.2%) is comparable to the general population background rate.",
+            "Check VL at 36 weeks to plan delivery mode. VL <50 = vaginal delivery with no IV zidovudine needed.",
+        ],
+    )
+
+
+def _assistant_hiv_oi_art_timing_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on when to start ART relative to an active OI."""
+    from .services.consult_narrator import narrate_hiv_oi_art_timing
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "ART timing with OIs per IAS-USA 2024: "
+        "Most OIs (PCP, toxo, MAC, histoplasma, KS, PML): start ART within 2 weeks. "
+        "Pulmonary TB: CD4 <50 within 2 weeks, CD4 >=50 within 2-8 weeks. "
+        "DEFER for cryptococcal meningitis (4-6 weeks, COAT trial), "
+        "TB meningitis (4-8 weeks), CMV retinitis zone 1 (~2 weeks). "
+        "IRIS is NOT a reason to stop ART — manage with anti-inflammatories."
+    )
+    answer, narration_refined = narrate_hiv_oi_art_timing(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        established_syndrome=state.established_syndrome,
+        consult_organisms=state.consult_organisms or None,
+        fallback_message=fallback_message,
+    )
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=[
+            AssistantOption(value="hiv_initial_art", label="Select ART regimen"),
+            AssistantOption(value="hiv_monitoring", label="Monitoring schedule"),
+            AssistantOption(value="drug_interaction", label="Check drug interactions"),
+            AssistantOption(value="prophylaxis", label="OI prophylaxis"),
+        ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_oi_art_timing"),
+        tips=[
+            "Cryptococcal meningitis: ALWAYS defer ART 4-6 weeks. The COAT trial showed early ART increases mortality.",
+            "TB + rifampin: double the dolutegravir dose to 50mg BID. Bictegravir is contraindicated with rifampin.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# HIVID Phase 3 — Treatment failure, resistance, switch/simplification
+# ---------------------------------------------------------------------------
+
+_HIV_TREATMENT_FAILURE_TRIGGERS: tuple[str, ...] = (
+    "virologic failure",
+    "virological failure",
+    "hiv failure",
+    "viral load detectable",
+    "vl detectable",
+    "vl not suppressed",
+    "hiv not suppressed",
+    "hiv rebound",
+    "viral rebound",
+    "hiv viremia",
+    "persistent viremia",
+    "low-level viremia",
+    "low level viremia",
+    "viral blip",
+    "hiv blip",
+    "art failure",
+    "art not working",
+    "failing art",
+    "failing antiretroviral",
+)
+
+_HIV_RESISTANCE_TRIGGERS: tuple[str, ...] = (
+    "hiv resistance",
+    "hiv genotype",
+    "hiv mutation",
+    "integrase resistance",
+    "insti resistance",
+    "nrti resistance",
+    "nnrti resistance",
+    "m184v",
+    "k65r",
+    "q148h",
+    "k103n",
+    "y143r",
+    "n155h",
+    "hiv drug resistance",
+    "resistance test result",
+    "genotype result",
+    "resistance interpretation",
+)
+
+_HIV_SWITCH_TRIGGERS: tuple[str, ...] = (
+    "switch art",
+    "switch antiretroviral",
+    "simplify art",
+    "simplify regimen",
+    "change art",
+    "change hiv regimen",
+    "switch to biktarvy",
+    "switch to dovato",
+    "switch to cabenuva",
+    "injectable art",
+    "long-acting art",
+    "long acting art",
+    "2-drug regimen",
+    "two drug regimen",
+    "art simplification",
+    "switch from",
+    "can i simplify",
+)
+
+
+def _is_hiv_treatment_failure_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_TREATMENT_FAILURE_TRIGGERS)
+
+
+def _is_hiv_resistance_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_RESISTANCE_TRIGGERS)
+
+
+def _is_hiv_switch_request(text: str) -> bool:
+    normalized = text.lower().strip()
+    return any(trigger in normalized for trigger in _HIV_SWITCH_TRIGGERS)
+
+
+def _assistant_hiv_treatment_failure_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Evaluate HIV virologic failure — workup and switch strategy."""
+    from .services.consult_narrator import narrate_hiv_treatment_failure
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "Virologic failure workup: (1) Assess adherence — most common cause, >95% needed. "
+        "Check polyvalent cation supplements chelating INSTIs. "
+        "(2) Drug interactions — rilpivirine+PPIs, rifampin+cobicistat. "
+        "(3) Absorption issues. "
+        "(4) Send RT + protease + integrase genotype WHILE ON failing regimen. "
+        "New regimen must include >=2 fully active agents. "
+        "For multi-class resistance: fostemsavir, lenacapavir, ibalizumab — refer to academic HIV center."
+    )
+    answer, narration_refined = narrate_hiv_treatment_failure(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    tf_opts: list[AssistantOption] = [
+        AssistantOption(value="hiv_resistance", label="Interpret resistance results"),
+        AssistantOption(value="hiv_switch", label="Switch ART regimen"),
+        AssistantOption(value="hiv_monitoring", label="Monitoring schedule"),
+        AssistantOption(value="drug_interaction", label="Check drug interactions"),
+    ]
+    cross_opts = _hivid_cross_module_options(state, current_intent="hiv_treatment_failure")
+    for co in cross_opts:
+        if not any(o.value == co.value for o in tf_opts):
+            tf_opts.append(co)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=tf_opts,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_treatment_failure"),
+        tips=[
+            "Adherence is the #1 cause of virologic failure. Ask about polyvalent cation supplements (Ca, Mg, Fe, Zn) — they chelate INSTIs.",
+            "Send genotype WHILE ON the failing regimen. Stopping ART before genotyping allows wild-type reversion and masks resistance.",
+        ],
+    )
+
+
+def _assistant_hiv_resistance_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Interpret HIV resistance mutations and recommend regimen adjustment."""
+    from .services.consult_narrator import narrate_hiv_resistance
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "HIV resistance interpretation: "
+        "M184V = FTC/3TC resistant, increases TDF susceptibility. "
+        "K65R = TDF/TAF resistant, increases AZT susceptibility. "
+        "K103N = EFV/NVP resistant, RPV and DOR usually susceptible. "
+        "Q148H alone = first-gen INSTI resistant, DTG/BIC usually active. "
+        "Q148H + G140S + E138K = DTG/BIC may be compromised — salvage territory. "
+        "DRV/r retains activity against most PI mutations (requires >=3 DRV-associated mutations). "
+        "Always interpret cumulative resistance history, not just current genotype."
+    )
+    answer, narration_refined = narrate_hiv_resistance(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    res_opts: list[AssistantOption] = [
+        AssistantOption(value="hiv_switch", label="Recommend new regimen"),
+        AssistantOption(value="hiv_treatment_failure", label="Full failure workup"),
+        AssistantOption(value="hiv_initial_art", label="Select ART regimen"),
+        AssistantOption(value="drug_interaction", label="Check drug interactions"),
+    ]
+    cross_opts = _hivid_cross_module_options(state, current_intent="hiv_resistance")
+    for co in cross_opts:
+        if not any(o.value == co.value for o in res_opts):
+            res_opts.append(co)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=res_opts,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_resistance"),
+        tips=[
+            "Resistance is cumulative — archived mutations may not appear on current genotype but still affect drug activity.",
+            "DTG and BIC have a high barrier to resistance. Single INSTI mutations rarely compromise them — the Q148H + secondary accumulation pathway is the main threat.",
+        ],
+    )
+
+
+def _assistant_hiv_switch_response(
+    message_text: str,
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Advise on ART switch or simplification for suppressed patients."""
+    from .services.consult_narrator import narrate_hiv_switch
+
+    hiv_ctx = _extract_hiv_context_from_text(message_text, state)
+    state.hiv_context = hiv_ctx if hiv_ctx else state.hiv_context
+
+    patient_summary = _consult_prior_context_summary(state)
+    fallback_message = (
+        "ART switch rules: ALWAYS review full resistance history before switching. "
+        "2-drug options (Dovato, Juluca) require: no prior failure, no HBV, no resistance to components. "
+        "PI-to-INSTI switch is safe even with NRTI resistance if no INSTI resistance. "
+        "Cabenuva (injectable CAB+RPV q1-2mo): needs no NNRTI resistance, VL suppressed, 1-2% failure risk with BMI >30. "
+        "If HBV coinfected: MUST maintain tenofovir or risk fatal flare. "
+        "Monitor VL at 1 month, then q3 months for 1 year after any switch."
+    )
+    answer, narration_refined = narrate_hiv_switch(
+        question=message_text,
+        hiv_context=state.hiv_context,
+        patient_summary=patient_summary,
+        fallback_message=fallback_message,
+    )
+    sw_opts: list[AssistantOption] = [
+        AssistantOption(value="hiv_resistance", label="Review resistance history"),
+        AssistantOption(value="hiv_monitoring", label="Post-switch monitoring"),
+        AssistantOption(value="drug_interaction", label="Check drug interactions"),
+        AssistantOption(value="consult_summary", label="Full consult summary"),
+    ]
+    cross_opts = _hivid_cross_module_options(state, current_intent="hiv_switch")
+    for co in cross_opts:
+        if not any(o.value == co.value for o in sw_opts):
+            sw_opts.append(co)
+    return AssistantTurnResponse(
+        assistantMessage=answer,
+        assistantNarrationRefined=narration_refined,
+        state=state,
+        options=sw_opts,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "hiv_switch"),
+        tips=[
+            "Never switch to a 2-drug regimen without reviewing full resistance history — archived mutations count.",
+            "If switching away from tenofovir in an HBV-coinfected patient, ensure alternative HBV coverage is in place — discontinuation can cause fatal HBV flare.",
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# HIVID Phase 4 — Cross-module integration helpers
+# ---------------------------------------------------------------------------
+
+_ACUTE_HIV_KEYWORDS: tuple[str, ...] = (
+    "acute retroviral", "acute hiv", "primary hiv", "seroconversion",
+    "hiv seroconversion", "acute antiretroviral", "fiebig",
+    "mononucleosis-like", "mono-like illness",
+)
+
+_HIV_AWARE_SYNDROMES: frozenset[str] = frozenset({
+    "acute retroviral syndrome", "mononucleosis", "viral syndrome",
+    "pharyngitis", "meningoencephalitis", "aseptic meningitis",
+    "fever and rash", "lymphadenopathy",
+})
+
+
+def _hivid_cd4_prophylaxis_bridge(state: AssistantState) -> list[AssistantOption]:
+    """If CD4 is known and <200, offer OI prophylaxis and ImmunoID chips."""
+    hiv_ctx = state.hiv_context or {}
+    cd4 = hiv_ctx.get("cd4")
+    if cd4 is None:
+        return []
+    try:
+        cd4_val = int(cd4)
+    except (ValueError, TypeError):
+        return []
+    opts: list[AssistantOption] = []
+    if cd4_val < 200:
+        opts.append(AssistantOption(value="prophylaxis", label="OI prophylaxis (CD4 <200)"))
+    if cd4_val < 100:
+        opts.append(AssistantOption(value="hiv_oi_art_timing", label="OI screening & ART timing"))
+    if cd4_val < 50:
+        opts.append(AssistantOption(value="immunoid", label="Full immunosuppression screen"))
+    return opts
+
+
+def _hivid_cross_module_options(state: AssistantState, *, current_intent: str) -> list[AssistantOption]:
+    """Return cross-module bridge options based on HIV context, excluding current intent."""
+    hiv_ctx = state.hiv_context or {}
+    opts: list[AssistantOption] = []
+
+    # CD4-based prophylaxis bridge
+    cd4_opts = _hivid_cd4_prophylaxis_bridge(state)
+    opts.extend(cd4_opts)
+
+    # HBV coinfection → drug interaction check
+    if hiv_ctx.get("hbv_coinfected") and current_intent != "drug_interaction":
+        opts.append(AssistantOption(value="drug_interaction", label="HBV-ART interactions"))
+
+    # On ART + organisms known → check ART-antimicrobial interactions
+    if hiv_ctx.get("on_art") and state.consult_organisms and current_intent != "drug_interaction":
+        opts.append(AssistantOption(value="drug_interaction", label="ART-antimicrobial interactions"))
+
+    # Pregnancy → pregnancy ART
+    if hiv_ctx.get("pregnant") and current_intent != "hiv_pregnancy":
+        opts.append(AssistantOption(value="hiv_pregnancy", label="Pregnancy ART planning"))
+
+    # Active OI → OI-ART timing
+    if hiv_ctx.get("active_oi") and current_intent != "hiv_oi_art_timing":
+        opts.append(AssistantOption(value="hiv_oi_art_timing", label="ART timing with OI"))
+
+    # Resistance mutations known → interpret them
+    if hiv_ctx.get("resistance_mutations") and current_intent not in {"hiv_resistance", "hiv_switch"}:
+        opts.append(AssistantOption(value="hiv_resistance", label="Interpret resistance mutations"))
+
+    # Deduplicate by value
+    seen: set[str] = set()
+    deduped: list[AssistantOption] = []
+    for o in opts:
+        if o.value not in seen:
+            seen.add(o.value)
+            deduped.append(o)
+    return deduped
+
+
+def _probid_hiv_bridge_option(state: AssistantState) -> AssistantOption | None:
+    """If ProbID syndrome looks like acute HIV/viral syndrome, offer HIVID bridge."""
+    syndrome = (state.established_syndrome or "").lower()
+    if not syndrome:
+        return None
+    if any(kw in syndrome for kw in _HIV_AWARE_SYNDROMES):
+        return AssistantOption(value="hiv_initial_art", label="Could this be acute HIV? Start ART workup")
+    return None
+
+
+def _is_acute_hiv_mention(text: str) -> bool:
+    """Check if message text mentions acute HIV/retroviral syndrome."""
+    normalized = text.lower()
+    return any(kw in normalized for kw in _ACUTE_HIV_KEYWORDS)
+
+
+def _immunoid_hiv_bridge_options(state: AssistantState) -> list[AssistantOption]:
+    """After ImmunoID, if HIV context exists or CD4 thresholds relevant, offer HIVID chips."""
+    opts: list[AssistantOption] = []
+    hiv_ctx = state.hiv_context or {}
+    if hiv_ctx:
+        # Patient has HIV context — offer relevant HIVID intents
+        if not hiv_ctx.get("on_art"):
+            opts.append(AssistantOption(value="hiv_initial_art", label="Start ART regimen"))
+        if hiv_ctx.get("on_art"):
+            opts.append(AssistantOption(value="hiv_monitoring", label="HIV monitoring schedule"))
+        opts.append(AssistantOption(value="hiv_prep", label="PrEP guidance"))
+    return opts
+
+
+# ---------------------------------------------------------------------------
+# Clarifying question system — ask ONE focused question when critical context
+# is missing that would materially change the answer.
+# ---------------------------------------------------------------------------
+
+_SYNDROME_KEYWORDS: tuple[str, ...] = (
+    "pneumonia", "pna", "cap", "hap", "vap", "uti", "urosepsis", "cystitis",
+    "pyelonephritis", "bacteraemia", "bacteremia", "sepsis", "septic", "ssti",
+    "cellulitis", "endocarditis", "osteomyelitis", "meningitis", "intra-abdominal",
+    "iai", "clabsi", "cauti", "neutropenic", "febrile neutropenia", "abscess",
+)
+
+_HA_KEYWORDS: tuple[str, ...] = (
+    "hospital", "nosocomial", "ha-", "healthcare", "hcap", "hap", "vap",
+    "icu", "clabsi", "cauti", "nursing home", "ltcf", "inpatient",
+)
+
+_CA_KEYWORDS: tuple[str, ...] = (
+    "community", "ca-", "cap", "outpatient", "community-acquired",
+)
+
+_ANTIBIOTIC_KEYWORDS: tuple[str, ...] = (
+    "vancomycin", "vanco", "pip-tazo", "tazocin", "meropenem", "ertapenem",
+    "ceftriaxone", "cefazolin", "cefepime", "ceftazidime", "flucloxacillin",
+    "amoxicillin", "ciprofloxacin", "levofloxacin", "daptomycin", "linezolid",
+    "ampicillin", "metronidazole", "azithromycin", "doxycycline", "tazobactam",
+    "piperacillin", "clindamycin", "trimethoprim", "bactrim", "nitrofurantoin",
+)
+
+
+def _needs_clarifying_question(
+    intent: str,
+    message_text: str,
+    state: AssistantState,
+) -> tuple[str, list[AssistantOption]] | None:
+    """
+    Check whether a critical piece of context is missing that would materially
+    change the answer. Returns (question_text, quick_reply_options) or None.
+
+    Rules:
+    - Only fires when the missing info would give a significantly different answer.
+    - Never fires mid-consult when rich context is already established.
+    - Never fires when the message itself already supplies the missing info.
+    - Asks at most one question — the single most important gap.
+    """
+    msg_lower = message_text.lower()
+
+    if intent == "empiric_therapy":
+        has_syndrome = bool(state.established_syndrome)
+        msg_mentions_syndrome = any(k in msg_lower for k in _SYNDROME_KEYWORDS)
+
+        # Gap 1: No syndrome at all — regimen completely depends on this
+        if not has_syndrome and not msg_mentions_syndrome:
+            return (
+                "Which clinical syndrome? The empiric regimen is quite different for "
+                "pneumonia, UTI, bacteraemia, or skin infection — I want to make sure "
+                "I give you the right first-line choice.",
+                [
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Community pneumonia (CAP)",
+                        insertText="Empiric therapy for community-acquired pneumonia",
+                    ),
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Hospital pneumonia (HAP/VAP)",
+                        insertText="Empiric therapy for hospital-acquired pneumonia",
+                    ),
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Urosepsis / UTI",
+                        insertText="Empiric therapy for urosepsis",
+                    ),
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Bacteraemia / unknown source",
+                        insertText="Empiric therapy for bacteraemia unknown source",
+                    ),
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Skin / soft tissue (SSTI)",
+                        insertText="Empiric therapy for skin and soft tissue infection",
+                    ),
+                ],
+            )
+
+        # Gap 2: Nosocomial-relevant syndrome without HA/CA clarity, no cultures yet
+        _is_nosocomial_relevant = any(
+            k in msg_lower for k in ("pneumonia", "pna", "bacteraemia", "bacteremia", "sepsis", "uti", "urosepsis")
+        ) or any(
+            k in (state.established_syndrome or "").lower()
+            for k in ("pneumonia", "bacteraemia", "bacteremia", "sepsis", "uti")
+        )
+        _has_acquisition = any(k in msg_lower for k in _HA_KEYWORDS + _CA_KEYWORDS)
+        if _is_nosocomial_relevant and not _has_acquisition and not state.consult_organisms:
+            return (
+                "Healthcare-associated or community-acquired? "
+                "This changes my first-line choice — I'd broaden for hospital-acquired "
+                "(anti-pseudomonal, MRSA coverage) and can stay narrower for community.",
+                [
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Community-acquired",
+                        insertText="Community-acquired",
+                    ),
+                    AssistantOption(
+                        value="empiric_therapy",
+                        label="Healthcare-associated / nosocomial",
+                        insertText="Healthcare-associated / nosocomial",
+                    ),
+                ],
+            )
+
+    if intent == "treatment_failure":
+        # If message is vague and we have no established context, ask what they're on
+        has_antibiotic = any(k in msg_lower for k in _ANTIBIOTIC_KEYWORDS)
+        has_organism = bool(state.consult_organisms) or any(
+            k in msg_lower for k in ("aureus", "mssa", "mrsa", "e. coli", "klebsiella",
+                                      "enterococcus", "pseudomonas", "candida", "strep")
+        )
+        has_syndrome = bool(state.established_syndrome)
+        if not has_antibiotic and not has_organism and not has_syndrome:
+            return (
+                "Which antibiotic is the patient on, and roughly how long? "
+                "That's the key starting point — I can then work through whether it's "
+                "the wrong drug, wrong dose, undrained source, or something else entirely.",
+                [],
+            )
+
+    return None
+
+
+def _build_clarifying_question_response(
+    question: str,
+    options: list[AssistantOption],
+    state: AssistantState,
+) -> AssistantTurnResponse:
+    """Build an assistant response that asks a single targeted clarifying question."""
+    return AssistantTurnResponse(
+        assistantMessage=question,
+        state=state,
+        options=options,
+        tips=[
+            "Answer in plain language or pick one of the options above.",
+            "The more context you give, the more specific I can be.",
+        ],
+    )
+
+
+def _build_suggested_placeholder(state: AssistantState, last_intent: str = "") -> str:
+    """
+    Build a context-aware composer placeholder that reflects what is already known
+    in this consult, so the input feels like a running conversation rather than
+    a blank slate after each response.
+    """
+    syndrome = state.established_syndrome
+    orgs = state.consult_organisms or []
+    pc = state.patient_context
+
+    # Build a compact patient label
+    patient_parts: List[str] = []
+    if pc:
+        if pc.age_years is not None:
+            patient_parts.append(f"{pc.age_years}yo")
+        if pc.sex:
+            patient_parts.append(pc.sex)
+    patient_label = " ".join(patient_parts) if patient_parts else ""
+
+    # Intent-specific trailing suggestions
+    intent_hints: dict[str, str] = {
+        "empiric_therapy": "Paste cultures when back, ask about duration, or check allergy safety...",
+        "mechid": "Ask about dosing, duration, IV-to-oral, or source control...",
+        "doseid": "Ask about IV-to-oral step-down, OPAT eligibility, or treatment duration...",
+        "allergyid": "Ask about alternative agents, allergy delabeling, or dosing...",
+        "duration": "Ask about IV-to-oral, OPAT, or source control status...",
+        "treatment_failure": "Share updated cultures, labs, or imaging findings...",
+        "iv_to_oral": "Ask about duration, OPAT, or discharge counselling...",
+        "opat": "Ask about duration, monitoring schedule, or discharge counselling...",
+        "source_control": "Ask about duration, OPAT eligibility, or empiric coverage...",
+        "followup_tests": "Ask about duration, treatment plan, or consult summary...",
+        "impression_plan": "Ask about any part of the plan, or paste new results...",
+        "hiv_initial_art": "Ask about monitoring, OI prophylaxis, drug interactions, or ART timing...",
+        "hiv_monitoring": "Ask about ART regimen, drug interactions, or OI prophylaxis...",
+        "hiv_prep": "Ask about PEP, ART, drug interactions, or doxyPEP for STI prevention...",
+        "hiv_pep": "Ask about PrEP transition, ART if HIV+, or drug interactions...",
+        "hiv_pregnancy": "Ask about delivery planning, monitoring, or neonatal prophylaxis...",
+        "hiv_oi_art_timing": "Ask about ART regimen, OI prophylaxis, or drug interactions...",
+        "hiv_treatment_failure": "Ask about resistance testing, regimen switch, or adherence support...",
+        "hiv_resistance": "Ask about regimen switch, salvage options, or drug interactions...",
+        "hiv_switch": "Ask about monitoring after switch, drug interactions, or simplification...",
+    }
+    hint = intent_hints.get(last_intent, "Ask a follow-up or paste new results...")
+
+    if syndrome and orgs:
+        org_str = ", ".join(orgs[:2]) + ("..." if len(orgs) > 2 else "")
+        prefix = f"{patient_label + ' · ' if patient_label else ''}{org_str} · {syndrome}"
+        return f"{prefix} — {hint}"
+    if syndrome:
+        prefix = f"{patient_label + ' · ' if patient_label else ''}{syndrome}"
+        return f"{prefix} — {hint}"
+    if orgs:
+        org_str = ", ".join(orgs[:2]) + ("..." if len(orgs) > 2 else "")
+        prefix = f"{patient_label + ' · ' if patient_label else ''}{org_str}"
+        return f"{prefix} — {hint}"
+    if patient_label:
+        return f"{patient_label} established — {hint}"
+    return "Describe the patient or paste culture results..."
+
+
 def _assistant_empiric_therapy_response(
     message_text: str,
     state: AssistantState,
 ) -> AssistantTurnResponse:
     """Answer an empiric therapy question — best regimen before cultures return."""
+    clarifying = _needs_clarifying_question("empiric_therapy", message_text, state)
+    if clarifying is not None:
+        return _build_clarifying_question_response(clarifying[0], clarifying[1], state)
+
     patient_summary = _consult_prior_context_summary(state)
     fallback_message = (
         "For empiric therapy, the best regimen depends on the syndrome and patient factors. "
@@ -8484,19 +9870,28 @@ def _assistant_empiric_therapy_response(
         if state.institutional_antibiogram
         else "Upload your institutional antibiogram for location-specific empiric guidance."
     )
+    # Empiric → next steps: paste cultures when back, allergy check, dose calc
+    empiric_options: list[AssistantOption] = [
+        AssistantOption(value="mechid", label="Cultures back — paste results"),
+        AssistantOption(value="allergyid", label="Allergy check"),
+        AssistantOption(value="doseid", label="Calculate dosing"),
+    ]
+    if not state.institutional_antibiogram:
+        empiric_options.insert(0, AssistantOption(value="upload_antibiogram", label="Upload institutional antibiogram"))
+    if not state.established_syndrome:
+        empiric_options.insert(0, AssistantOption(value="probid", label="Syndrome workup first"))
+    syndrome_opts = _syndrome_next_step_options(state, exclude={"source_control", "followup_tests"})
+    for opt in reversed(syndrome_opts):
+        empiric_options.insert(0, opt)
     return AssistantTurnResponse(
         assistantMessage=answer,
         assistantNarrationRefined=narration_refined,
         state=state,
-        options=[
-            AssistantOption(value="probid", label="Syndrome workup"),
-            AssistantOption(value="mechid", label="Paste culture results"),
-            AssistantOption(value="allergyid", label="Allergy check"),
-            AssistantOption(value="doseid", label="Calculate dosing"),
-        ],
+        options=empiric_options,
+        suggestedPlaceholder=_build_suggested_placeholder(state, "empiric_therapy"),
         tips=[
             antibiogram_tip,
-            "Once cultures return, paste the organism and susceptibilities and I'll refine the recommendation.",
+            "Once cultures return, paste the organism and susceptibilities and I'll refine to a targeted regimen.",
         ],
     )
 
@@ -8559,11 +9954,17 @@ def _assistant_duration_response(
         assistantNarrationRefined=narration_refined,
         state=state,
         options=[
-            AssistantOption(value="add_more_details", label="Add source control details"),
-            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="source_control", label="Source control status"),
+            AssistantOption(value="opat", label="OPAT eligibility"),
+            AssistantOption(value="iv_to_oral", label="IV-to-oral step-down?"),
             AssistantOption(value="doseid", label="Calculate dosing"),
-            AssistantOption(value="restart", label="Start new consult"),
+            *(
+                [AssistantOption(value="consult_summary", label="Full consult summary")]
+                if _is_mid_consult(state)
+                else [AssistantOption(value="restart", label="Start new consult")]
+            ),
         ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "duration"),
         tips=[
             "Duration runs from first negative culture for bacteraemia, not from antibiotic start.",
             "Source control status (line removed, abscess drained) is the biggest modifier of duration.",
@@ -8594,10 +9995,18 @@ def _assistant_followup_tests_response(
         assistantNarrationRefined=narration_refined,
         state=state,
         options=[
-            AssistantOption(value="probid", label="Syndrome workup"),
-            AssistantOption(value="mechid", label="Paste culture results"),
+            AssistantOption(value="duration", label="How long to treat?"),
             AssistantOption(value="doseid", label="Calculate dosing"),
-            AssistantOption(value="restart", label="Start new consult"),
+            *(
+                [AssistantOption(value="mechid", label="Paste culture results")]
+                if not state.consult_organisms
+                else []
+            ),
+            *(
+                [AssistantOption(value="consult_summary", label="Full consult summary")]
+                if _is_mid_consult(state)
+                else [AssistantOption(value="restart", label="Start new consult")]
+            ),
         ],
         tips=[
             "For S. aureus bacteraemia, TEE should not be delayed beyond 5-7 days.",
@@ -9136,6 +10545,10 @@ def _assistant_treatment_failure_response(
     state: AssistantState,
 ) -> AssistantTurnResponse:
     """Structured differential for treatment failure — patient not improving on antibiotics."""
+    clarifying = _needs_clarifying_question("treatment_failure", message_text, state)
+    if clarifying is not None:
+        return _build_clarifying_question_response(clarifying[0], clarifying[1], state)
+
     patient_summary = _consult_prior_context_summary(state)
     fallback_message = (
         "Treatment failure has a structured differential: wrong diagnosis (drug fever, non-infectious cause), "
@@ -9160,6 +10573,7 @@ def _assistant_treatment_failure_response(
             AssistantOption(value="doseid", label="Check drug levels / dosing"),
             AssistantOption(value="source_control", label="Source control decision"),
         ],
+        suggestedPlaceholder=_build_suggested_placeholder(state, "treatment_failure"),
         tips=[
             "S. aureus still bacteraemic at day 3: get a TEE and MRI spine — metastatic seeding is the rule, not the exception.",
             "Drug fever classically appears day 7-10, patient looks well despite fever, eosinophilia may be present.",
@@ -9330,17 +10744,25 @@ def _assistant_drug_interaction_response(
         established_syndrome=state.established_syndrome,
         consult_organisms=state.consult_organisms or None,
         patient_summary=patient_summary,
+        hiv_context=state.hiv_context,
         fallback_message=fallback_message,
     )
+    di_opts: list[AssistantOption] = [
+        AssistantOption(value="allergyid", label="Allergy check"),
+        AssistantOption(value="doseid", label="Calculate adjusted dose"),
+        AssistantOption(value="mechid", label="Paste susceptibilities"),
+    ]
+    # If HIV context exists, offer relevant HIVID chips
+    if state.hiv_context:
+        if state.hiv_context.get("on_art"):
+            di_opts.append(AssistantOption(value="hiv_switch", label="Consider ART switch"))
+        else:
+            di_opts.append(AssistantOption(value="hiv_initial_art", label="Select ART regimen"))
     return AssistantTurnResponse(
         assistantMessage=answer,
         assistantNarrationRefined=narration_refined,
         state=state,
-        options=[
-            AssistantOption(value="allergyid", label="Allergy check"),
-            AssistantOption(value="doseid", label="Calculate adjusted dose"),
-            AssistantOption(value="mechid", label="Paste susceptibilities"),
-        ],
+        options=di_opts,
         tips=[
             "Rifampin interactions take 2-3 days to onset and 2 weeks to offset — plan accordingly.",
             "Azole antifungals (especially fluconazole) typically require tacrolimus dose reduction of 30-50%.",
@@ -9408,10 +10830,19 @@ def _assistant_source_control_response(
         assistantNarrationRefined=narration_refined,
         state=state,
         options=[
-            AssistantOption(value="mechid", label="Paste susceptibilities"),
             AssistantOption(value="duration", label="Duration after source control"),
+            AssistantOption(value="opat", label="OPAT eligibility"),
             AssistantOption(value="doseid", label="Calculate antibiotic dose"),
-            AssistantOption(value="probid", label="Syndrome workup"),
+            *(
+                [AssistantOption(value="mechid", label="Paste susceptibilities")]
+                if not state.consult_organisms
+                else []
+            ),
+            *(
+                [AssistantOption(value="consult_summary", label="Full consult summary")]
+                if _is_mid_consult(state)
+                else []
+            ),
         ],
         tips=[
             "S. aureus bacteraemia: line removal reduces duration of bacteraemia and mortality — do not delay.",
@@ -9506,24 +10937,18 @@ def _assistant_general_id_response(
     )
 
 
-def _assistant_llm_triage(
+def _assistant_route_by_intent(
+    intent: str,
     req: AssistantTurnRequest,
     state: AssistantState,
+    message_text: str,
 ) -> AssistantTurnResponse | None:
     """
-    LLM-backed last-resort triage called when all deterministic routing has failed.
-    Classifies the message and routes to the appropriate module, answers general ID
-    questions directly, or asks a targeted clarifying question.
-    Returns None if the LLM is unavailable or the call fails, to allow fall-through.
+    Route an already-classified intent to the appropriate response function.
+    Shared by _assistant_llm_triage and _assistant_done_state_redirect so that
+    the LLM classification step is never duplicated.
+    Returns None for 'unclear' intent.
     """
-    message_text = (req.message or "").strip()
-    if not message_text:
-        return None
-
-    intent = _assistant_llm_triage_intent(message_text)
-    if intent is None:
-        return None
-
     if intent == "probid":
         routed = _assistant_intake_case_from_text(req, state)
         if routed is not None:
@@ -9571,93 +10996,107 @@ def _assistant_llm_triage(
 
     if intent == "empiric_therapy":
         return _assistant_empiric_therapy_response(message_text, state)
-
     if intent == "iv_to_oral":
         return _assistant_iv_to_oral_response(message_text, state)
-
     if intent == "duration":
         return _assistant_duration_response(message_text, state)
-
     if intent == "followup_tests":
         return _assistant_followup_tests_response(message_text, state)
-
     if intent == "stewardship":
         return _assistant_stewardship_response(message_text, state)
-
     if intent == "stewardship_review":
         return _assistant_stewardship_review_response(message_text, state)
-
     if intent == "opat":
         return _assistant_opat_response(message_text, state)
-
     if intent == "oral_therapy":
         return _assistant_oral_therapy_response(message_text, state)
-
     if intent == "discharge_counselling":
         return _assistant_discharge_counselling_response(message_text, state)
-
     if intent == "drug_interaction":
         return _assistant_drug_interaction_response(message_text, state)
-
     if intent == "prophylaxis":
         return _assistant_prophylaxis_response(message_text, state)
-
     if intent == "source_control":
         return _assistant_source_control_response(message_text, state)
-
     if intent == "treatment_failure":
         return _assistant_treatment_failure_response(message_text, state)
-
     if intent == "biomarker_interpretation":
         return _assistant_biomarker_response(message_text, state)
-
     if intent == "fluid_interpretation":
         return _assistant_fluid_interpretation_response(message_text, state)
-
     if intent == "allergy_delabeling":
         return _assistant_allergy_delabeling_response(message_text, state)
-
     if intent == "fungal_management":
         return _assistant_fungal_management_response(message_text, state)
-
     if intent == "sepsis_management":
         return _assistant_sepsis_response(message_text, state)
-
     if intent == "cns_infection":
         return _assistant_cns_infection_response(message_text, state)
-
     if intent == "mycobacterial":
         return _assistant_mycobacterial_response(message_text, state)
-
     if intent == "pregnancy_antibiotics":
         return _assistant_pregnancy_antibiotics_response(message_text, state)
-
     if intent == "travel_medicine":
         return _assistant_travel_medicine_response(message_text, state)
-
     if intent == "impression_plan":
         return _assistant_impression_plan_response(message_text, state)
-
     if intent == "duke_criteria":
         return _assistant_duke_criteria_response(message_text, state)
-
     if intent == "ast_meaning":
         return _assistant_ast_meaning_response(message_text, state)
-
     if intent == "complexity_flag":
         return _assistant_complexity_response(message_text, state)
-
     if intent == "course_tracker":
         return _assistant_course_tracker_response(message_text, state)
-
+    if intent == "hiv_initial_art":
+        return _assistant_hiv_initial_art_response(message_text, state)
+    if intent == "hiv_monitoring":
+        return _assistant_hiv_monitoring_response(message_text, state)
+    if intent == "hiv_prep":
+        return _assistant_hiv_prep_response(message_text, state)
+    if intent == "hiv_pep":
+        return _assistant_hiv_pep_response(message_text, state)
+    if intent == "hiv_pregnancy":
+        return _assistant_hiv_pregnancy_response(message_text, state)
+    if intent == "hiv_oi_art_timing":
+        return _assistant_hiv_oi_art_timing_response(message_text, state)
+    if intent == "hiv_treatment_failure":
+        return _assistant_hiv_treatment_failure_response(message_text, state)
+    if intent == "hiv_resistance":
+        return _assistant_hiv_resistance_response(message_text, state)
+    if intent == "hiv_switch":
+        return _assistant_hiv_switch_response(message_text, state)
     if intent == "general_id":
         return _assistant_general_id_response(message_text, state)
-
     if intent == "consult_summary":
         return _assistant_consult_summary_response(state)
 
-    # intent == "unclear" — return None to fall through to the original generic response
+    # intent == "unclear" — return None to fall through
     return None
+
+
+def _assistant_llm_triage(
+    req: AssistantTurnRequest,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    """
+    LLM-backed last-resort triage called when all deterministic routing has failed.
+    Context-aware: passes consult state so routing accounts for established syndrome/organisms.
+    Also extracts any clinical data embedded in the message and applies it to state before routing,
+    so downstream response functions receive the richest possible context.
+    Returns None if the LLM is unavailable or the call fails, to allow fall-through.
+    """
+    message_text = (req.message or "").strip()
+    if not message_text:
+        return None
+
+    triage_result = _assistant_llm_triage_intent(message_text, state)
+    if triage_result is None:
+        return None
+
+    _apply_triage_extracted_context(state, triage_result.get("extracted") or {})
+    intent = triage_result.get("intent", "unclear")
+    return _assistant_route_by_intent(intent, req, state, message_text)
 
 
 _ALLERGY_MENTION_PATTERNS = [
@@ -9907,7 +11346,64 @@ def _consult_prior_context_summary(state: AssistantState) -> str | None:
         parts.append(f"Syndrome: {state.established_syndrome}")
     if state.consult_organisms:
         parts.append(f"Organisms: {', '.join(state.consult_organisms)}")
+    # HIV context summary
+    hiv_ctx = state.hiv_context or {}
+    if hiv_ctx:
+        hiv_parts: list[str] = ["HIV+"]
+        if hiv_ctx.get("cd4") is not None:
+            hiv_parts.append(f"CD4 {hiv_ctx['cd4']}")
+        if hiv_ctx.get("viral_load") is not None:
+            hiv_parts.append(f"VL {hiv_ctx['viral_load']}")
+        if hiv_ctx.get("on_art"):
+            regimen = hiv_ctx.get("current_regimen", "unknown")
+            hiv_parts.append(f"on {regimen}")
+        if hiv_ctx.get("hbv_coinfected"):
+            hiv_parts.append("HBV+")
+        parts.append(" ".join(hiv_parts))
     return " · ".join(parts) if parts else None
+
+
+def _syndrome_next_step_options(state: AssistantState, *, exclude: set[str] | None = None) -> list[AssistantOption]:
+    """
+    Return 1-2 contextually appropriate next-step chips based on established syndrome and consult context.
+    Keeps the conversation clinically focused rather than showing generic module names.
+    """
+    exclude = exclude or set()
+    options: list[AssistantOption] = []
+    syndrome = (state.established_syndrome or "").lower()
+    orgs_lower = " ".join(state.consult_organisms or []).lower()
+
+    # Endocarditis / SAB / candidaemia → TEE + clearance cultures are the immediate priority
+    if any(s in syndrome for s in ("endocarditis", "bacteraemia", "bacteremia", "candidaemia", "candidemia")):
+        if "followup_tests" not in exclude:
+            options.append(AssistantOption(value="followup_tests", label="Order TEE / clearance cultures"))
+
+    # S. aureus anywhere → Duke criteria / TEE if not already there
+    if ("aureus" in orgs_lower or "mssa" in orgs_lower or "mrsa" in orgs_lower) and "bacteraemia" in syndrome:
+        if "duke_criteria" not in exclude and not any(o.value == "followup_tests" for o in options):
+            options.append(AssistantOption(value="duke_criteria", label="Apply Duke criteria"))
+
+    # Bone / joint / osteomyelitis → IV-to-oral (OVIVA) is the key next question
+    if any(s in syndrome for s in ("osteomyelitis", "septic arthritis", "bone", "joint infection", "prosthetic joint", "pjı", "pji")):
+        if "iv_to_oral" not in exclude:
+            options.append(AssistantOption(value="iv_to_oral", label="IV-to-oral step-down (OVIVA)"))
+
+    # Bacteraemia / sepsis / candidaemia → source control
+    if any(s in syndrome for s in ("bacteraemia", "bacteremia", "sepsis", "septic shock", "candidaemia", "candidemia")):
+        if "source_control" not in exclude and not any(o.value == "source_control" for o in options):
+            options.append(AssistantOption(value="source_control", label="Source control decision"))
+
+    # CNS infections → drug interaction check (dex timing, acyclovir)
+    if any(s in syndrome for s in ("meningitis", "encephalitis", "brain abscess")):
+        if "drug_interaction" not in exclude:
+            options.append(AssistantOption(value="drug_interaction", label="Check drug interactions"))
+
+    return options[:2]
+
+
+def _is_mid_consult(state: AssistantState) -> bool:
+    """True when enough context is established that 'restart' is less useful than 'summary'."""
+    return bool(state.established_syndrome or state.consult_organisms or state.last_probid_summary or state.last_mechid_summary)
 
 
 def _snapshot_probid_result(state: AssistantState, text_result: "TextAnalyzeResponse", module: "SyndromeModule | None") -> None:
@@ -10648,6 +12144,7 @@ def _assistant_start_mechid_from_text(
         mechid_result,
         established_syndrome=state.established_syndrome,
         consult_organisms=state.consult_organisms or None,
+        institutional_antibiogram=state.institutional_antibiogram or None,
     )
     return AssistantTurnResponse(
         assistantMessage=review_message,
@@ -11583,8 +13080,14 @@ def _assistant_immunoid_response(
     options: List[AssistantOption] = [
         *doseid_options,
         AssistantOption(value="add_more_details", label="Update this case"),
-        AssistantOption(value="restart", label="Start new consult"),
     ]
+    # ImmunoID → HIVID bridge: offer HIV-specific chips when relevant
+    hiv_bridge_opts = _immunoid_hiv_bridge_options(state)
+    options.extend(hiv_bridge_opts)
+    if _is_mid_consult(state):
+        options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+    else:
+        options.append(AssistantOption(value="restart", label="Start new consult"))
     options.extend(_assistant_immunoid_extra_context_options(state))
     fallback_message = ((prefix or "") + _assistant_immunoid_final_message(result)).strip()
     narrated_message, narration_refined = narrate_immunoid_assistant_message(
@@ -13024,29 +14527,44 @@ def _assistant_doseid_response(
         consult_organisms=state.consult_organisms or None,
         prior_context_summary=_consult_prior_context_summary(state),
     )
+    # Build next-step options based on whether dosing is complete or still provisional
+    if result.follow_up_questions and result.medications:
+        # Provisional: still missing inputs — primary action is to complete the calculation
+        doseid_options: list[AssistantOption] = [
+            AssistantOption(value="run_assessment", label="Run provisional dosing"),
+            AssistantOption(value="add_more_details", label="Update dosing inputs"),
+        ]
+        doseid_tips: list[str] = [
+            "If you do not have the next missing value yet, use Run provisional dosing and I will keep the missing inputs visible.",
+            "You can add age, sex, height, weight, serum creatinine, or direct CrCl to refine the regimen.",
+        ]
+    else:
+        # Calculation complete — offer clinically relevant next steps
+        exclude_next = {"source_control", "followup_tests"}  # avoid duplicates with syndrome options below
+        syndrome_opts = _syndrome_next_step_options(state, exclude=exclude_next)
+        doseid_options = [
+            AssistantOption(value="iv_to_oral", label="IV-to-oral step-down?"),
+            AssistantOption(value="opat", label="OPAT eligibility"),
+            AssistantOption(value="duration", label="How long to treat?"),
+            *syndrome_opts,
+            AssistantOption(value="add_more_details", label="Update dosing inputs"),
+        ]
+        if _is_mid_consult(state):
+            doseid_options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+        else:
+            doseid_options.append(AssistantOption(value="restart", label="Start new consult"))
+        doseid_tips = [
+            "A useful reply would be: 'cefepime on HD' or 'RIPE for 62 kg, CrCl 35, female, 165 cm'.",
+            "Ask about IV-to-oral step-down once the patient is clinically stable and afebrile for 48h.",
+        ]
+
     return AssistantTurnResponse(
         assistantMessage=message,
         assistantNarrationRefined=narration_refined,
         state=state,
         doseidAnalysis=result,
-        options=[
-            *(
-                [AssistantOption(value="run_assessment", label="Run provisional dosing")]
-                if result.follow_up_questions and result.medications
-                else []
-            ),
-            AssistantOption(value="add_more_details", label="Update dosing inputs"),
-            AssistantOption(value="restart", label="Start new consult"),
-        ],
-        tips=[
-            *(
-                ["If you do not have the next missing value yet, use Run provisional dosing and I will keep the missing inputs visible."]
-                if result.follow_up_questions and result.medications
-                else []
-            ),
-            "A useful reply would be: 'cefepime on HD' or 'RIPE for 62 kg, CrCl 35, female, 165 cm'.",
-            "You can add age, sex, height, weight, serum creatinine, or direct CrCl to refine the regimen.",
-        ],
+        options=doseid_options,
+        tips=doseid_tips,
     )
 
 
@@ -13689,6 +15207,137 @@ def _select_pretest_factor_from_turn(module: SyndromeModule, req: AssistantTurnR
     return None
 
 
+def _assistant_done_state_redirect(
+    req: AssistantTurnRequest,
+    state: AssistantState,
+) -> AssistantTurnResponse | None:
+    """
+    When the assistant is in 'done' state and the user sends a free-form message,
+    check whether it is a redirect to a different module or intent rather than
+    an update to the current workflow.
+
+    Strategy:
+    1. Fast-path keyword checks cover clearly-phrased redirects (doseid, duration, iv_to_oral, etc.)
+    2. For question-like messages not caught by fast-path, LLM triage runs with full consult context.
+    3. Returns a redirect response if a different intent is identified; returns None if the message
+       should be treated as a case update for the current workflow.
+    """
+    msg = (req.message or "").strip()
+    if not msg:
+        return None
+
+    # Run all fast-path checks in order — same list as the select_module dispatcher.
+    # These cover the vast majority of clearly-phrased mid-consult redirects.
+    if _is_impression_plan_request(msg):
+        return _assistant_impression_plan_response(msg, state)
+    if _is_consult_summary_request(msg):
+        return _assistant_consult_summary_response(state)
+    if _is_empiric_therapy_request(msg):
+        return _assistant_empiric_therapy_response(msg, state)
+    if _is_iv_to_oral_request(msg):
+        return _assistant_iv_to_oral_response(msg, state)
+    if _is_duration_request(msg):
+        return _assistant_duration_response(msg, state)
+    if _is_followup_test_request(msg):
+        return _assistant_followup_tests_response(msg, state)
+    if _is_stewardship_request(msg):
+        return _assistant_stewardship_response(msg, state)
+    if _is_stewardship_review_request(msg):
+        return _assistant_stewardship_review_response(msg, state)
+    if _is_opat_request(msg):
+        return _assistant_opat_response(msg, state)
+    if _is_oral_therapy_request(msg):
+        return _assistant_oral_therapy_response(msg, state)
+    if _is_discharge_counselling_request(msg):
+        return _assistant_discharge_counselling_response(msg, state)
+    if _is_drug_interaction_request(msg):
+        return _assistant_drug_interaction_response(msg, state)
+    if _is_prophylaxis_request(msg):
+        return _assistant_prophylaxis_response(msg, state)
+    if _is_source_control_request(msg):
+        return _assistant_source_control_response(msg, state)
+    if _is_treatment_failure_request(msg):
+        return _assistant_treatment_failure_response(msg, state)
+    if _is_biomarker_request(msg):
+        return _assistant_biomarker_response(msg, state)
+    if _is_fluid_interpretation_request(msg):
+        return _assistant_fluid_interpretation_response(msg, state)
+    if _is_allergy_delabeling_request(msg):
+        return _assistant_allergy_delabeling_response(msg, state)
+    if _is_fungal_management_request(msg):
+        return _assistant_fungal_management_response(msg, state)
+    if _is_sepsis_request(msg):
+        return _assistant_sepsis_response(msg, state)
+    if _is_cns_infection_request(msg):
+        return _assistant_cns_infection_response(msg, state)
+    if _is_mycobacterial_request(msg):
+        return _assistant_mycobacterial_response(msg, state)
+    if _is_pregnancy_antibiotics_request(msg):
+        return _assistant_pregnancy_antibiotics_response(msg, state)
+    if _is_travel_medicine_request(msg):
+        return _assistant_travel_medicine_response(msg, state)
+    if _is_duke_criteria_request(msg):
+        return _assistant_duke_criteria_response(msg, state)
+    if _is_ast_meaning_request(msg):
+        return _assistant_ast_meaning_response(msg, state)
+    if _is_complexity_request(msg):
+        return _assistant_complexity_response(msg, state)
+    if _is_course_tracker_request(msg):
+        return _assistant_course_tracker_response(msg, state)
+    if _is_hiv_initial_art_request(msg):
+        return _assistant_hiv_initial_art_response(msg, state)
+    if _is_hiv_monitoring_request(msg):
+        return _assistant_hiv_monitoring_response(msg, state)
+    if _is_hiv_prep_request(msg):
+        return _assistant_hiv_prep_response(msg, state)
+    if _is_hiv_pep_request(msg):
+        return _assistant_hiv_pep_response(msg, state)
+    if _is_hiv_pregnancy_request(msg):
+        return _assistant_hiv_pregnancy_response(msg, state)
+    if _is_hiv_oi_art_timing_request(msg):
+        return _assistant_hiv_oi_art_timing_response(msg, state)
+    if _is_hiv_treatment_failure_request(msg):
+        return _assistant_hiv_treatment_failure_response(msg, state)
+    if _is_hiv_resistance_request(msg):
+        return _assistant_hiv_resistance_response(msg, state)
+    if _is_hiv_switch_request(msg):
+        return _assistant_hiv_switch_response(msg, state)
+
+    # Cross-workflow direct parsers: catch doseid or mechid phrasing when in a different workflow
+    if state.workflow != "doseid":
+        doseid_rsp = _assistant_start_doseid_from_text(msg, state)
+        if doseid_rsp is not None:
+            return doseid_rsp
+    if state.workflow not in {"allergyid", "mechid"}:
+        mechid_rsp = _assistant_start_mechid_from_text(msg, state)
+        if mechid_rsp is not None:
+            return mechid_rsp
+
+    # LLM triage for natural-language redirects not caught by the fast-path.
+    # Only triggered for question-like messages to avoid adding latency to case-update replies.
+    _msg_lower = msg.lower()
+    is_question_like = (
+        "?" in msg
+        or _msg_lower.startswith((
+            "what ", "how ", "can i ", "can we ", "should i ", "should we ",
+            "when ", "why ", "is it ", "is this ", "could i ", "would ",
+            "do i need", "do we need", "tell me", "give me",
+        ))
+    )
+    if is_question_like:
+        triage_result = _assistant_llm_triage_intent(msg, state)
+        if triage_result is not None:
+            _apply_triage_extracted_context(state, triage_result.get("extracted") or {})
+            intent = triage_result.get("intent", "unclear")
+            # If triage gives a workflow intent matching the current one, let the update proceed
+            if intent in {"unclear", state.workflow}:
+                return None
+            # Otherwise redirect — single LLM call, no duplication
+            return _assistant_route_by_intent(intent, req, state, msg)
+
+    return None
+
+
 @app.post("/v1/assistant/turn", response_model=AssistantTurnResponse)
 def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
     state = _assistant_initial_state(req)
@@ -13764,6 +15413,8 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     explicit_workflow_id,
                     lead_in=f"This reads like an explicit request for {workflow_label}, so I’ll start in that pathway. ",
                 )
+            if _is_impression_plan_request(message_text):
+                return _assistant_impression_plan_response(message_text, state)
             if _is_consult_summary_request(message_text):
                 return _assistant_consult_summary_response(state)
             if _is_empiric_therapy_request(message_text):
@@ -13820,6 +15471,24 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 return _assistant_complexity_response(message_text, state)
             if _is_course_tracker_request(message_text):
                 return _assistant_course_tracker_response(message_text, state)
+            if _is_hiv_initial_art_request(message_text):
+                return _assistant_hiv_initial_art_response(message_text, state)
+            if _is_hiv_monitoring_request(message_text):
+                return _assistant_hiv_monitoring_response(message_text, state)
+            if _is_hiv_prep_request(message_text):
+                return _assistant_hiv_prep_response(message_text, state)
+            if _is_hiv_pep_request(message_text):
+                return _assistant_hiv_pep_response(message_text, state)
+            if _is_hiv_pregnancy_request(message_text):
+                return _assistant_hiv_pregnancy_response(message_text, state)
+            if _is_hiv_oi_art_timing_request(message_text):
+                return _assistant_hiv_oi_art_timing_response(message_text, state)
+            if _is_hiv_treatment_failure_request(message_text):
+                return _assistant_hiv_treatment_failure_response(message_text, state)
+            if _is_hiv_resistance_request(message_text):
+                return _assistant_hiv_resistance_response(message_text, state)
+            if _is_hiv_switch_request(message_text):
+                return _assistant_hiv_switch_response(message_text, state)
             consult_intent_response = _assistant_handle_consult_intent(req, state)
             if consult_intent_response is not None:
                 return consult_intent_response
@@ -13929,9 +15598,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
         if chosen_module_id:
             return _assistant_begin_selected_workflow(state, chosen_module_id)
 
-        if _is_consult_summary_request(req.message or ""):
-            return _assistant_consult_summary_response(state)
         _msg_text = (req.message or "").strip()
+        if _is_impression_plan_request(_msg_text):
+            return _assistant_impression_plan_response(_msg_text, state)
+        if _is_consult_summary_request(_msg_text):
+            return _assistant_consult_summary_response(state)
         if _is_empiric_therapy_request(_msg_text):
             return _assistant_empiric_therapy_response(_msg_text, state)
         if _is_iv_to_oral_request(_msg_text):
@@ -13976,8 +15647,6 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             return _assistant_pregnancy_antibiotics_response(_msg_text, state)
         if _is_travel_medicine_request(_msg_text):
             return _assistant_travel_medicine_response(_msg_text, state)
-        if _is_impression_plan_request(_msg_text):
-            return _assistant_impression_plan_response(_msg_text, state)
         if _is_duke_criteria_request(_msg_text):
             return _assistant_duke_criteria_response(_msg_text, state)
         if _is_ast_meaning_request(_msg_text):
@@ -14177,6 +15846,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             mechid_result,
             established_syndrome=state.established_syndrome,
             consult_organisms=state.consult_organisms or None,
+            institutional_antibiogram=state.institutional_antibiogram or None,
         )
         return AssistantTurnResponse(
             assistantMessage=review_message,
@@ -14230,6 +15900,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     mechid_result,
                     established_syndrome=state.established_syndrome,
                     consult_organisms=state.consult_organisms or None,
+                    institutional_antibiogram=state.institutional_antibiogram or None,
                 )
                 return AssistantTurnResponse(
                     assistantMessage=review_message,
@@ -14257,11 +15928,20 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 established_syndrome=state.established_syndrome,
                 consult_organisms=state.consult_organisms or None,
                 polymicrobial_analyses=poly_analyses or None,
+                institutional_antibiogram=state.institutional_antibiogram or None,
             )
             done_options = [
+                AssistantOption(value="duration", label="How long to treat?"),
                 AssistantOption(value="add_more_details", label="Update this case"),
-                AssistantOption(value="restart", label="Start new consult"),
             ]
+            if _is_mid_consult(state):
+                done_options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+            else:
+                done_options.append(AssistantOption(value="restart", label="Start new consult"))
+            # Add syndrome-specific next steps (e.g. TEE for endocarditis, source control for bacteraemia)
+            syndrome_opts = _syndrome_next_step_options(state, exclude={"source_control"})
+            for opt in reversed(syndrome_opts):
+                done_options.insert(0, opt)
             done_tips = [
                 "Add another susceptibility, test result, or clinical detail anytime and I will update the same case.",
                 "Review the mechanism, cautions, therapy notes, and references in the analysis panel.",
@@ -14920,8 +16600,11 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 state.pending_followup_text = None
             done_options = [
                 AssistantOption(value="add_more_details", label="Update this case"),
-                AssistantOption(value="restart", label="Start new consult"),
             ]
+            if _is_mid_consult(state):
+                done_options.append(AssistantOption(value="consult_summary", label="Full consult summary"))
+            else:
+                done_options.append(AssistantOption(value="restart", label="Start new consult"))
             done_tips = [
                 "Add another test result or case detail anytime and I will update the same consult.",
                 "Review `understood` to confirm what I extracted from your text.",
@@ -14933,6 +16616,18 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
             if micro_bridge and not any(o.value in {"continue_to_resistance", "mechid"} for o in done_options):
                 done_options.insert(0, micro_bridge)
                 done_tips.insert(0, "If culture results are back, paste them and I'll interpret resistance and therapy in the context of this syndrome.")
+            # No organisms yet but syndrome established → offer empiric therapy
+            elif state.established_syndrome and not state.consult_organisms:
+                done_options.insert(0, AssistantOption(value="empiric_therapy", label="What to start empirically?"))
+                done_tips.insert(0, "Cultures pending? I can recommend empiric coverage based on the syndrome while you wait for results.")
+            # Acute HIV / viral syndrome bridge → offer ART workup
+            hiv_bridge = _probid_hiv_bridge_option(state)
+            if hiv_bridge:
+                done_options.insert(0, hiv_bridge)
+                done_tips.insert(0, "Acute retroviral syndrome should be on the differential — I can start the HIV ART workup if 4th-gen Ag/Ab is positive.")
+            elif _is_acute_hiv_mention(text_result.get("raw_text", "") if isinstance(text_result, dict) else ""):
+                done_options.insert(0, AssistantOption(value="hiv_initial_art", label="Start ART for acute HIV"))
+                done_tips.insert(0, "If HIV Ag/Ab is confirmed, same-day ART is recommended — I can help select the regimen.")
             probid_doseid_ids = _assistant_probid_doseid_candidate_ids(module, text_result, state)
             if probid_doseid_ids:
                 narrated_message = _assistant_append_dosing_invitation(narrated_message)
@@ -15126,6 +16821,12 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                 tips=["For example: 'TEE negative', 'blood cultures cleared', or 'CSF Gram stain positive'."],
             )
         if req.message and req.message.strip():
+            # Before treating the message as a case update, check whether it is actually
+            # a redirect to a different intent (e.g. "what's the dose?" while in mechid done).
+            _done_redirect = _assistant_done_state_redirect(req, state)
+            if _done_redirect is not None:
+                return _done_redirect
+
             if state.workflow == "mechid" and state.mechid_text:
                 previous_result = _build_mechid_text_response(
                     state.mechid_text,
@@ -15155,6 +16856,7 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                     established_syndrome=state.established_syndrome,
                     consult_organisms=state.consult_organisms or None,
                     polymicrobial_analyses=upd_poly or None,
+                    institutional_antibiogram=state.institutional_antibiogram or None,
                 )
                 prefix = "I updated the isolate consult with the new information."
                 if previous_result.analysis is not None and updated_result.analysis is not None:
@@ -15290,6 +16992,14 @@ def assistant_turn(req: AssistantTurnRequest) -> AssistantTurnResponse:
                         allergy_opt = _assistant_allergy_check_option(state, candidate_drug_names=_upd_candidate_names)
                         if allergy_opt:
                             done_options.append(allergy_opt)
+                    # Acute HIV bridge for second ProbID done path
+                    hiv_bridge2 = _probid_hiv_bridge_option(state)
+                    if hiv_bridge2 and not any(o.value == hiv_bridge2.value for o in done_options):
+                        done_options.insert(0, hiv_bridge2)
+                        done_tips.insert(0, "Acute retroviral syndrome should be on the differential — I can start the HIV ART workup if confirmed.")
+                    # No organisms + syndrome → empiric
+                    if state.established_syndrome and not state.consult_organisms and not any(o.value == "empiric_therapy" for o in done_options):
+                        done_options.insert(0, AssistantOption(value="empiric_therapy", label="What to start empirically?"))
                     return AssistantTurnResponse(
                         assistantMessage=f"{lead} {narrated_message}",
                         assistantNarrationRefined=narration_refined,

@@ -1166,8 +1166,7 @@
                 <button type="button" class="btn" id="imageBtn">Upload AST image</button>
                 <input type="file" id="imageInput" class="hidden" accept="image/*" />
                 <button type="button" class="btn" id="antibiogramBtn">Upload antibiogram</button>
-                <input type="file" id="antibiogramInput" class="hidden" accept="image/*" />
-                <button type="button" class="btn consult hidden" id="consultBtn">Consultant impression</button>
+                <input type="file" id="antibiogramInput" class="hidden" accept="image/*,application/pdf,.pdf" />
                 <button type="submit" class="btn primary" id="sendBtn">Send</button>
               </div>
             </div>
@@ -1251,7 +1250,6 @@
         imageInput: document.getElementById("imageInput"),
         antibiogramBtn: document.getElementById("antibiogramBtn"),
         antibiogramInput: document.getElementById("antibiogramInput"),
-        consultBtn: document.getElementById("consultBtn"),
         launchpad: document.getElementById("launchpad"),
         composerHint: document.getElementById("composerHint"),
         helpBanner: document.getElementById("helpBanner"),
@@ -1417,7 +1415,7 @@
           return "Paste the organism, isolate report, syndrome, and any severity clues in one message.";
         }
         if (workflow === "mechid" && stage === "mechid_confirm") {
-          return "Confirm the extraction before asking for the consultant impression.";
+          return "Confirm or correct the extraction, then select an option above.";
         }
         if (workflow === "doseid" && stage === "doseid_describe") {
           return "List the antimicrobial or regimen plus weight and renal context, including dialysis or CrCl when you have it.";
@@ -1449,9 +1447,9 @@
         if (stage === "describe_case" && section === "micro") return "Add cultures, PCR results, stains, or organism data...";
         if (stage === "describe_case" && section === "imaging") return "Add chest imaging, CT, MRI, echo, or other key imaging results...";
         if (stage === "describe_case") return "Describe the case in plain language...";
-        if (stage === "confirm_case") return "Add one or two missing high-yield findings, or click the consultant impression button...";
+        if (stage === "confirm_case") return "Add any missing findings, or select an option above to continue...";
         if (workflow === "mechid" && stage === "mechid_describe") return "Paste the organism, susceptibility pattern, syndrome, and severity context...";
-        if (workflow === "mechid" && stage === "mechid_confirm") return "Correct anything that was extracted incorrectly, then ask for the consultant impression...";
+        if (workflow === "mechid" && stage === "mechid_confirm") return "Correct anything that was extracted incorrectly, or select an option above to continue...";
         if (workflow === "doseid" && stage === "doseid_describe") return "Type the drug or regimen, weight, serum creatinine or CrCl, and dialysis status...";
         if (workflow === "immunoid" && stage === "immunoid_select_agents") return "Type the immunosuppressive drugs or regimen being planned...";
         if (workflow === "immunoid" && stage === "immunoid_collect_context") return "Answer the missing screening or prophylaxis question here...";
@@ -1507,8 +1505,8 @@
         els.progressMeta.textContent = progressMetaForState(assistantState);
       }
 
-      function syncComposerContext(assistantState = {}) {
-        els.userInput.placeholder = placeholderForState(assistantState);
+      function syncComposerContext(assistantState = {}, suggestedPlaceholder = null) {
+        els.userInput.placeholder = suggestedPlaceholder || placeholderForState(assistantState);
         const label = sendButtonLabelForState(assistantState);
         if (!state.busy) {
           els.sendBtn.textContent = label;
@@ -1523,7 +1521,6 @@
         els.patientBar.classList.add("hidden");
         els.patientBar.innerHTML = "";
         els.optionTray.innerHTML = "";
-        syncConsultButton([]);
         state.assistantState = null;
         state.lastResponse = null;
         state.hiddenCaseOptions.clear();
@@ -1551,23 +1548,9 @@
         els.exampleBtn.disabled = next;
         els.imageBtn.disabled = next;
         els.antibiogramBtn.disabled = next;
-        els.consultBtn.disabled = next;
         els.userInput.disabled = next;
         if (next) els.sendBtn.textContent = "Sending...";
         else els.sendBtn.textContent = state.sendButtonLabel || "Send";
-      }
-
-      function syncConsultButton(options = []) {
-        const consultOption = options.find((opt) => opt.value === "run_assessment");
-        if (!consultOption) {
-          els.consultBtn.classList.add("hidden");
-          els.consultBtn.textContent = "Give consultant impression";
-          els.consultBtn.disabled = state.busy;
-          return;
-        }
-        els.consultBtn.classList.remove("hidden");
-        els.consultBtn.textContent = consultOption.label || "Give consultant impression";
-        els.consultBtn.disabled = state.busy;
       }
 
       function renderMarkdown(text) {
@@ -1661,7 +1644,6 @@
 
       function renderOptions(options = []) {
         els.optionTray.innerHTML = "";
-        syncConsultButton(options);
         if (!options.length) return;
         const currentStage = state.assistantState?.stage || null;
         const supportsInsertMode = ["describe_case", "confirm_case"].includes(currentStage);
@@ -1708,9 +1690,6 @@
         }
         let pendingSection = null;
         for (const opt of options) {
-          if (opt.value === "run_assessment") {
-            continue;
-          }
           if (typeof opt.value === "string" && opt.value.startsWith("section:")) {
             const label = document.createElement("div");
             label.className = "option-section";
@@ -1752,6 +1731,10 @@
                 : (opt.description || opt.label)
             );
           btn.addEventListener("click", () => {
+            if (opt.value === "upload_antibiogram") {
+              els.antibiogramInput.click();
+              return;
+            }
             if (opt.value === "continue_case_draft") {
               const draft = els.userInput.value.trim();
               els.userInput.value = "";
@@ -1943,7 +1926,7 @@
         }
 
         renderProgress(s);
-        syncComposerContext(s);
+        syncComposerContext(s, resp?.suggestedPlaceholder || null);
         syncLaunchpad(workflow === "probid" && s.stage === "select_module" ? null : workflow);
         // helpBanner is hidden in the new UI; updates are no-ops kept for JS compat
         els.helpBanner.textContent = "";
@@ -2650,10 +2633,6 @@
       els.antibiogramInput.addEventListener("change", () => {
         const [file] = Array.from(els.antibiogramInput.files || []);
         if (file) uploadInstitutionalAntibiogram(file);
-      });
-
-      els.consultBtn.addEventListener("click", () => {
-        sendTurn({ selection: "run_assessment", userVisibleText: "Give consultant impression" });
       });
 
       // Quickstart overlay

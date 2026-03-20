@@ -584,6 +584,8 @@ class AssistantState(BaseModel):
     last_allergy_summary: Optional[Dict] = Field(default=None, alias="lastAllergySummary")
     # Institutional antibiogram — loaded once per session, used to localise empiric therapy advice
     institutional_antibiogram: Optional[Dict] = Field(default=None, alias="institutionalAntibiogram")
+    # HIV consult context — carries ART, viral load, CD4, resistance, and special population data
+    hiv_context: Optional[Dict] = Field(default=None, alias="hivContext")
 
     model_config = {"populate_by_name": True}
 
@@ -663,6 +665,7 @@ class AssistantTurnResponse(BaseModel):
     allergyid_analysis: Optional[AntibioticAllergyAnalyzeResponse] = Field(default=None, alias="allergyidAnalysis")
     assistant_contract: Optional[AssistantInterfaceContract] = Field(default=None, alias="assistantContract")
     tips: List[str] = Field(default_factory=list)
+    suggested_placeholder: Optional[str] = Field(default=None, alias="suggestedPlaceholder")
 
     model_config = {"populate_by_name": True}
 

@@ -152,6 +152,21 @@ def parse_antibiogram_image_with_openai(
     model = parser_model or os.getenv("OPENAI_VISION_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
     instructions = _build_antibiogram_instructions()
 
+    # Build the file content block — PDFs use input_file, images use input_image
+    is_pdf = "pdf" in media_type.lower()
+    if is_pdf:
+        file_content_block: Dict[str, Any] = {
+            "type": "input_file",
+            "filename": filename or "antibiogram.pdf",
+            "file_data": image_data_url,
+        }
+    else:
+        file_content_block = {
+            "type": "input_image",
+            "image_url": image_data_url,
+        }
+
+    file_desc = "PDF document" if is_pdf else "image"
     try:
         response = client.responses.create(
             model=model,
@@ -163,14 +178,11 @@ def parse_antibiogram_image_with_openai(
                         {
                             "type": "input_text",
                             "text": (
-                                "Extract the full antibiogram table from this image into JSON. "
+                                f"Extract the full antibiogram table from this {file_desc} into JSON. "
                                 f"Filename: {filename or 'unknown'}; media type: {media_type}."
                             ),
                         },
-                        {
-                            "type": "input_image",
-                            "image_url": image_data_url,
-                        },
+                        file_content_block,
                     ],
                 }
             ],
@@ -184,7 +196,7 @@ def parse_antibiogram_image_with_openai(
 
     payload = _extract_json(output_text)
     validated = _validate_antibiogram_payload(payload)
-    validated["parser"] = f"openai-{model}-antibiogram-v1"
+    validated["parser"] = f"openai-{model}-antibiogram-{'pdf' if is_pdf else 'image'}-v1"
     return validated
 
 

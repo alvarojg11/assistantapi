@@ -51,10 +51,11 @@ def _call_consult_model(*, prompt: str, payload: Dict[str, Any], model: str | No
     client = OpenAI(**client_kwargs)
 
     chosen_model = model or os.getenv("OPENAI_CONSULT_MODEL", "gpt-4.1-mini")
+    effective_prompt = prompt + "\n" + _PHYSICIAN_VOICE_RULES
     try:
         response = client.responses.create(
             model=chosen_model,
-            instructions=prompt,
+            instructions=effective_prompt,
             input=json.dumps(payload, ensure_ascii=True),
         )
     except Exception as exc:  # pragma: no cover
@@ -99,6 +100,34 @@ def _build_grounding_envelope(
     if extra_context:
         envelope["context"] = extra_context
     return envelope
+
+
+_PHYSICIAN_VOICE_RULES = (
+    "VOICE RULES (apply to every response):\n"
+    "1. PERSONALIZE the opening — if you know the patient's age, sex, syndrome, or organisms, open with them directly: "
+    "'For your 65yo male with MRSA bacteremia...' or 'In this patient with endocarditis...'. "
+    "Never open with 'Based on the information provided', 'Great question', 'I'll help you', or similar filler.\n"
+    "2. FLAG UNCERTAINTY honestly — for genuinely controversial areas, say so explicitly rather than projecting false confidence. "
+    "Examples: pip-tazo for ESBL (MERINO trial showed inferiority), SAB oral step-down (POET data is for NVE only, not SAB), "
+    "vancomycin MIC ≥2 management, culture-negative endocarditis duration. "
+    "A phrase like 'the evidence here is contested' or 'guidelines differ on this' is appropriate.\n"
+    "3. ONE-SENTENCE BOTTOM LINE first — lead with the clinical action, then the reasoning. "
+    "Do not bury the recommendation in paragraph two.\n"
+    "4. US FORMULARY — this app is used in the United States. Only recommend antibiotics that are routinely stocked and used in US hospitals. "
+    "Key rules:\n"
+    "   - MSSA skin/soft tissue (oral): use cephalexin 500mg QID or amoxicillin-clavulanate 875/125mg BD. "
+    "Do NOT recommend dicloxacillin (rarely stocked in US outpatient pharmacies) or flucloxacillin (not available in the US).\n"
+    "   - MSSA bacteremia/serious infections (IV): use cefazolin 2g IV q8h as first-line (preferred over nafcillin in most US centers due to tolerability). "
+    "Nafcillin is an acceptable alternative. Do NOT recommend flucloxacillin or oxacillin as primary recommendations.\n"
+    "   - GNR coverage: use ceftriaxone, cefepime, piperacillin-tazobactam, or meropenem as appropriate. "
+    "Do NOT recommend cefuroxime IV (rarely used in US practice) — use ceftriaxone instead.\n"
+    "   - Oral step-down for bone/joint (OVIVA data): in the US context, use levofloxacin 750mg OD ± rifampin 300mg BD for susceptible GNR/Staph. "
+    "Do NOT recommend dicloxacillin or flucloxacillin for oral step-down.\n"
+    "   - Oral antistaphylococcal: use cephalexin, dicloxacillin is acceptable only if explicitly available, but prefer cephalexin.\n"
+    "   - Pivmecillinam: NOT available in the US — do not recommend.\n"
+    "   - Temocillin: NOT available in the US — do not recommend.\n"
+    "   - Use 'vancomycin' not 'glycopeptide'; use 'acetaminophen' not 'paracetamol'; use US drug names throughout.\n"
+)
 
 
 def _grounded_narration_prompt(base_prompt: str) -> str:
@@ -850,18 +879,61 @@ def narrate_empiric_therapy_answer(
         "  - If the antibiogram does not contain data for the most likely pathogen, state this and fall back to guideline-based empiric recommendations.\n"
     ) if institutional_antibiogram_block else ""
 
+    # Detect controversial areas to flag honestly
+    question_lower = question.lower()
+    orgs_lower = " ".join(consult_organisms or []).lower()
+    controversy_notes = ""
+    if ("esbl" in question_lower or "esbl" in orgs_lower) and any(
+        k in question_lower for k in ("pip", "tazobactam", "tazocin", "piperacillin")
+    ):
+        controversy_notes += (
+            "CONTROVERSY: If pip-tazo is mentioned for ESBL — explicitly flag the MERINO trial (2018) "
+            "which showed meropenem is superior to pip-tazo for ESBL bacteraemia (30-day mortality higher with pip-tazo). "
+            "Recommend carbapenem; acknowledge ongoing debate about inoculum effect. "
+            "Do NOT present pip-tazo as equivalent.\n"
+        )
+
+    # Detect antifungal + susceptibility-variable species requiring antibiogram guidance
+    antifungal_note = ""
+    if any(k in question_lower or k in orgs_lower for k in ("candida", "fungal", "antifungal", "fluconazole", "echinocandin", "micafungin", "caspofungin")):
+        if any(k in question_lower or k in orgs_lower for k in ("glabrata", "krusei", "tropicalis", "auris")):
+            antifungal_note = (
+                "ANTIFUNGAL NOTE: For Candida glabrata and C. krusei, azole resistance is common "
+                "(C. krusei is intrinsically resistant to fluconazole; C. glabrata has variable susceptibility). "
+                "Recommend an echinocandin (micafungin 100mg OD, caspofungin 70mg load then 50mg OD, or anidulafungin 200mg load then 100mg OD) "
+                "as the empiric first choice. State explicitly whether local fluconazole susceptibility from the antibiogram supports fluconazole use "
+                "or whether the echinocandin should be the default at this institution.\n"
+            )
+
     prompt = (
         "You are an experienced infectious diseases consultant answering a clinician's question about empiric antimicrobial therapy.\n"
         "Empiric therapy means treatment started before culture results are available, based on syndrome and epidemiology.\n"
         + context_block
-        + antibiogram_section +
+        + antibiogram_section
+        + controversy_notes
+        + antifungal_note
+        + "CRITICAL RULE — MATCH ROUTE AND SPECTRUM TO THE SYNDROME:\n"
+        "  - Uncomplicated cystitis / lower UTI: oral agents ONLY. First-line: nitrofurantoin 100mg MR BD x5d, or TMP-SMX 960mg BD x3d (if local susceptibility allows), or fosfomycin 3g single dose. "
+        "Do NOT recommend IV antibiotics or carbapenems for uncomplicated cystitis.\n"
+        "  - Pyelonephritis (non-severe, no sepsis criteria): oral fluoroquinolone (ciprofloxacin 500mg BD x7d or levofloxacin 750mg OD x5d) if local susceptibility ≥80%, "
+        "OR IV ceftriaxone 2g OD if oral route unsuitable. Reserve carbapenems only if local ESBL rate is high (shown in antibiogram) or the patient has prior ESBL-producing isolates.\n"
+        "  - Sepsis / bacteraemia / severe presentations: IV broad-spectrum is appropriate. "
+        "Default GNR coverage: piperacillin-tazobactam 4.5g IV q8h, or cefepime 2g IV q8h. "
+        "Upgrade to a carbapenem (meropenem 1g IV q8h or ertapenem 1g IV OD) ONLY IF: local ESBL/carbapenem-resistance rates justify it (antibiogram shows <80% susceptibility to pip-tazo or cephalosporins), "
+        "OR the patient has prior resistant isolates, OR they are immunocompromised with septic shock. "
+        "Do NOT default to carbapenems for every GNR bacteraemia in the absence of resistance data.\n"
+        "  - HAP/VAP: anti-pseudomonal beta-lactam + MRSA coverage (vancomycin or linezolid) if risk factors present.\n"
+        "  - Intra-abdominal infections: ceftriaxone 2g IV OD + metronidazole 500mg IV q8h for mild-moderate community-acquired; piperacillin-tazobactam 3.375g IV q6h (or 4.5g q8h extended infusion) for severe or hospital-acquired; anti-pseudomonal coverage for nosocomial IAI.\n"
+        "Always name a specific drug, dose, and route — never say 'it depends' without also giving your best recommendation. "
+        "If local data is missing, give the syndrome-appropriate guideline default (not the broadest possible option) and note that local rates may change the choice.\n"
         "Give a concise, actionable recommendation:\n"
-        "  1. State the preferred empiric regimen for the syndrome, including drug name and key dose range.\n"
+        "  1. State the preferred empiric regimen: drug name, dose, route, and frequency. Always name the drug.\n"
         "  2. Name the most important pathogens being covered.\n"
-        "  3. Address when to add MRSA coverage, when to consider anti-pseudomonal coverage, and when to add anaerobic coverage — only if relevant.\n"
-        "  4. Note any patient-specific adjustments (renal, allergy) if context is available.\n"
-        "  5. Specify what to culture before starting and when to narrow based on results.\n"
+        "  3. Address MRSA, anti-pseudomonal, and anaerobic coverage only if clinically relevant to this syndrome.\n"
+        "  4. Note patient-specific adjustments (renal function, allergy, weight) if context is available.\n"
+        "  5. State what to culture before starting, and when to narrow based on results.\n"
         "If the syndrome is unclear, name the most likely diagnosis and give the regimen for that working diagnosis.\n"
+        "If local antibiogram data is provided, use it to confirm or override the default choice — state the local susceptibility % explicitly.\n"
         "Do not recommend therapy for syndromes clearly outside ID (e.g., pure cardiac or oncologic issues).\n"
         "Do not invent specific PK/PD numbers or MIC breakpoints. Stick to guideline-concordant regimens.\n"
         "Sound like a helpful ID colleague on a consult call — direct, confident, and brief.\n"
@@ -1808,6 +1880,7 @@ def narrate_drug_interaction_answer(
     established_syndrome: str | None = None,
     consult_organisms: List[str] | None = None,
     patient_summary: str | None = None,
+    hiv_context: dict | None = None,
     fallback_message: str,
 ) -> Tuple[str, bool]:
     """Answer a drug interaction question relevant to antimicrobial therapy."""
@@ -1821,6 +1894,10 @@ def narrate_drug_interaction_answer(
         context_parts.append(f"Syndrome: {established_syndrome}.")
     if consult_organisms:
         context_parts.append(f"Identified organisms: {', '.join(consult_organisms)}.")
+    if hiv_context:
+        hiv_block = _build_hiv_context_block(hiv_context)
+        if hiv_block:
+            context_parts.append(f"HIV context: {hiv_block}")
     context_block = (" ".join(context_parts) + "\n") if context_parts else ""
 
     prompt = (
@@ -1843,6 +1920,17 @@ def narrate_drug_interaction_answer(
         "  - Polymyxins (colistin/polymyxin B): nephrotoxic — avoid combination nephrotoxins.\n"
         "  - Linezolid: bone marrow suppression — weekly CBC for prolonged use; additive myelosuppression with other bone marrow suppressants.\n"
         "  - Dapsone: haemolysis in G6PD deficiency — screen before use.\n\n"
+        "ANTIRETROVIRAL (ART) INTERACTIONS — critical when patient is on HIV therapy:\n"
+        "  - Dolutegravir (DTG) / Bictegravir (BIC): chelated by polyvalent cations (Ca²⁺, Mg²⁺, Fe²⁺, Al³⁺, Zn²⁺) — take INSTI 2h before or 6h after supplements/antacids. Rifampin: DOUBLE DTG to 50mg BID (BIC contraindicated with rifampin). Metformin: cap at 500mg BID (DTG/BIC inhibit OCT2, increase metformin levels 79%). Carbamazepine: avoid (induces UGT1A1, drops INSTI levels).\n"
+        "  - Cobicistat (COBI) / Ritonavir (RTV) boosters: potent CYP3A4 INHIBITORS — raise levels of: statins (avoid simvastatin/lovastatin → use atorvastatin ≤20mg or pitavastatin), tacrolimus/ciclosporin (dramatic reduction needed), inhaled fluticasone (Cushing syndrome → use beclomethasone), sildenafil/tadalafil (reduce dose 50-75%), rifabutin (150mg QOD with RTV), amlodipine (reduce dose), colchicine (contraindicated with renal/hepatic impairment). Cobicistat additionally CONTRAINDICATED in pregnancy T2/T3 (subtherapeutic ART levels).\n"
+        "  - Rilpivirine (RPV): requires stomach acid for absorption — CONTRAINDICATED with PPIs (omeprazole, pantoprazole). H2RAs: give RPV 12h before or 4h after. Antacids: separate by 2h. Rifampin/rifabutin: avoid (decrease RPV levels below efficacy).\n"
+        "  - Tenofovir (TDF/TAF): additive nephrotoxicity with aminoglycosides, amphotericin B, NSAIDs, vancomycin. TDF specifically: avoid with high-dose NSAIDs or concurrent nephrotoxins. TAF: levels decreased by rifampin (use TDF instead); levels increased by cobicistat/ritonavir (use TAF 10mg not 25mg).\n"
+        "  - Efavirenz (EFV): CYP2B6 substrate + CYP3A4 inducer — reduces voriconazole levels (double voriconazole dose to 400mg BID or use alternative). Reduces methadone (withdrawal risk — increase methadone dose). Reduces artemether-lumefantrine.\n"
+        "  - Atazanavir (ATV): requires acid for absorption — PPIs contraindicated. Causes unconjugated hyperbilirubinemia (cosmetic, not hepatotoxic). Additive QT risk with other QT-prolonging drugs.\n"
+        "  - Darunavir/r (DRV/r): CYP3A4 inhibitor (via ritonavir) — same interaction profile as COBI/RTV above. Rifampin contraindicated (use rifabutin 150mg QOD).\n"
+        "  - Maraviroc (MVC): CYP3A4 substrate — dose adjustment needed: 150mg BID with CYP3A4 inhibitors (PIs, azoles), 600mg BID with CYP3A4 inducers (rifampin, EFV).\n"
+        "  - Lenacapavir: CYP3A4 substrate — avoid strong inducers (rifampin, carbamazepine, phenytoin). Rifabutin OK.\n"
+        "  - ART + anti-TB: Rifampin is the most consequential interaction — contraindicated with all PIs, COBI-boosted regimens, RPV, BIC, and maraviroc at standard dose. Options with rifampin: DTG 50mg BID, EFV 600mg OD, or raltegravir 800mg BID. Rifabutin is safer: use 150mg QOD with PI/r; 300mg OD with DTG; 450-600mg OD with EFV.\n\n"
         "ANSWER FORMAT: Lead with the clinical verdict (safe, caution, avoid, or alternative recommended). "
         "State the mechanism briefly. Give the practical management step: what to monitor, what dose adjustment is needed, or what alternative to use. "
         "If the specific interaction is not listed above but involves an ID drug, reason from drug class pharmacology.\n"
@@ -2064,10 +2152,34 @@ def narrate_duration_answer(
         context_parts.append(f"Identified organisms: {', '.join(consult_organisms)}.")
     context_block = (" ".join(context_parts) + "\n") if context_parts else ""
 
+    # Detect high-uncertainty duration scenarios
+    question_lower = question.lower()
+    orgs_lower = " ".join(consult_organisms or []).lower()
+    syndrome_lower = (established_syndrome or "").lower()
+    controversy_notes = ""
+    if ("aureus" in orgs_lower or "mssa" in orgs_lower or "mrsa" in orgs_lower or
+            "aureus" in question_lower) and any(
+        k in question_lower for k in ("oral", "switch", "step down", "step-down", "po", "tablet")
+    ):
+        controversy_notes += (
+            "CONTROVERSY: S. aureus bacteraemia requires a complete IV course. "
+            "The POET trial applies only to native valve endocarditis caused by Streptococci/Enterococcus — "
+            "do NOT generalise POET to SAB. Flag this explicitly if oral step-down is raised for S. aureus bacteraemia.\n"
+        )
+    if "culture-negative" in question_lower or (
+        "endocarditis" in syndrome_lower and not consult_organisms
+    ):
+        controversy_notes += (
+            "UNCERTAINTY: Duration for culture-negative endocarditis is genuinely uncertain. "
+            "Acknowledge this — empiric 4-6 weeks IV is standard but evidence is limited. "
+            "Flag the importance of infectious diseases specialist review.\n"
+        )
+
     prompt = (
         "You are an infectious diseases consultant answering a clinician's question about antibiotic treatment duration.\n"
-        + context_block +
-        "Give a clear, guideline-concordant duration recommendation:\n"
+        + context_block
+        + controversy_notes
+        + "Give a clear, guideline-concordant duration recommendation:\n"
         "  1. State the duration range up front — be specific (e.g., '14 days', '4 to 6 weeks', '5 to 7 days').\n"
         "  2. Name the key factors that determine duration: source control status, bacteraemia clearance, response to therapy, "
         "whether this is complicated or uncomplicated.\n"
@@ -2195,6 +2307,732 @@ def narrate_consult_summary(
             stage="final",
             fallback_message=fallback_message,
             deterministic_payload=summary_payload,
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+# ---------------------------------------------------------------------------
+# HIVID — HIV antiretroviral therapy narrators (Phase 1: initial ART + monitoring)
+# ---------------------------------------------------------------------------
+
+
+def _build_hiv_context_block(
+    hiv_context: "dict | None",
+    patient_summary: "str | None" = None,
+    established_syndrome: "str | None" = None,
+    consult_organisms: "list[str] | None" = None,
+) -> str:
+    """Build a context block from HIV-specific and general consult state for HIVID narrators."""
+    context_parts: List[str] = []
+    if patient_summary:
+        context_parts.append(f"Patient context: {patient_summary}.")
+    if established_syndrome:
+        context_parts.append(f"Established syndrome: {established_syndrome}.")
+    if consult_organisms:
+        context_parts.append(f"Identified organisms: {', '.join(consult_organisms)}.")
+    if hiv_context:
+        hiv_parts: List[str] = []
+        if hiv_context.get("viral_load") is not None:
+            hiv_parts.append(f"HIV VL: {hiv_context['viral_load']} copies/mL")
+        if hiv_context.get("cd4") is not None:
+            hiv_parts.append(f"CD4: {hiv_context['cd4']} cells/uL")
+        if hiv_context.get("hbv_coinfected"):
+            hiv_parts.append("HBV coinfected")
+        if hiv_context.get("hcv_coinfected"):
+            hiv_parts.append("HCV coinfected")
+        if hiv_context.get("pregnant"):
+            trimester = hiv_context.get("trimester")
+            hiv_parts.append(f"Pregnant (T{trimester})" if trimester else "Pregnant")
+        if hiv_context.get("active_oi"):
+            hiv_parts.append(f"Active OI: {hiv_context['active_oi']}")
+        if hiv_context.get("resistance_mutations"):
+            hiv_parts.append(f"Known mutations: {', '.join(hiv_context['resistance_mutations'])}")
+        if hiv_context.get("on_art"):
+            current = hiv_context.get("current_regimen")
+            if current:
+                hiv_parts.append(f"Currently on: {', '.join(current)}")
+            else:
+                hiv_parts.append("Currently on ART (regimen unspecified)")
+        if hiv_context.get("creatinine_clearance") is not None:
+            hiv_parts.append(f"CrCl: {hiv_context['creatinine_clearance']} mL/min")
+        if hiv_context.get("prior_cab_la_prep"):
+            hiv_parts.append("Prior CAB-LA PrEP exposure")
+        if hiv_parts:
+            context_parts.append("HIV-specific data: " + "; ".join(hiv_parts) + ".")
+    return (" ".join(context_parts) + "\n") if context_parts else ""
+
+
+def narrate_hiv_initial_art(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    established_syndrome: str | None = None,
+    consult_organisms: list[str] | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Recommend an initial ART regimen based on patient factors, per IAS-USA 2024 guidelines."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary, established_syndrome, consult_organisms)
+
+    prompt = (
+        "You are an infectious diseases consultant specializing in HIV medicine, recommending "
+        "an initial antiretroviral therapy (ART) regimen based on the IAS-USA 2024 guidelines "
+        "(Gandhi et al., JAMA 2025).\n"
+        + context_block +
+        "CLINICAL DECISION RULES — apply these deterministically, the evidence is settled:\n\n"
+        "RECOMMENDED INITIAL REGIMENS (in order of preference for most patients):\n"
+        "  1. Bictegravir/emtricitabine/TAF (Biktarvy) — 1 pill daily. High barrier to resistance, minimal interactions. Requires CrCl >=30.\n"
+        "  2. Dolutegravir + emtricitabine/TAF (Tivicay + Descovy) — 2 pills daily. High barrier to resistance, HBV-active.\n"
+        "  3. Dolutegravir + lamivudine (Dovato) — 1 pill daily, 2-drug regimen. "
+        "ONLY if VL <500,000, NO HBV coinfection, NO resistance to either component, CrCl >=50. "
+        "Not for rapid start when genotype/HBV/VL results are not yet available.\n\n"
+        "MANDATORY DECISION LOGIC — check each:\n"
+        "  - HBV coinfected: MUST include tenofovir (TDF or TAF) + emtricitabine. Dovato is CONTRAINDICATED (no HBV coverage, flare risk).\n"
+        "  - CrCl <30: avoid TAF (not studied) and TDF (nephrotoxic). Consult HIV pharmacist for adjusted backbone.\n"
+        "  - VL >500,000: do NOT use Dovato (2-drug). Use 3-drug regimen (Biktarvy or DTG + F/TAF).\n"
+        "  - Pregnancy: DTG is recommended including first trimester (NTD risk ~0.2%, similar to background). "
+        "Preferred: DTG + emtricitabine/TDF (or TAF). BIC/TAF/FTC is alternative (BIIb). "
+        "Cobicistat-boosted regimens are CONTRAINDICATED in pregnancy (low drug levels). "
+        "If prior CAB-LA PrEP exposure: use DRV/r 600/100 BID + TXF/XTC instead (possible INSTI resistance).\n"
+        "  - Prior CAB-LA PrEP: start DRV/r 600/100 BID + TXF/XTC. Send integrase genotype. "
+        "Switch to INSTI once resistance excluded.\n"
+        "  - Active TB with rifampin: DTG 50mg BID (double dose). BIC contraindicated with rifampin. "
+        "Cobicistat contraindicated. For 3HP (weekly isoniazid+rifapentine latent TB): DTG 50mg OD is acceptable. "
+        "For 1HP (daily isoniazid+rifapentine latent TB): DTG 50mg BID.\n"
+        "  - Metformin co-administration: DTG/BIC increase metformin via OCT2 — cap metformin at 500mg BID.\n"
+        "  - Weight/metabolic concerns: INSTI class + TAF associated with greatest weight gain. "
+        "Consider TDF over TAF if renal function allows. Lifestyle counseling for diet and exercise.\n"
+        "  - Cardiovascular risk: pitavastatin recommended for primary CVD prevention in all PLWH aged 40-75 "
+        "(REPRIEVE trial). If on abacavir, switch to non-abacavir regimen if CVD risk factors present.\n\n"
+        "RAPID/SAME-DAY ART START:\n"
+        "  - Recommend same-day start for most new diagnoses. Do NOT wait for genotype results.\n"
+        "  - EXCEPTIONS — delay ART:\n"
+        "    - Cryptococcal meningitis: defer 4-6 weeks (COAT trial — early ART increases mortality).\n"
+        "    - TB meningitis: defer 4-8 weeks (high IRIS mortality).\n"
+        "    - CMV retinitis (zone 1): defer ~2 weeks (immune recovery uveitis risk).\n"
+        "  - All other OIs: start ART within 2 weeks (PCP, toxo, MAC, histoplasmosis, KS, PML).\n"
+        "  - Pulmonary TB: CD4 <50 start within 2 weeks; CD4 >=50 start within 2-8 weeks.\n\n"
+        "BASELINE LABS to order at or before ART start:\n"
+        "  HIV VL, CD4, RT-protease genotype, HBV serologies, HCV Ab, CMP, CBC, fasting lipids, "
+        "glucose/HbA1c, pregnancy test if applicable, STI screening (RPR, GC/CT NAAT at all exposed sites), "
+        "Toxoplasma IgG, CMV IgG, IGRA for TB. If CD4 <100: serum cryptococcal antigen.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the specific recommended regimen name, dose, and pill count.\n"
+        "  2. State why this regimen was chosen over alternatives (address HBV, renal, VL, pregnancy, OI if relevant).\n"
+        "  3. If any mandatory checks above apply, explicitly address each one.\n"
+        "  4. State ART timing: same-day vs. defer with specific timeframe and reason.\n"
+        "  5. List the baseline labs to order.\n"
+        "  6. One sentence on expected trajectory (VL undetectable by ~12-24 weeks on INSTI-based ART).\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs. Sound like an ID consultant at the bedside."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_monitoring(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Provide HIV lab monitoring schedule per IAS-USA 2024 guidelines."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on HIV laboratory monitoring "
+        "per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "MONITORING SCHEDULE RULES:\n\n"
+        "AT DIAGNOSIS / BEFORE ART:\n"
+        "  - HIV viral load, CD4 count\n"
+        "  - HIV genotype: RT + protease. Integrase genotype ONLY if prior CAB-LA PrEP or known INSTI-exposed source.\n"
+        "  - HBV serologies (HBsAg, anti-HBs, anti-HBc) — critical for regimen selection\n"
+        "  - HCV antibody\n"
+        "  - CMP (creatinine, hepatic panel), CBC\n"
+        "  - Fasting lipid panel, glucose/HbA1c\n"
+        "  - Urinalysis if starting TDF-based regimen\n"
+        "  - Pregnancy test if applicable\n"
+        "  - STI screening: syphilis (RPR/VDRL), gonorrhea + chlamydia (NAAT at all exposed sites)\n"
+        "  - Toxoplasma IgG, CMV IgG\n"
+        "  - TB screening: IGRA preferred over TST\n"
+        "  - If CD4 <100: serum cryptococcal antigen\n\n"
+        "ON-TREATMENT:\n"
+        "  Viral load:\n"
+        "    - 4-6 weeks after starting ART (confirm initial response)\n"
+        "    - Then every 4-8 weeks until undetectable (<50 copies/mL)\n"
+        "    - Once suppressed and stable: every 3-6 months\n"
+        "    - After >=2 years suppressed + stable: can extend to every 6 months\n"
+        "    - After >=5 years suppressed + stable + patient prefers less monitoring: annually is acceptable\n\n"
+        "  CD4 count:\n"
+        "    - Every 3-6 months for first 2 years\n"
+        "    - After >=2 years suppressed + CD4 >300: can stop routine CD4 monitoring\n"
+        "    - Resume if virologic failure, new OI, or immunosuppressive therapy\n\n"
+        "  Renal function (CrCl):\n"
+        "    - Baseline, then annually if on TAF\n"
+        "    - Baseline, then every 3-6 months if on TDF\n"
+        "    - NOTE: DTG/BIC can increase serum creatinine ~0.1 mg/dL via OCT2 inhibition — "
+        "this is NOT nephrotoxicity, do NOT change regimen for this alone\n\n"
+        "  Fasting lipids:\n"
+        "    - Baseline, then annually (more frequent if abnormal)\n"
+        "    - Pitavastatin recommended for primary CVD prevention in PLWH age 40-75 (REPRIEVE trial)\n\n"
+        "  HBV monitoring (if coinfected):\n"
+        "    - HBV VL at baseline, then every 3-6 months on tenofovir-containing regimen\n"
+        "    - CRITICAL: if tenofovir discontinued for any reason, monitor closely for HBV flare (can be severe/fatal)\n\n"
+        "  Genotype at failure:\n"
+        "    - If VL >=200 copies/mL on 2 consecutive measurements after >=24 weeks: "
+        "send RT + protease + integrase genotype while on failing regimen\n"
+        "    - Blips (single VL 50-200 then re-suppresses): NOT failure — "
+        "reassess adherence, polyvalent cation chelation (Ca, Mg, Fe, Al taken with INSTI), drug interactions (PPIs with rilpivirine)\n\n"
+        "  Weight and metabolic:\n"
+        "    - Document weight and BMI every 6 months when on INSTI or TAF\n"
+        "    - Do NOT switch regimen solely for weight gain (evidence of benefit is lacking)\n"
+        "    - GLP-1 receptor agonists effective for weight loss in PLWH (similar to general population)\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with what is needed RIGHT NOW for this patient (baseline vs on-treatment schedule).\n"
+        "  2. Provide the specific monitoring schedule relevant to their current ART and clinical status.\n"
+        "  3. Flag any regimen-specific monitoring (TDF nephrotoxicity, DTG creatinine artifact, lipid changes).\n"
+        "  4. If applicable, note when monitoring frequency can safely be reduced.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 2 to 4 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+# ---------------------------------------------------------------------------
+# HIVID Phase 2 — PrEP, PEP, pregnancy, OI-ART timing
+# ---------------------------------------------------------------------------
+
+
+def narrate_hiv_prep(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """PrEP regimen selection and monitoring per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on HIV pre-exposure prophylaxis (PrEP) "
+        "per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "PrEP INDICATIONS:\n"
+        "  - Offer to ALL sexually active persons requesting PrEP, anyone who injects nonprescription drugs, "
+        "uses substances, or has an SUD — no need for risk-scoring tools.\n"
+        "  - Particularly encourage: MSM, transgender persons, persons with partners from high-incidence regions, "
+        "transactional sex, PWID, incarcerated persons, anyone with STI in the past year.\n\n"
+        "PrEP REGIMEN OPTIONS — choose based on exposure route, adherence capacity, and patient preference:\n\n"
+        "  1. ORAL TDF/FTC (Truvada or generic) 200/300mg — 1 pill daily.\n"
+        "     - Recommended for ALL populations (MSM, cisgender women, TGW, PWID).\n"
+        "     - Initiate with a double loading dose, then 1 pill daily thereafter.\n"
+        "     - Discontinuation: continue until 2 doses after last sexual activity (rectal exposure) "
+        "or 7 days after last activity (vaginal/neovaginal exposure).\n"
+        "     - 4+ doses/week provides high protection for rectal exposure; 2+ doses/week gives 79-88% reduction.\n"
+        "     - Recommended in pregnancy and breastfeeding.\n"
+        "     - Requires CrCl >=60.\n\n"
+        "  2. ON-DEMAND (2-1-1) TDF/FTC — for cisgender men and others with planned receptive anal sex ONLY.\n"
+        "     - 2 pills 2-24h before sex, 1 pill 24h after first dose, 1 pill 48h after first dose.\n"
+        "     - If sex continues: daily dosing until 2 doses after last activity.\n"
+        "     - NOT for vaginal/neovaginal exposures or IDU alone (insufficient tissue drug levels).\n"
+        "     - For TGW on gender-affirming hormones: administer with food (mitigates lower TFV-DP in rectal tissue).\n\n"
+        "  3. ORAL TAF/FTC (Descovy) 200/25mg — 1 pill daily.\n"
+        "     - LIMITED to cisgender men and others WITHOUT receptive vaginal sex or IDU alone.\n"
+        "     - Preferred over TDF/FTC if CrCl 30-60 or known osteopenia/osteoporosis.\n"
+        "     - Bone density scan NOT required before initiating tenofovir-based PrEP.\n\n"
+        "  4. INJECTABLE CAB-LA (cabotegravir, Apretude) 600mg IM gluteal — every 2 months.\n"
+        "     - First 2 injections separated by 4 weeks, then every 8 weeks.\n"
+        "     - Superior to oral TDF/FTC in clinical trials.\n"
+        "     - Recommended for ALL populations likely to be sexually exposed to HIV.\n"
+        "     - Optional oral CAB lead-in for 4-5 weeks (recommended for severe atopic histories).\n"
+        "     - For those without oral lead-in: overlap first injection with 7 days of oral TDF/FTC PrEP.\n"
+        "     - Must be gluteal injection — anterior thigh did NOT reach PK targets.\n"
+        "     - If injections >=8 weeks late: reload with 4-week interval between 2 injections before resuming q8w.\n"
+        "     - Keep 1-month supply of oral TDF/FTC on hand for bridging if injection delayed >=7 days.\n"
+        "     - Growing safety data in pregnancy and breastfeeding (BIIa).\n"
+        "     - Does NOT provide HBV coverage — rescreen for HBV and immunize if indicated.\n\n"
+        "  5. LENACAPAVIR SC — every 6 months.\n"
+        "     - PURPOSE 1 trial: 100% efficacy in cisgender women.\n"
+        "     - FDA review pending for PrEP indication as of late 2024.\n"
+        "     - Not yet approved for PrEP — mention as emerging option if patient asks.\n\n"
+        "BASELINE BEFORE PrEP:\n"
+        "  - Confirm HIV-negative: 4th-gen Ag/Ab test (if injectable CAB-LA: also HIV RNA).\n"
+        "  - CrCl (>=60 for TDF, >=30 for TAF).\n"
+        "  - HBV serologies (TDF/TAF are HBV-active — flare risk on discontinuation if HBsAg+).\n"
+        "  - HCV antibody.\n"
+        "  - STI screening (RPR, GC/CT NAAT at all exposed sites).\n"
+        "  - Pregnancy test if applicable.\n\n"
+        "MONITORING ON PrEP:\n"
+        "  - HIV test every 3 months (every 2 months for injectable CAB — at each injection visit).\n"
+        "  - CrCl every 6-12 months (TDF) or annually (TAF).\n"
+        "  - STI screening every 3-6 months.\n"
+        "  - If HBsAg+: monitor HBV VL; do NOT stop TDF/TAF without hepatology input.\n\n"
+        "RAPID PrEP START:\n"
+        "  - If negative HIV serology from blood drawn within 7 days or same-day rapid test negative: "
+        "start PrEP immediately while awaiting additional diagnostics.\n"
+        "  - Any delay is a missed prevention opportunity.\n\n"
+        "DoxyPEP (STI prevention — mention if MSM/TGW):\n"
+        "  - Doxycycline 200mg within 72h after condomless sex.\n"
+        "  - Reduces chlamydia 70-88%, syphilis 73-87%. Less consistent for gonorrhea.\n"
+        "  - Recommended for MSM/TGW with bacterial STI in past 12 months.\n"
+        "  - Can be taken as often as daily. Prescribe 30 doses (60 tablets) at a time.\n"
+        "  - Quarterly STI screening at all exposed sites recommended.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the recommended PrEP regimen for THIS patient's specific exposure pattern.\n"
+        "  2. Explain why this option over alternatives (exposure route, adherence, renal function).\n"
+        "  3. List baseline labs needed.\n"
+        "  4. State monitoring schedule.\n"
+        "  5. If MSM/TGW: mention doxyPEP for STI prevention.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_pep(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """PEP regimen and follow-up per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on HIV post-exposure prophylaxis (PEP) "
+        "per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "PEP TIMING — CRITICAL:\n"
+        "  - Start within 72 hours of exposure (earlier = more effective; ideally within 2 hours).\n"
+        "  - Do NOT start PEP if >72 hours since exposure — offer PrEP instead if ongoing risk.\n\n"
+        "PREFERRED PEP REGIMEN:\n"
+        "  - Dolutegravir 50mg OD + emtricitabine/TDF (Truvada) 200/300mg OD x 28 days.\n"
+        "  - Alternative: Biktarvy (BIC/TAF/FTC) 1 pill OD x 28 days — simpler, widely used in US centers.\n"
+        "  - Complete the full 28-day course.\n\n"
+        "BASELINE LABS:\n"
+        "  - 4th-gen HIV Ag/Ab test (rule out existing infection BEFORE starting PEP).\n"
+        "  - HBV serologies.\n"
+        "  - HCV antibody.\n"
+        "  - CMP (creatinine, hepatic panel).\n"
+        "  - Pregnancy test if applicable.\n"
+        "  - Source patient: rapid HIV test and/or HIV VL if status unknown.\n\n"
+        "FOLLOW-UP:\n"
+        "  - HIV test at 4-6 weeks and 3 months post-exposure (4th-gen Ag/Ab).\n"
+        "  - If symptoms of acute HIV during PEP: order HIV VL + 4th-gen immediately.\n"
+        "  - Assess for ongoing exposure risk — transition to PrEP if ongoing risk (no gap between PEP and PrEP).\n\n"
+        "SPECIAL SITUATIONS:\n"
+        "  - Known resistant source virus: adjust PEP based on source genotype.\n"
+        "  - Pregnancy: DTG-based PEP is acceptable.\n"
+        "  - Renal impairment: use TAF (Biktarvy) instead of TDF if CrCl 30-60.\n"
+        "  - HBsAg+ patient: TDF/FTC backbone treats both; warn about HBV flare if PEP is stopped "
+        "and patient is HBsAg+ — ensure hepatology follow-up.\n"
+        "  - Source on ART with undetectable VL: risk of transmission extremely low (U=U). "
+        "PEP may not be necessary — shared decision-making.\n"
+        "  - After CAB-LA PrEP breakthrough or suspected INSTI-resistant source: "
+        "use DRV/r 600/100 BID + TDF/FTC x 28 days instead of INSTI-based PEP.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the specific PEP regimen, dose, duration.\n"
+        "  2. Emphasize timing (must start within 72h, ideally within 2h).\n"
+        "  3. List baseline labs.\n"
+        "  4. State follow-up schedule.\n"
+        "  5. Discuss PrEP transition if ongoing risk.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 4 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_pregnancy(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Pregnancy-specific ART, delivery planning, and neonatal prophylaxis per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on HIV management in pregnancy "
+        "per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "ART IN PREGNANCY — CORE RULES:\n"
+        "  - Immediate ART initiation for ALL pregnant individuals with HIV (for maternal health + prevent perinatal/sexual transmission).\n"
+        "  - Preferred regimen: dolutegravir + emtricitabine/TAF (or TDF if TAF not available).\n"
+        "     - DTG is recommended INCLUDING first trimester — NTD risk ~0.2%, comparable to background rate.\n"
+        "  - Alternative: BIC/TAF/FTC (Biktarvy) — evidence rating BIIa. PK studies show adequate bictegravir levels in pregnancy. "
+        "If already on Biktarvy and suppressed, continue.\n"
+        "  - If DTG and BIC are not options: DRV/r 600/100 BID + TAF/XTC (or TDF/XTC).\n"
+        "  - If prior CAB-LA PrEP exposure: DRV/r 600/100 BID + TXF/XTC (possible INSTI resistance).\n\n"
+        "CONTRAINDICATED in pregnancy:\n"
+        "  - Cobicistat-containing regimens (low drug levels in 2nd/3rd trimester — reduced efficacy).\n"
+        "  - Insufficient data for: doravirine-containing regimens, injectable CAB+RPV, DTG/3TC (Dovato).\n"
+        "  - If pregnant while on injectable CAB+RPV: switch to oral triple-drug regimen.\n\n"
+        "DELIVERY PLANNING (based on VL at 36 weeks):\n"
+        "  - VL suppressed (<50 copies/mL): vaginal delivery. No IV zidovudine needed.\n"
+        "  - VL 50-999 at 36 weeks: scheduled C-section at 38 weeks + IV zidovudine during delivery.\n"
+        "  - VL >=1000 at 36 weeks: scheduled C-section at 38 weeks + IV zidovudine + consider intensified neonatal prophylaxis.\n\n"
+        "NEONATAL PROPHYLAXIS:\n"
+        "  - Low risk (maternal VL suppressed, on ART >=4 weeks before delivery): "
+        "zidovudine (AZT) x 4 weeks to the neonate.\n"
+        "  - High risk (maternal VL >50 at delivery, or no/late ART, or ART <4 weeks before delivery): "
+        "zidovudine + lamivudine + nevirapine (3-drug) x 6 weeks to the neonate.\n"
+        "  - Breastfeeding: in the US, formula feeding is recommended when safe and available. "
+        "If breastfeeding is chosen: continue suppressive ART throughout, monitor infant HIV status.\n\n"
+        "SPECIAL CONSIDERATIONS:\n"
+        "  - HBV coinfection: MUST maintain tenofovir-containing regimen throughout pregnancy and postpartum "
+        "(risk of HBV flare if discontinued).\n"
+        "  - VL monitoring in pregnancy: check at ART initiation, 2-4 weeks later, monthly until undetectable, "
+        "then at minimum at 36 weeks for delivery planning.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the recommended ART regimen for this pregnant patient.\n"
+        "  2. Address trimester-specific considerations.\n"
+        "  3. State delivery plan based on expected VL trajectory.\n"
+        "  4. Specify neonatal prophylaxis recommendation.\n"
+        "  5. Flag any special considerations (HBV, adherence, prior CAB-LA).\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_oi_art_timing(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    established_syndrome: str | None = None,
+    consult_organisms: list[str] | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """When to start ART relative to an active opportunistic infection per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary, established_syndrome, consult_organisms)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on the timing of ART initiation "
+        "relative to an active opportunistic infection, per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "OI-SPECIFIC ART TIMING RULES:\n\n"
+        "START ART WITHIN 2 WEEKS (for most OIs):\n"
+        "  - PCP (Pneumocystis jirovecii pneumonia): start ART within 2 weeks of PCP treatment.\n"
+        "  - Toxoplasmosis: within 2 weeks.\n"
+        "  - MAC (Mycobacterium avium complex): within 2 weeks.\n"
+        "  - Histoplasmosis: within 1-2 weeks.\n"
+        "  - Kaposi sarcoma: start ART immediately — ART IS the primary treatment.\n"
+        "  - PML (progressive multifocal leukoencephalopathy): start ART immediately — no specific PML treatment exists.\n\n"
+        "PULMONARY TB (non-meningeal) — CD4-dependent:\n"
+        "  - CD4 <50: start ART within 2 weeks of TB treatment initiation.\n"
+        "  - CD4 >=50: start ART within 2-8 weeks of TB treatment.\n"
+        "  - Drug interactions: DTG 50mg BID with rifampin. BIC contraindicated with rifampin. "
+        "Cobicistat contraindicated with rifampin.\n"
+        "  - For 3HP (weekly isoniazid+rifapentine for latent TB): DTG 50mg OD is acceptable.\n"
+        "  - For 1HP (daily isoniazid+rifapentine for latent TB): DTG 50mg BID.\n"
+        "  - Alternative if INSTI not available: ritonavir-boosted atazanavir or lopinavir + TXF/XTC with rifabutin 150mg daily.\n\n"
+        "DEFER ART — HIGH IRIS RISK:\n"
+        "  - TB MENINGITIS: defer ART 4-8 weeks after TB treatment initiation. "
+        "Early ART in TB meningitis is associated with increased IRIS mortality.\n"
+        "  - CRYPTOCOCCAL MENINGITIS: defer ART 4-6 weeks after antifungal induction. "
+        "COAT trial: early ART increased mortality. "
+        "Exception: asymptomatic cryptococcal antigenemia with negative CSF — immediate ART + preemptive fluconazole.\n"
+        "  - CMV RETINITIS (zone 1 involvement): defer ART ~2 weeks (immune recovery uveitis risk).\n\n"
+        "GENERAL IRIS CONSIDERATIONS:\n"
+        "  - IRIS is more common with lower baseline CD4, higher baseline VL, and rapid immune reconstitution.\n"
+        "  - IRIS is NOT a reason to stop ART — manage with anti-inflammatory agents (NSAIDs, corticosteroids in severe cases).\n"
+        "  - Close clinical monitoring in the first 4-12 weeks after ART initiation with an active OI.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the specific ART timing recommendation for THIS OI.\n"
+        "  2. State the evidence basis (trial name or guideline level).\n"
+        "  3. Address drug interactions if relevant (especially TB + rifampin).\n"
+        "  4. Discuss IRIS risk and monitoring.\n"
+        "  5. Name the recommended ART regimen in this context.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 4 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+# ---------------------------------------------------------------------------
+# HIVID Phase 3 — Treatment failure, resistance, switch/simplification
+# ---------------------------------------------------------------------------
+
+
+def narrate_hiv_treatment_failure(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Virologic failure workup per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant evaluating HIV virologic failure "
+        "per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "DEFINITIONS:\n"
+        "  - Virologic failure: HIV RNA >=200 copies/mL on 2 consecutive measurements after >=24 weeks of ART.\n"
+        "  - Viral blip: single VL 50-200, then re-suppresses. Common with current assays. NOT failure.\n"
+        "  - Persistent low-level viremia: VL 50-200 despite confirmed excellent adherence. "
+        "May be caused by large HIV reservoir, clonal expansion, or impaired immune response. "
+        "Unlikely to benefit from ART intensification.\n\n"
+        "FAILURE WORKUP — IN ORDER OF LIKELIHOOD:\n"
+        "  1. ADHERENCE — most common cause. >95% adherence needed for sustained suppression.\n"
+        "     - Ask directly, non-judgmentally. Assess pill burden, dosing frequency, side effects, cost, stigma.\n"
+        "     - For INSTI-based regimens: check polyvalent cation supplements (calcium, magnesium, iron, zinc, aluminum) — "
+        "these chelate INSTIs and impair absorption. INSTIs must be taken 2h before or 6h after cations.\n"
+        "  2. DRUG INTERACTIONS:\n"
+        "     - Rilpivirine + PPIs: CONTRAINDICATED (need gastric acid for absorption).\n"
+        "     - Rilpivirine + H2 blockers: take RPV 4h before or 12h after.\n"
+        "     - Rifampin + cobicistat or bictegravir: CONTRAINDICATED.\n"
+        "     - Metformin + DTG/BIC: increased metformin levels.\n"
+        "  3. ABSORPTION ISSUES: GI conditions (inflammatory bowel disease, short bowel, bariatric surgery).\n"
+        "  4. RESISTANCE TESTING:\n"
+        "     - Send RT + protease + integrase genotype WHILE ON the failing regimen.\n"
+        "     - Review ALL prior resistance results — resistance is cumulative (archived mutations may not appear on current genotype).\n"
+        "     - Some commercial assays require VL >500-1000 to perform genotyping.\n\n"
+        "SWITCH STRATEGY AFTER CONFIRMED FAILURE:\n"
+        "  - New regimen must include >=2 (preferably 3) fully active agents based on cumulative resistance.\n"
+        "  - DTG and BIC retain activity against most first-gen INSTI mutations EXCEPT Q148H + >=2 secondary mutations.\n"
+        "  - Darunavir/ritonavir (DRV/r): high barrier to resistance, useful in salvage.\n"
+        "  - Doravirine (DOR): active against most NNRTI-resistant virus (except specific patterns).\n"
+        "  - Do NOT simply add a single drug to a failing regimen — this creates sequential monotherapy and breeds resistance.\n\n"
+        "SALVAGE (multi-class resistance):\n"
+        "  - Fostemsavir (attachment inhibitor) — for highly treatment-experienced patients.\n"
+        "  - Lenacapavir (capsid inhibitor) — every 6 months SC; approved for multi-class resistance.\n"
+        "  - Ibalizumab (post-attachment inhibitor) — IV every 2 weeks.\n"
+        "  - Refer to academic HIV center for complex salvage cases.\n\n"
+        "INJECTABLE ART FAILURE (CAB+RPV LA):\n"
+        "  - 1-2% incidence of virologic failure even with injection adherence.\n"
+        "  - Risk factors: rilpivirine resistance at baseline, viral subtype A6, BMI >30.\n"
+        "  - Failure causes 2-class resistance (NNRTI + INSTI) — significantly limits future options.\n"
+        "  - Switch to oral DTG or BIC-based regimen + 2 active NRTIs guided by genotype.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the most likely cause (adherence is always #1).\n"
+        "  2. Walk through the workup systematically.\n"
+        "  3. State what resistance tests to order.\n"
+        "  4. Give guidance on switch strategy based on available data.\n"
+        "  5. Flag when to refer to a specialist center.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_resistance(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """Interpret HIV resistance mutations and guide regimen adjustment per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant interpreting HIV drug resistance mutations "
+        "per IAS-USA 2024 guidelines and the Stanford HIV Drug Resistance Database.\n"
+        + context_block +
+        "INTEGRASE STRAND TRANSFER INHIBITOR (INSTI) RESISTANCE:\n"
+        "  Major mutations and clinical impact:\n"
+        "  - Y143R/C/H: raltegravir/elvitegravir RESISTANT. DTG and BIC remain SUSCEPTIBLE.\n"
+        "  - N155H: raltegravir/elvitegravir RESISTANT. DTG usually susceptible (may need BID dosing). BIC susceptible.\n"
+        "  - Q148H alone: raltegravir/elvitegravir RESISTANT. DTG usually susceptible (BID dosing). BIC usually susceptible.\n"
+        "  - Q148H + G140S: raltegravir/elvitegravir RESISTANT. DTG reduced susceptibility (BID dosing required). BIC reduced susceptibility.\n"
+        "  - Q148H + >=2 secondary (G140S + E138K etc.): all first-gen INSTIs RESISTANT. DTG MAY be resistant. BIC MAY be resistant. "
+        "This is the most concerning pattern — consider salvage agents.\n"
+        "  - G118R: reduced susceptibility to all INSTIs including DTG.\n"
+        "  - R263K: DTG low-level resistance (still clinically active). Other INSTIs susceptible.\n"
+        "  KEY PRINCIPLE: DTG and BIC have HIGH genetic barrier to resistance. Single INSTI mutations rarely compromise them. "
+        "Accumulation of Q148 pathway + secondary mutations is the main threat. Always interpret the FULL mutation pattern.\n\n"
+        "NRTI RESISTANCE:\n"
+        "  - M184V/I: lamivudine and emtricitabine RESISTANT. Increases susceptibility to tenofovir and AZT. "
+        "Retains partial activity of FTC/3TC (reduced replication capacity). Can keep in regimen for partial benefit + fitness cost.\n"
+        "  - K65R: tenofovir (TDF and TAF) RESISTANT. Increases susceptibility to AZT. "
+        "Lamivudine/emtricitabine partially affected.\n"
+        "  - TAMs (thymidine analog mutations: M41L, D67N, K70R, L210W, T215Y/F, K219Q/E): "
+        "AZT and d4T resistance. Higher TAM burden reduces tenofovir and abacavir activity. "
+        ">=3 TAMs including M41L or L210W: tenofovir likely compromised.\n"
+        "  - K65R + M184V: both TDF and FTC resistant. Use AZT-based backbone if needed. "
+        "DTG/BIC remain active if no INSTI resistance.\n\n"
+        "NNRTI RESISTANCE:\n"
+        "  - K103N: efavirenz and nevirapine RESISTANT. Rilpivirine usually SUSCEPTIBLE. Doravirine SUSCEPTIBLE.\n"
+        "  - Y181C: rilpivirine RESISTANT. Efavirenz may retain partial activity. Doravirine usually susceptible.\n"
+        "  - E138K (alone): rilpivirine reduced susceptibility.\n"
+        "  - E138K + M184I: combination confers rilpivirine resistance.\n"
+        "  - Doravirine has the broadest NNRTI resistance profile — active against most single NNRTI mutations.\n\n"
+        "PROTEASE INHIBITOR (PI) RESISTANCE:\n"
+        "  - Darunavir has the HIGHEST barrier of all PIs. Requires >=3 DRV-associated mutations for clinically significant resistance.\n"
+        "  - DRV-associated mutations: V11I, V32I, L33F, I47V, I50V, I54M/L, T74P, L76V, I84V, L89V.\n"
+        "  - Even with some PI mutations, boosted DRV/r often retains activity.\n\n"
+        "GENERAL PRINCIPLES:\n"
+        "  - Resistance is CUMULATIVE — mutations detected in prior genotypes remain archived even if not on current test.\n"
+        "  - Always review the complete resistance history, not just the most recent genotype.\n"
+        "  - A new regimen after failure must include >=2 (preferably 3) fully active agents.\n"
+        "  - For complex multi-class resistance: fostemsavir, lenacapavir, ibalizumab. Refer to academic HIV center.\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with the clinical significance of the mutations present — which drug classes are compromised.\n"
+        "  2. For each mutation mentioned, state which drugs remain active and which are compromised.\n"
+        "  3. Recommend a specific regimen based on the resistance profile.\n"
+        "  4. If multi-class resistance is present, name salvage options and recommend specialist referral.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
+        ), True
+    except (ConsultNarrationError, LLMParserError):
+        return fallback_message, False
+
+
+def narrate_hiv_switch(
+    *,
+    question: str,
+    hiv_context: dict | None = None,
+    patient_summary: str | None = None,
+    fallback_message: str,
+) -> Tuple[str, bool]:
+    """ART switch/simplification guidance for virologically suppressed patients per IAS-USA 2024."""
+    if not consult_narration_enabled():
+        return fallback_message, False
+
+    context_block = _build_hiv_context_block(hiv_context, patient_summary)
+
+    prompt = (
+        "You are an infectious diseases consultant advising on switching or simplifying ART "
+        "in a virologically suppressed patient, per IAS-USA 2024 guidelines.\n"
+        + context_block +
+        "REASONS TO SWITCH (while suppressed):\n"
+        "  - Simplification (reduce pill burden or dosing frequency).\n"
+        "  - Adverse effects (renal toxicity from TDF, weight gain from INSTI+TAF, lipid changes, GI intolerance).\n"
+        "  - Drug interactions (boosted PI interactions, rilpivirine+PPI contraindication).\n"
+        "  - Pregnancy planning (switch to DTG-based, avoid cobicistat).\n"
+        "  - Cost/insurance changes.\n"
+        "  - Cardiovascular risk (switch off abacavir if CVD risk factors).\n\n"
+        "SWITCH RULES — CRITICAL:\n"
+        "  - ALWAYS review full resistance history before ANY switch.\n"
+        "  - Do NOT switch to a regimen with agents to which archived resistance may exist.\n"
+        "  - If switching away from TDF or TAF in HBV coinfected patient: MUST maintain HBV-active agent "
+        "or risk severe/fatal HBV flare.\n"
+        "  - Monitor more closely after switch: VL at 1 month, then every 3 months for 1 year.\n\n"
+        "2-DRUG REGIMEN SWITCHES (for eligible suppressed patients):\n"
+        "  - DTG + 3TC (Dovato): acceptable ONLY if no prior virologic failure, no HBV coinfection, "
+        "no known resistance to either component, VL suppressed >=3-6 months.\n"
+        "  - DTG + RPV (Juluca): available as coformulated single tablet. "
+        "No HBV coinfection, no rilpivirine resistance, no PPI use.\n\n"
+        "SWITCH FROM BOOSTED PI TO INSTI:\n"
+        "  - Patients on boosted PI + 2 NRTIs can switch to DTG + TXF/XTC or BIC/TAF/FTC "
+        "regardless of likely prior NRTI resistance, PROVIDED there is no INSTI resistance history.\n"
+        "  - This switch is particularly beneficial for patients with: "
+        "PI-related dyslipidemia, drug interactions with boosted PIs, GI intolerance, high pill burden.\n"
+        "  - Do NOT switch from boosted PI to NNRTI or first-gen INSTI (raltegravir/elvitegravir) + 2 NRTIs "
+        "in the presence of NRTI resistance — increased risk of failure and emergent NNRTI/INSTI resistance.\n"
+        "  - Patients with NRTI resistance switching to DTG/BIC + dual NRTI: monitor more closely in first year.\n\n"
+        "LONG-ACTING INJECTABLE SWITCH:\n"
+        "  - Cabotegravir + rilpivirine (Cabenuva) IM every 1-2 months:\n"
+        "    - Requires: VL suppressed, no NNRTI resistance, no prior rilpivirine failure.\n"
+        "    - BMI >30: higher risk of virologic failure (1-2% even with adherence).\n"
+        "    - Discuss 2-class resistance risk if failure occurs.\n"
+        "    - Does NOT cover HBV — must continue HBV treatment separately if coinfected.\n"
+        "    - More resource-intensive for clinics (scheduling, injection administration).\n"
+        "  - Lenacapavir SC every 6 months:\n"
+        "    - Currently approved only for treatment-experienced with multi-class resistance.\n"
+        "    - Trials ongoing for first-line use (LEN/BIC combination).\n"
+        "    - Weekly oral islatravir + lenacapavir combination in phase 2b (promising results).\n\n"
+        "WEIGHT MANAGEMENT CONSIDERATIONS:\n"
+        "  - INSTI + TAF associated with greatest weight gain.\n"
+        "  - Do NOT switch regimen solely for weight gain — evidence of benefit is lacking.\n"
+        "  - Lifestyle modifications (diet, exercise) are first-line.\n"
+        "  - GLP-1 receptor agonists (semaglutide) effective for weight loss in PLWH.\n"
+        "  - If switching for other reasons AND weight is a concern: consider TDF over TAF (if renal allows).\n\n"
+        "CARDIOVASCULAR RISK:\n"
+        "  - Abacavir: associated with increased cardiovascular events. "
+        "Switch to non-abacavir regimen if CVD risk factors present.\n"
+        "  - Pitavastatin recommended for primary CVD prevention in all PLWH aged 40-75 (REPRIEVE trial).\n\n"
+        "RESPONSE FORMAT:\n"
+        "  1. Open with whether the proposed switch is safe and recommended.\n"
+        "  2. Address resistance history requirements.\n"
+        "  3. Flag HBV considerations if relevant.\n"
+        "  4. State the monitoring schedule after switch.\n"
+        "  5. Name specific alternative regimens if the proposed switch is not ideal.\n"
+        "Do not use markdown bullets, asterisks, headers, or arrow symbols. Plain text only.\n"
+        "Keep the answer to 3 to 5 short paragraphs."
+    )
+    try:
+        return _call_consult_model(
+            prompt=prompt,
+            payload={"question": question},
         ), True
     except (ConsultNarrationError, LLMParserError):
         return fallback_message, False
