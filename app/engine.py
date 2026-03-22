@@ -8,11 +8,13 @@ from .pretest_factors import get_pretest_factor_spec, get_pretest_factor_tuning
 from .schemas import (
     AnalyzeRequest,
     AppliedFinding,
+    ClinicalScoreResult,
     DecisionThresholds,
     EndoRiskModifiersInput,
     FindingState,
     HarmInputs,
     LRItem,
+    NextBestTest,
     ProbIDControlsInput,
     StepwiseUpdate,
     SyndromeModule,
@@ -284,6 +286,52 @@ def build_stepwise_path(
             )
         )
     return steps
+
+
+def compute_next_best_tests(
+    *,
+    current_posttest: float,
+    module: SyndromeModule,
+    findings: Dict[str, FindingState],
+    max_results: int = 5,
+) -> List[NextBestTest]:
+    """For each unevaluated finding with both LR+ and LR-, calculate the
+    probability swing if that test were positive vs negative.  Return the
+    top *max_results* tests ranked by largest swing (most informative)."""
+    evaluated = {fid for fid, state in findings.items() if state != "unknown"}
+    candidates: List[NextBestTest] = []
+    current_odds = prob_to_odds(clamp(current_posttest, EPS, 1 - EPS))
+    for item in module.items:
+        if item.id in evaluated:
+            continue
+        if item.lr_pos is None or item.lr_neg is None:
+            continue
+        # Skip neutral / "not done" items (LR effectively 1.0)
+        if abs((item.lr_pos or 1.0) - 1.0) < 0.01 and abs((item.lr_neg or 1.0) - 1.0) < 0.01:
+            continue
+        p_if_pos = odds_to_prob(current_odds * clamp_lr(item.lr_pos))
+        p_if_neg = odds_to_prob(current_odds * clamp_lr(item.lr_neg))
+        swing = abs(p_if_pos - p_if_neg)
+        source_short = None
+        if hasattr(item, "source") and item.source:
+            src = item.source
+            if isinstance(src, dict):
+                source_short = src.get("short")
+            elif hasattr(src, "short"):
+                source_short = src.short
+        candidates.append(
+            NextBestTest(
+                id=item.id,
+                label=item.label,
+                category=item.category,
+                probabilityIfPositive=round(p_if_pos, 4),
+                probabilityIfNegative=round(p_if_neg, 4),
+                probabilitySwing=round(swing, 4),
+                sourceShort=source_short,
+            )
+        )
+    candidates.sort(key=lambda t: t.probability_swing, reverse=True)
+    return candidates[:max_results]
 
 
 def _compute_virsta_score(v) -> int:
@@ -857,3 +905,469 @@ def resolve_harms(module: SyndromeModule, req: AnalyzeRequest, *, states_overrid
 
     est = estimate_harms(module.id, states_override if states_override is not None else req.findings)
     return HarmInputs(unnecessary_treatment=est.unnecessary_tx, missed_diagnosis=est.missed_dx)
+
+
+# ---------------------------------------------------------------------------
+# Clinical prediction rule calculators
+# ---------------------------------------------------------------------------
+
+def _is_present(findings: Dict[str, FindingState], item_id: str) -> bool:
+    return findings.get(item_id) == "present"
+
+
+def _is_absent(findings: Dict[str, FindingState], item_id: str) -> bool:
+    return findings.get(item_id) == "absent"
+
+
+def _is_evaluated(findings: Dict[str, FindingState], item_id: str) -> bool:
+    return findings.get(item_id, "unknown") != "unknown"
+
+
+def compute_clinical_scores(
+    module_id: str,
+    findings: Dict[str, FindingState],
+) -> List[ClinicalScoreResult]:
+    """Compute all applicable clinical prediction rule scores for a module."""
+    scores: List[ClinicalScoreResult] = []
+    if module_id == "cap":
+        s = _compute_psi(findings)
+        if s:
+            scores.append(s)
+        q = _compute_qsofa(findings)
+        if q:
+            scores.append(q)
+    elif module_id == "endo":
+        d = _compute_duke(findings)
+        if d:
+            scores.append(d)
+    elif module_id == "necrotizing_soft_tissue_infection":
+        l = _compute_lrinec(findings)
+        if l:
+            scores.append(l)
+    elif module_id == "febrile_neutropenia":
+        m = _compute_mascc(findings)
+        if m:
+            scores.append(m)
+    elif module_id == "bacterial_meningitis":
+        b = _compute_bms(findings)
+        if b:
+            scores.append(b)
+    return scores
+
+
+# --- PSI/PORT (Fine, NEJM 1997) ---
+# Simplified: uses ProbID findings to estimate PSI class.
+# Full PSI requires 20 variables; we use available findings to approximate.
+
+def _compute_psi(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    # Check if we have enough CAP findings to score
+    evaluated = {fid for fid, s in findings.items() if s != "unknown" and fid.startswith("cap_")}
+    if len(evaluated) < 3:
+        return None
+
+    met: List[str] = []
+    not_met: List[str] = []
+    points = 0
+
+    # Demographics
+    if _is_present(findings, "cap_age_ge65"):
+        met.append("Age ≥65 years (+age points)")
+        points += 70  # approximate midpoint
+    elif _is_evaluated(findings, "cap_age_ge65"):
+        not_met.append("Age ≥65")
+
+    # Nursing home
+    if _is_present(findings, "cap_nursing_home"):
+        met.append("Nursing home resident (+10)")
+        points += 10
+    elif _is_evaluated(findings, "cap_nursing_home"):
+        not_met.append("Nursing home resident")
+
+    # Comorbidities
+    comorbidity_items = {
+        "cap_copd": ("COPD/chronic lung disease", 10),
+        "cap_hf": ("Heart failure", 10),
+        "cap_liver_disease": ("Liver disease", 20),
+        "cap_renal_disease": ("Renal disease", 10),
+        "cap_neoplastic_disease": ("Neoplastic disease", 30),
+        "cap_dm": ("Diabetes mellitus", 10),
+        "cap_cerebrovascular": ("Cerebrovascular disease", 10),
+    }
+    for item_id, (label, pts) in comorbidity_items.items():
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            points += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    # Physical exam findings
+    exam_items = {
+        "cap_rr": ("Tachypnea ≥30/min", 20),
+        "cap_hypotension": ("Hypotension SBP <90", 20),
+        "cap_hr": ("Tachycardia ≥125/min", 10),
+        "cap_hypothermia": ("Temperature <35°C", 15),
+        "cap_ams": ("Altered mental status", 20),
+        "cap_hypox": ("Hypoxemia SpO₂ <90%", 10),
+    }
+    for item_id, (label, pts) in exam_items.items():
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            points += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    # Lab findings
+    lab_items = {
+        "cap_bun_elevated": ("BUN >30 mg/dL", 20),
+        "cap_sodium_low": ("Sodium <130 mEq/L", 20),
+        "cap_glucose_high": ("Glucose ≥250 mg/dL", 10),
+        "cap_hematocrit_low": ("Hematocrit <30%", 10),
+        "cap_pao2_low": ("PaO₂ <60 mmHg", 10),
+        "cap_arterial_ph_low": ("Arterial pH <7.35", 30),
+        "cap_pleural_effusion": ("Pleural effusion", 10),
+    }
+    for item_id, (label, pts) in lab_items.items():
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            points += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    # Determine PSI class
+    if points <= 50:
+        risk_class = "I-II"
+        interp = "Low risk (0.1-0.7% mortality)"
+        rec = "Outpatient treatment appropriate. Consider oral antibiotics."
+    elif points <= 70:
+        risk_class = "III"
+        interp = "Low-moderate risk (0.9-2.8% mortality)"
+        rec = "Brief observation or outpatient with close follow-up."
+    elif points <= 90:
+        risk_class = "IV"
+        interp = "Moderate risk (8.2-9.3% mortality)"
+        rec = "Inpatient treatment recommended."
+    elif points <= 130:
+        risk_class = "V"
+        interp = "High risk (27-31% mortality)"
+        rec = "Inpatient treatment, consider ICU admission."
+    else:
+        risk_class = "V+"
+        interp = "Very high risk (>31% mortality)"
+        rec = "ICU admission strongly recommended."
+
+    return ClinicalScoreResult(
+        scoreName="PSI/PORT Score",
+        scoreValue=points,
+        riskClass=f"Class {risk_class}",
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=met,
+        componentsNotMet=not_met,
+        source="Fine et al. NEJM 1997",
+    )
+
+
+# --- Modified Duke Criteria (Fowler, CID 2023 — 2023 Duke-ISCVID) ---
+
+def _compute_duke(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    evaluated = {fid for fid, s in findings.items() if s != "unknown" and fid.startswith("endo_")}
+    if len(evaluated) < 3:
+        return None
+
+    major_met: List[str] = []
+    minor_met: List[str] = []
+    major_not: List[str] = []
+    minor_not: List[str] = []
+
+    # Major criterion 1: Microbiology
+    micro_major_ids = {
+        "endo_bcx_major_typical": "Typical organism in ≥2 sets",
+        "endo_bcx_major_persistent": "Persistently positive blood cultures",
+        "endo_bcx_saureus_multi": "S. aureus in ≥2 sets",
+        "endo_bcx_cons_prosthetic_multi": "CoNS in ≥2 sets with prosthetic",
+        "endo_bcx_efaecalis_multi": "E. faecalis in ≥2 sets",
+        "endo_bcx_nbhs_multi": "NBHS in ≥2 sets",
+        "endo_coxiella_major": "Coxiella Phase I IgG ≥1:800",
+    }
+    micro_major_count = 0
+    for item_id, label in micro_major_ids.items():
+        if _is_present(findings, item_id):
+            major_met.append(f"Micro major: {label}")
+            micro_major_count += 1
+        elif _is_evaluated(findings, item_id):
+            major_not.append(f"Micro major: {label}")
+
+    # Major criterion 2: Imaging (echo/PET)
+    imaging_major = False
+    for item_id, label in [
+        ("endo_tte", "TTE positive (vegetation/regurgitation/perforation)"),
+        ("endo_tee", "TEE positive (vegetation/regurgitation/perforation)"),
+        ("endo_pet", "FDG PET/CT positive"),
+    ]:
+        if _is_present(findings, item_id):
+            major_met.append(f"Imaging major: {label}")
+            imaging_major = True
+        elif _is_evaluated(findings, item_id):
+            major_not.append(f"Imaging major: {label}")
+
+    total_major = min(micro_major_count, 1) + (1 if imaging_major else 0)
+
+    # Minor criteria
+    minor_items = {
+        "endo_fever": "Fever ≥38°C",
+        "endo_vascular": "Vascular phenomena",
+        "endo_immune": "Immunologic phenomena",
+        "endo_virsta_prosthetic_valve": "Predisposing heart condition (prosthetic valve/CIED)",
+        "endo_virsta_ivdu": "IVDU",
+        "endo_bcx_pos_not_major": "Positive BCx not meeting major criterion",
+    }
+    minor_count = 0
+    for item_id, label in minor_items.items():
+        if _is_present(findings, item_id):
+            minor_met.append(label)
+            minor_count += 1
+        elif _is_evaluated(findings, item_id):
+            minor_not.append(label)
+
+    # Classification
+    all_met = major_met + minor_met
+    all_not = major_not + minor_not
+
+    if total_major >= 2 or (total_major >= 1 and minor_count >= 3) or minor_count >= 5:
+        risk_class = "Definite"
+        interp = "Definite infective endocarditis by Modified Duke Criteria"
+        rec = "Treat as IE. Prolonged IV antibiotics (4-6 weeks). Surgical evaluation if indication present."
+    elif (total_major >= 1 and minor_count >= 1) or minor_count >= 3:
+        risk_class = "Possible"
+        interp = "Possible infective endocarditis — cannot be ruled out"
+        rec = "Further workup: TEE if not done, FDG-PET/CT if prosthetic. Consider repeat blood cultures. Treat empirically if clinical suspicion high."
+    else:
+        risk_class = "Rejected"
+        interp = "Duke criteria not met — IE unlikely but not excluded"
+        rec = "Alternative diagnosis likely. If clinical suspicion persists, consider repeat imaging or extended culture protocol."
+
+    return ClinicalScoreResult(
+        scoreName="Modified Duke Criteria (2023 Duke-ISCVID)",
+        scoreValue=None,
+        riskClass=risk_class,
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=all_met,
+        componentsNotMet=all_not,
+        source="Fowler et al. CID 2023",
+    )
+
+
+# --- qSOFA (Seymour, JAMA 2016 — Sepsis-3) ---
+
+def _compute_qsofa(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    # qSOFA uses 3 criteria: RR ≥22, AMS, SBP ≤100
+    # Map to available CAP findings (these overlap with PSI items)
+    criteria = {
+        "cap_rr": "Respiratory rate ≥22/min",
+        "cap_ams": "Altered mental status",
+        "cap_hypotension": "Systolic BP ≤100 mmHg",
+    }
+    evaluated_count = sum(1 for fid in criteria if _is_evaluated(findings, fid))
+    if evaluated_count < 2:
+        return None
+
+    met: List[str] = []
+    not_met: List[str] = []
+    score = 0
+    for item_id, label in criteria.items():
+        if _is_present(findings, item_id):
+            met.append(label)
+            score += 1
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    if score >= 2:
+        interp = "qSOFA ≥2 — high risk of poor outcome (mortality 3-14x higher)"
+        rec = "Assess for organ dysfunction (full SOFA). Consider ICU level of care. Ensure Hour-1 sepsis bundle."
+    elif score == 1:
+        interp = "qSOFA 1 — intermediate risk"
+        rec = "Monitor closely. Reassess if clinical trajectory worsens."
+    else:
+        interp = "qSOFA 0 — lower risk of poor outcome"
+        rec = "Low qSOFA does NOT exclude sepsis. Clinical judgment remains paramount."
+
+    return ClinicalScoreResult(
+        scoreName="qSOFA",
+        scoreValue=score,
+        riskClass=f"{score}/3",
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=met,
+        componentsNotMet=not_met,
+        source="Seymour et al. JAMA 2016 (Sepsis-3)",
+    )
+
+
+# --- LRINEC (Wong, Crit Care Med 2004) ---
+
+def _compute_lrinec(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    evaluated = {fid for fid, s in findings.items() if s != "unknown" and fid.startswith("nsti_")}
+    if len(evaluated) < 3:
+        return None
+
+    met: List[str] = []
+    not_met: List[str] = []
+    score = 0
+
+    # LRINEC components mapped to NSTI module findings
+    components = {
+        "nsti_wbc_high": ("WBC elevated (>15,000 or <4,000/µL)", 1),
+        "nsti_hgb_low": ("Hemoglobin <13.5 g/dL", 2),
+        "nsti_sodium_low": ("Sodium <135 mEq/L", 2),
+        "nsti_creatinine_elevated": ("Creatinine >1.6 mg/dL", 2),
+        "nsti_glucose_elevated": ("Glucose >180 mg/dL", 1),
+        "nsti_crp_gt150": ("CRP >150 mg/L", 4),
+    }
+    for item_id, (label, pts) in components.items():
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            score += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    if score >= 8:
+        risk_class = "High risk"
+        interp = f"LRINEC {score} ≥8 — strongly predictive of NF (PPV ~93%)"
+        rec = "Emergent surgical exploration. Do NOT wait for imaging. Start broad-spectrum empirics (vancomycin + pip-tazo + clindamycin)."
+    elif score >= 6:
+        risk_class = "Intermediate risk"
+        interp = f"LRINEC {score} (6-7) — suspicious for NF"
+        rec = "Urgent surgical consultation. CT/MRI if surgery not immediately available. LRINEC sensitivity is only ~60-80% — clinical suspicion trumps score."
+    else:
+        risk_class = "Low risk"
+        interp = f"LRINEC {score} <6 — lower probability of NF"
+        rec = "NF not excluded by low LRINEC (sensitivity limited). If rapid progression, crepitus, or disproportionate pain → surgical exploration regardless of score."
+
+    return ClinicalScoreResult(
+        scoreName="LRINEC Score",
+        scoreValue=score,
+        riskClass=risk_class,
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=met,
+        componentsNotMet=not_met,
+        source="Wong et al. Crit Care Med 2004",
+    )
+
+
+# --- MASCC (Klastersky, JCO 2000) ---
+
+def _compute_mascc(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    evaluated = {fid for fid, s in findings.items() if s != "unknown" and fid.startswith("fn_")}
+    if len(evaluated) < 3:
+        return None
+
+    met: List[str] = []
+    not_met: List[str] = []
+    score = 0
+
+    # MASCC components — score is ADDITIVE (higher = lower risk)
+    components = {
+        "fn_mascc_burden_mild": ("Mild/no symptoms", 5),
+        "fn_mascc_burden_moderate": ("Moderate symptoms", 3),
+        "fn_mascc_no_hypotension": ("No hypotension (SBP ≥90)", 5),
+        "fn_mascc_no_copd": ("No active COPD", 4),
+        "fn_mascc_solid_tumor_or_no_fungal": ("Solid tumor or no prior fungal", 4),
+        "fn_mascc_no_dehydration": ("No dehydration requiring IV fluids", 3),
+        "fn_mascc_outpatient": ("Outpatient at onset", 3),
+        "fn_mascc_age_lt60": ("Age <60 years", 2),
+    }
+    # Burden of illness: mild and moderate are mutually exclusive; pick the one present
+    burden_mild = _is_present(findings, "fn_mascc_burden_mild")
+    burden_moderate = _is_present(findings, "fn_mascc_burden_moderate")
+
+    for item_id, (label, pts) in components.items():
+        # Skip mild if moderate is present (mutually exclusive)
+        if item_id == "fn_mascc_burden_mild" and burden_moderate:
+            continue
+        if item_id == "fn_mascc_burden_moderate" and burden_mild:
+            continue
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            score += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    if score >= 21:
+        risk_class = "Low risk"
+        interp = f"MASCC {score} ≥21 — low risk of serious complications (PPV 91%, mortality <3%)"
+        rec = "Consider outpatient oral antibiotics (ciprofloxacin + amoxicillin-clavulanate). Requires: tolerating PO, adherence, close follow-up within 24-48h, no prior FQ prophylaxis."
+    elif score >= 15:
+        risk_class = "Intermediate risk"
+        interp = f"MASCC {score} (15-20) — intermediate risk"
+        rec = "Inpatient IV antibiotics recommended. Anti-pseudomonal beta-lactam monotherapy (cefepime, pip-tazo, or meropenem)."
+    else:
+        risk_class = "High risk"
+        interp = f"MASCC {score} <15 — high risk of serious complications"
+        rec = "Inpatient IV antibiotics mandatory. Anti-pseudomonal beta-lactam. Add vancomycin if suspected CLABSI, MRSA, mucositis, or hemodynamic instability. Consider antifungal if neutropenia >7 days."
+
+    return ClinicalScoreResult(
+        scoreName="MASCC Score",
+        scoreValue=score,
+        riskClass=risk_class,
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=met,
+        componentsNotMet=not_met,
+        source="Klastersky et al. JCO 2000",
+    )
+
+
+# --- Bacterial Meningitis Score (Nigrovic, JAMA 2007) ---
+
+def _compute_bms(findings: Dict[str, FindingState]) -> ClinicalScoreResult | None:
+    evaluated = {fid for fid, s in findings.items() if s != "unknown" and fid.startswith("bm_")}
+    if len(evaluated) < 3:
+        return None
+
+    met: List[str] = []
+    not_met: List[str] = []
+    score = 0
+
+    components = {
+        "bm_bms_gram_stain_positive": ("CSF Gram stain positive", 2),
+        "bm_bms_csf_protein_ge80": ("CSF protein ≥80 mg/dL", 1),
+        "bm_bms_blood_anc_ge10k": ("Blood ANC ≥10,000/µL", 1),
+        "bm_bms_csf_anc_ge1000": ("CSF ANC ≥1,000/µL", 1),
+        "bm_bms_seizure": ("Seizure at/before presentation", 1),
+    }
+    for item_id, (label, pts) in components.items():
+        if _is_present(findings, item_id):
+            met.append(f"{label} (+{pts})")
+            score += pts
+        elif _is_evaluated(findings, item_id):
+            not_met.append(label)
+
+    if score == 0 and len(met) == 0 and len(not_met) >= 3:
+        risk_class = "Very low risk"
+        interp = "BMS = 0 — very low risk of bacterial meningitis (NPV 99.7%)"
+        rec = "Bacterial meningitis essentially excluded. Consider viral etiology. Close follow-up if discharged. Note: validated primarily in children; use with caution in adults."
+    elif score >= 3:
+        risk_class = "High risk"
+        interp = f"BMS = {score} — high probability of bacterial meningitis"
+        rec = "Treat empirically immediately. Ceftriaxone + vancomycin ± dexamethasone (give dexamethasone BEFORE or WITH first antibiotic dose). Do not delay treatment for imaging."
+    elif score >= 1:
+        risk_class = "Moderate risk"
+        interp = f"BMS = {score} — bacterial meningitis cannot be excluded"
+        rec = "Empiric antibiotics recommended. Observe closely. Repeat LP if clinical course uncertain."
+    else:
+        risk_class = "Insufficient data"
+        interp = "BMS — insufficient criteria evaluated"
+        rec = "Complete CSF analysis, Gram stain, and peripheral blood ANC to fully score."
+
+    return ClinicalScoreResult(
+        scoreName="Bacterial Meningitis Score",
+        scoreValue=score,
+        riskClass=risk_class,
+        interpretation=interp,
+        recommendation=rec,
+        componentsMet=met,
+        componentsNotMet=not_met,
+        source="Nigrovic et al. JAMA 2007",
+    )

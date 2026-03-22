@@ -15,6 +15,8 @@ from .engine import (
     applied_finding_summaries,
     build_stepwise_path,
     combined_lr,
+    compute_clinical_scores,
+    compute_next_best_tests,
     confidence_from_thresholds,
     derive_decision_thresholds,
     estimate_harms,
@@ -27,6 +29,8 @@ from .engine import (
 from .pretest_factors import get_pretest_factor_tuning, resolve_pretest_factor_specs
 from .schemas import (
     AssistantOption,
+    CalibrationOutcome,
+    CalibrationReport,
     DoseIDAssistantAnalysis,
     DoseIDAssistantPatientContext,
     AntibioticAllergyAnalyzeRequest,
@@ -4035,6 +4039,13 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         prep_findings=prep.analysis_findings,
     )
 
+    next_best = compute_next_best_tests(
+        current_posttest=posttest_probability,
+        module=module,
+        findings=prep.analysis_findings,
+        max_results=5,
+    )
+    clinical_scores = compute_clinical_scores(module.id, prep.analysis_findings)
     response = AnalyzeResponse(
         moduleId=module.id,
         moduleName=module.name,
@@ -4053,6 +4064,8 @@ def _analyze_internal(req: AnalyzeRequest) -> AnalyzeResponse:
         reasons=reasons,
         riskFlags=risk_flags,
         explanationForUser=None,
+        nextBestTests=next_best,
+        clinicalScores=clinical_scores,
     )
     if req.include_explanation:
         response.explanation_for_user = _build_probid_consult_message(module, response)
@@ -4193,6 +4206,41 @@ def analyze_text(req: TextAnalyzeRequest) -> TextAnalyzeResponse:
     )
     _sync_text_result_references(text_result=response)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Calibration feedback endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/v1/probid/outcome")
+def submit_outcome(outcome: CalibrationOutcome) -> Dict[str, Any]:
+    """Record a (predicted_probability, actual_outcome) pair for calibration."""
+    from .services.calibration_store import record_outcome
+    total = record_outcome(outcome)
+    return {"status": "recorded", "totalOutcomes": total}
+
+
+@app.get("/v1/probid/calibration", response_model=CalibrationReport)
+def get_calibration() -> CalibrationReport:
+    """Compute and return the full calibration report across all modules."""
+    from .services.calibration_store import compute_calibration_report
+    return compute_calibration_report()
+
+
+@app.get("/v1/probid/outcomes")
+def list_outcomes(module_id: str | None = None) -> Dict[str, Any]:
+    """List all recorded outcomes, optionally filtered by module."""
+    from .services.calibration_store import get_all_outcomes
+    outcomes = get_all_outcomes(module_id)
+    return {"outcomes": outcomes, "count": len(outcomes)}
+
+
+@app.delete("/v1/probid/outcomes")
+def clear_outcomes(module_id: str | None = None) -> Dict[str, Any]:
+    """Delete outcomes. If module_id given, only that module's outcomes."""
+    from .services.calibration_store import delete_outcomes
+    deleted = delete_outcomes(module_id)
+    return {"deleted": deleted}
 
 
 def _assistant_module_options() -> List[AssistantOption]:
@@ -4985,6 +5033,24 @@ def _build_probid_consult_message(
         lines.append(f"How long I would usually treat: {_join_readable(analysis.treatment_duration_guidance[:2])}.")
     if analysis.monitoring_recommendations:
         lines.append(f"What I would monitor: {_join_readable(analysis.monitoring_recommendations[:3])}.")
+    if analysis.next_best_tests:
+        top = analysis.next_best_tests[0]
+        nbt_line = (
+            f"Most informative next test: {top.label} — "
+            f"if positive, probability moves to {round(top.probability_if_positive * 100)}%; "
+            f"if negative, {round(top.probability_if_negative * 100)}%."
+        )
+        if len(analysis.next_best_tests) > 1:
+            second = analysis.next_best_tests[1]
+            nbt_line += f" Runner-up: {second.label}."
+        lines.append(nbt_line)
+    if analysis.clinical_scores:
+        for cs in analysis.clinical_scores:
+            score_str = f"{cs.score_name}: {cs.risk_class}" if cs.risk_class else cs.score_name
+            if cs.score_value is not None:
+                score_str += f" (score {cs.score_value})"
+            score_str += f" — {cs.interpretation}. {cs.recommendation}"
+            lines.append(score_str)
     if include_panel_note:
         lines.append("I left the LR breakdown and structured findings in the analysis panel below.")
     return "\n".join(lines)

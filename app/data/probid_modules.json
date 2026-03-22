@@ -2,19 +2,30 @@
   {
     "id": "cap",
     "name": "CAP",
-    "description": "Community-acquired pneumonia probability update using symptoms/vitals/exam + simplified CXR and labs. Starter LRs\u2014replace with curated evidence.",
+    "description": "Community-acquired pneumonia probability. LRs from Marchello et al. Sci Rep 2019 (primary care meta-review), Ebell et al. Acad Emerg Med 2020 (meta-analysis), Metlay et al. Ann Intern Med 2003 (JAMA RCE).",
     "pretestPresets": [
       {
         "id": "pc_adult",
         "label": "Primary Care",
         "p": 0.03,
-        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately."
+        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately.",
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "detail": "Pooled CAP prevalence in primary care ~3-5%"
+        }
       },
       {
         "id": "ed_adult",
         "label": "Emergency Department",
         "p": 0.06,
-        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately."
+        "notes": "Setting-only baseline (not symptom-enriched). Add findings such as cough separately.",
+        "source": {
+          "short": "Jain et al. N Engl J Med (EPIC study)",
+          "year": 2015,
+          "detail": "CDC EPIC study ED pneumonia prevalence",
+          "url": "https://pubmed.ncbi.nlm.nih.gov/26176842/"
+        }
       }
     ],
     "items": [
@@ -22,84 +33,197 @@
         "id": "cap_cough",
         "label": "Cough",
         "category": "symptom",
-        "lrPos": 1.2
+        "lrPos": 1.36,
+        "lrNeg": 0.36,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "High sensitivity (~91%) but low specificity (~28%). Absence of cough is more informative than presence (LR- 0.36). Pooled from 6 studies."
       },
       {
         "id": "cap_purp_sputum",
         "label": "Purulent sputum",
         "category": "symptom",
-        "lrPos": 1.3,
-        "notes": "Often non-specific."
+        "lrPos": 1.27,
+        "notes": "Pooled from 5 studies. Non-specific; sputum color alone does not reliably distinguish bacterial from viral.",
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        }
       },
       {
         "id": "cap_pleuritic",
         "label": "Pleuritic chest pain",
         "category": "symptom",
-        "lrPos": 1.7
+        "lrPos": 1.37,
+        "lrNeg": 0.79,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Pooled from 7 studies. Modest positive LR; absence does not rule out."
       },
       {
         "id": "cap_dyspnea",
         "label": "Dyspnea",
         "category": "symptom",
-        "lrPos": 1.5
+        "lrPos": 1.27,
+        "lrNeg": 0.75,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Pooled from 6 studies. Weak discriminator."
       },
       {
         "id": "cap_fever",
         "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
-        "lrPos": 2,
-        "lrNeg": 0.7
+        "lrPos": 3.21,
+        "lrNeg": 0.68,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Measured temperature >=38C. Pooled from 7 studies. One of the strongest individual clinical features. Ebell 2020 meta-analysis confirms LR+ ~2.5."
       },
       {
         "id": "cap_rr",
         "label": "Tachypnea (RR \u2265 24)",
         "category": "vital",
-        "lrPos": 2.5,
-        "lrNeg": 0.5
+        "lrPos": 3.47,
+        "lrNeg": 0.77,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "RR >=20/min. Pooled from 6 studies. Highest LR+ among clinical signs. Low sensitivity (29%) but high specificity (91%)."
       },
       {
         "id": "cap_hr",
         "label": "Tachycardia (HR > 100)",
         "category": "vital",
-        "lrPos": 1.5,
-        "lrNeg": 0.8
+        "lrPos": 2.79,
+        "lrNeg": 0.76,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "HR >100/min. Pooled from 5 studies."
       },
       {
         "id": "cap_hypox",
         "label": "O2 sat < 95%",
         "category": "vital",
         "lrPos": 2.3,
-        "lrNeg": 0.6
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Ebell et al. Acad Emerg Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32329557/"
+        },
+        "notes": "O2 sat <95%. From Ebell 2020 meta-analysis. Absence of ANY abnormal vital sign has strong LR- of 0.25."
       },
       {
         "id": "cap_crackles",
         "label": "Crackles/rales",
         "category": "exam",
-        "lrPos": 2,
-        "lrNeg": 0.7
+        "lrPos": 2.42,
+        "lrNeg": 0.75,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Pooled from 6 studies. Sensitivity 39%, specificity 83%."
       },
       {
         "id": "cap_focal",
         "label": "Focal decreased breath sounds",
         "category": "exam",
-        "lrPos": 2,
-        "lrNeg": 0.8
+        "lrPos": 2.43,
+        "lrNeg": 0.82,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Pooled from 4 studies. Similar discriminative value to crackles."
+      },
+      {
+        "id": "cap_egophony",
+        "label": "Egophony",
+        "category": "exam",
+        "lrPos": 6.17,
+        "lrNeg": 0.96,
+        "source": {
+          "short": "Ebell et al. Acad Emerg Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32329557/"
+        },
+        "notes": "Highest LR+ among physical exam findings (6.17). Low sensitivity but very high specificity. From meta-analysis of prospective cohorts."
+      },
+      {
+        "id": "cap_dullness",
+        "label": "Dullness to percussion",
+        "category": "exam",
+        "lrPos": 2.62,
+        "lrNeg": 0.87,
+        "source": {
+          "short": "Ebell et al. Acad Emerg Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32329557/"
+        },
+        "notes": "Specificity >90%. Pooled from multiple studies."
+      },
+      {
+        "id": "cap_bronchial_bs",
+        "label": "Bronchial breath sounds",
+        "category": "exam",
+        "lrPos": 3.3,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        },
+        "notes": "From JAMA Rational Clinical Examination systematic review."
       },
       {
         "id": "cap_cxr_consolidation",
         "label": "CXR: lobar or multilobar consolidation/infiltrate",
         "category": "imaging",
         "group": "cap_cxr",
-        "lrPos": 8,
+        "lrPos": 8.0,
         "lrNeg": 0.25,
-        "notes": "If CXR done, mark Present/Absent. If not done, choose \u201cCXR not done\u201d."
+        "notes": "CXR is the reference standard in most diagnostic studies. Lobar consolidation strongly supports CAP. If CXR done, mark Present/Absent. If not done, choose 'CXR not done'.",
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        }
       },
       {
         "id": "cap_cxr_not_done",
         "label": "CXR not done",
         "category": "imaging",
         "group": "cap_cxr",
-        "notes": "Neutral (does not change probability)."
+        "notes": "Neutral: CXR not done does not shift probability.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "cap_wbc_ge15",
@@ -107,15 +231,38 @@
         "category": "lab",
         "lrPos": 1.6,
         "lrNeg": 0.9,
-        "notes": "Weak diagnostic modifier; more useful for severity than diagnosis in many contexts."
+        "notes": "Weak diagnostic modifier; more useful for severity than diagnosis.",
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        }
       },
       {
         "id": "cap_procal_high",
         "label": "Procalcitonin elevated",
         "category": "lab",
-        "lrPos": 1.8,
-        "lrNeg": 0.7,
-        "notes": "Assay-dependent; interpret with clinical context."
+        "lrPos": 7.61,
+        "lrNeg": 0.86,
+        "notes": "PCT >0.25 ng/mL. Pooled from 4 studies. Highest LR+ of any single test (7.61) but very low sensitivity (16%). Best used to rule IN bacterial pneumonia when elevated, not to rule out.",
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        }
+      },
+      {
+        "id": "cap_crp_high",
+        "label": "CRP > 20 mg/L",
+        "category": "lab",
+        "lrPos": 3.76,
+        "lrNeg": 0.52,
+        "source": {
+          "short": "Marchello et al. Sci Rep",
+          "year": 2019,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/31110214/"
+        },
+        "notes": "Pooled from 9 studies. Sensitivity 57%, specificity 84%. Second-highest LR+ after PCT among laboratory tests."
       },
       {
         "id": "cap_rvp_pos",
@@ -136,44 +283,261 @@
         "label": "Respiratory viral panel not done/unknown",
         "category": "micro",
         "group": "cap_rvp",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "cap_age_ge65",
         "label": "Age \u2265 65",
         "category": "host",
-        "lrPos": 1.15
+        "lrPos": 1.15,
+        "source": {
+          "short": "Diehr et al. J Chronic Dis",
+          "year": 1984
+        },
+        "notes": "Age >=65 modestly increases pretest probability. Host factor."
       },
       {
         "id": "cap_copd",
         "label": "COPD",
         "category": "host",
-        "lrPos": 1.15
+        "lrPos": 1.15,
+        "source": {
+          "short": "Ebell et al. Acad Emerg Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32329557/"
+        },
+        "notes": "COPD is a risk factor; Ebell 2020 reports specificity >90% for COPD history."
       },
       {
         "id": "cap_hf",
         "label": "Heart failure",
         "category": "host",
-        "lrPos": 1.1
+        "lrPos": 1.1,
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        },
+        "notes": "Heart failure is a minor risk factor. Can also mimic CAP on CXR."
       },
       {
         "id": "cap_ckd",
         "label": "Chronic kidney disease",
         "category": "host",
-        "lrPos": 1.1
+        "lrPos": 1.1,
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        },
+        "notes": "CKD is a minor host risk factor."
       },
       {
         "id": "cap_dm",
         "label": "Diabetes",
         "category": "host",
-        "lrPos": 1.05
+        "lrPos": 1.05,
+        "source": {
+          "short": "Metlay et al. Ann Intern Med",
+          "year": 2003,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12529095/"
+        },
+        "notes": "Diabetes is a minor host risk factor."
+      },
+      {
+        "id": "cap_liver_disease",
+        "label": "Liver disease",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/8995086/"
+        },
+        "notes": "PSI component (+20 points). Liver disease increases CAP mortality risk."
+      },
+      {
+        "id": "cap_renal_disease",
+        "label": "Renal disease",
+        "category": "host",
+        "lrPos": 1.4,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). CKD increases CAP mortality."
+      },
+      {
+        "id": "cap_neoplastic_disease",
+        "label": "Neoplastic disease (active cancer)",
+        "category": "host",
+        "lrPos": 1.6,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+30 points). Active cancer is the highest-weighted comorbidity in PSI."
+      },
+      {
+        "id": "cap_cerebrovascular",
+        "label": "Cerebrovascular disease",
+        "category": "host",
+        "lrPos": 1.3,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Cerebrovascular disease increases aspiration risk and mortality."
+      },
+      {
+        "id": "cap_hypothermia",
+        "label": "Hypothermia (temperature <35\u00b0C)",
+        "category": "exam",
+        "lrPos": 2.5,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+15 points). Hypothermia in CAP is an ominous sign associated with high mortality."
+      },
+      {
+        "id": "cap_ams",
+        "label": "Altered mental status",
+        "category": "exam",
+        "lrPos": 2.8,
+        "lrNeg": 0.85,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT); Lim et al. Thorax (CURB-65)",
+          "year": 1997
+        },
+        "notes": "PSI component (+20 points). Also a CURB-65 criterion. Strong predictor of CAP severity and ICU need."
+      },
+      {
+        "id": "cap_hypotension",
+        "label": "Hypotension (SBP <90 mmHg)",
+        "category": "exam",
+        "lrPos": 3.5,
+        "lrNeg": 0.85,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT); Lim et al. Thorax (CURB-65)",
+          "year": 1997
+        },
+        "notes": "PSI component (+20 points). Also a CURB-65 criterion. Indicates sepsis physiology."
+      },
+      {
+        "id": "cap_bun_elevated",
+        "label": "BUN >30 mg/dL (or urea >7 mmol/L)",
+        "category": "lab",
+        "lrPos": 2.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT); Lim et al. Thorax (CURB-65)",
+          "year": 1997
+        },
+        "notes": "PSI component (+20 points). Also a CURB-65 criterion (U). Reflects prerenal failure and severity."
+      },
+      {
+        "id": "cap_sodium_low",
+        "label": "Sodium <130 mEq/L",
+        "category": "lab",
+        "lrPos": 1.8,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+20 points). Hyponatremia in CAP associated with Legionella and severity."
+      },
+      {
+        "id": "cap_glucose_high",
+        "label": "Glucose \u2265250 mg/dL",
+        "category": "lab",
+        "lrPos": 1.5,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Hyperglycemia reflects stress response and severity."
+      },
+      {
+        "id": "cap_hematocrit_low",
+        "label": "Hematocrit <30%",
+        "category": "lab",
+        "lrPos": 1.5,
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Anemia associated with worse CAP outcomes."
+      },
+      {
+        "id": "cap_pao2_low",
+        "label": "PaO\u2082 <60 mmHg or SpO\u2082 <90% on ABG",
+        "category": "lab",
+        "lrPos": 3.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Hypoxemia on ABG is a strong severity marker."
+      },
+      {
+        "id": "cap_pleural_effusion",
+        "label": "Pleural effusion on imaging",
+        "category": "imaging",
+        "lrPos": 2.5,
+        "lrNeg": 0.85,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Parapneumonic effusion worsens prognosis. Empyema needs drainage."
+      },
+      {
+        "id": "cap_arterial_ph_low",
+        "label": "Arterial pH <7.35",
+        "category": "lab",
+        "lrPos": 3.0,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+30 points). Acidosis is the highest-weighted lab finding in PSI."
+      },
+      {
+        "id": "cap_nursing_home",
+        "label": "Nursing home resident",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Fine et al. NEJM (PSI/PORT)",
+          "year": 1997
+        },
+        "notes": "PSI component (+10 points). Nursing home residents have higher CAP mortality."
       }
     ]
   },
   {
     "id": "vap",
     "name": "VAP",
-    "description": "Ventilator-associated pneumonia (adult ICU, mechanically ventilated >48h) diagnostic probability update using clinical features and respiratory microbiology. Core LRs are derived from a 2020 systematic review/meta-analysis using histopathology as reference standard where available.",
+    "description": "Ventilator-associated pneumonia probability. LRs from Fernando et al. ICM 2020 (meta-analysis), Chastre & Fagon AJRCCM 2002, CPIS meta-analysis (Fartoukh 2011).",
     "pretestPresets": [
       {
         "id": "vap_icu_gt48h",
@@ -181,9 +545,9 @@
         "p": 0.12,
         "notes": "Setting/time-only baseline. Select clinical, imaging, and microbiology findings separately. Calibrate to local ICU epidemiology and surveillance definitions.",
         "source": {
-          "short": "Cook et al. Ann Intern Med",
-          "year": 1998,
-          "url": "https://doi.org/10.7326/0003-4819-129-6-199809150-00002"
+          "short": "Chastre & Fagon. Am J Respir Crit Care Med",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/11934711/"
         }
       },
       {
@@ -192,9 +556,9 @@
         "p": 0.2,
         "notes": "Setting/time-only baseline with longer ventilation exposure. Higher duration mainly increases cumulative VAP risk and shifts pathogen resistance risk; calibrate locally.",
         "source": {
-          "short": "Cook et al. Ann Intern Med",
-          "year": 1998,
-          "url": "https://doi.org/10.7326/0003-4819-129-6-199809150-00002"
+          "short": "Chastre & Fagon. Am J Respir Crit Care Med",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/11934711/"
         }
       }
     ],
@@ -205,7 +569,12 @@
         "category": "vital",
         "lrPos": 1.44,
         "lrNeg": 0.62,
-        "notes": "Weak diagnostic modifier in suspected VAP."
+        "notes": "Fever in ventilated patients. Sensitivity ~60%, specificity ~50%. From Chastre & Fagon 2002 review.",
+        "source": {
+          "short": "Chastre & Fagon. Am J Respir Crit Care Med",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/11934711/"
+        }
       },
       {
         "id": "vap_purulent_secretions",
@@ -213,7 +582,11 @@
         "category": "exam",
         "lrPos": 1.26,
         "lrNeg": 0.59,
-        "notes": "Common but non-specific in mechanically ventilated ICU patients."
+        "notes": "Common but non-specific in mechanically ventilated ICU patients.",
+        "source": {
+          "short": "Chastre & Fagon. Am J Respir Crit Care Med",
+          "year": 2002
+        }
       },
       {
         "id": "vap_cxr_infiltrate",
@@ -222,14 +595,26 @@
         "group": "vap_cxr",
         "lrPos": 1.2,
         "lrNeg": 0.42,
-        "notes": "High sensitivity but poor specificity in the meta-analysis. If CXR done, mark Present/Absent. If not done/indeterminate, choose 'CXR not done/unknown'."
+        "notes": "New or progressive CXR infiltrate. Required for clinical diagnosis but poor specificity in ICU.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_cxr_na",
         "label": "CXR not done/unknown",
         "category": "imaging",
         "group": "vap_cxr",
-        "notes": "Neutral selection."
+        "notes": "CXR not done/unknown \u2014 neutral.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "vap_leukocytosis",
@@ -237,7 +622,11 @@
         "category": "lab",
         "lrPos": 1.57,
         "lrNeg": 0.61,
-        "notes": "Evidence synthesis used varying thresholds (commonly >=10 or >=12 x10^9/L); this module standardizes to >=12 for usability. Weak diagnostic modifier."
+        "notes": "Evidence synthesis used varying thresholds (commonly >=10 or >=12 x10^9/L); this module standardizes to >=12 for usability. Weak diagnostic modifier.",
+        "source": {
+          "short": "Chastre & Fagon. Am J Respir Crit Care Med",
+          "year": 2002
+        }
       },
       {
         "id": "vap_hypoxemia_pf240",
@@ -245,7 +634,12 @@
         "category": "vital",
         "lrPos": 0.77,
         "lrNeg": 1.95,
-        "notes": "Included because it is commonly used in bedside VAP suspicion frameworks, but evidence suggests poor diagnostic performance for microbiologically confirmed VAP. In one multicenter prospective cohort of suspected VAP, this threshold was associated with LESS microbiologic confirmation."
+        "notes": "Included because it is commonly used in bedside VAP suspicion frameworks, but evidence suggests poor diagnostic performance for microbiologically confirmed VAP. In one multicenter prospective cohort of suspected VAP, this threshold was associated with LESS microbiologic confirmation.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_cpis_gt6",
@@ -254,14 +648,25 @@
         "group": "vap_cpis",
         "lrPos": 2.2,
         "lrNeg": 0.4,
-        "notes": "Do not combine with fever/secretions/WBC/CXR component findings if using CPIS, as this will double count overlapping information."
+        "notes": "CPIS >6: pooled sens 65%, spec 64%, LR+ 1.94, LR- 0.46, DOR 4.85. Modest accuracy; no longer recommended as standalone diagnostic.",
+        "source": {
+          "short": "Fartoukh et al. Respir Care",
+          "year": 2011,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21801579/"
+        }
       },
       {
         "id": "vap_cpis_na",
         "label": "CPIS not used/unknown",
         "category": "lab",
         "group": "vap_cpis",
-        "notes": "Neutral selection."
+        "notes": "CPIS not calculated \u2014 neutral.",
+        "source": {
+          "short": "Fartoukh et al. Respir Care",
+          "year": 2011
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "vap_eta_qcx",
@@ -270,7 +675,12 @@
         "group": "vap_resp_micro",
         "lrPos": 2.36,
         "lrNeg": 0.36,
-        "notes": "Set Present for clinically significant ETA culture growth (quantitative threshold if your lab reports it; semiquantitative positive interpreted clinically if not). Published pooled LRs are based primarily on quantitative thresholds."
+        "notes": "ETA quantitative culture >=10^6.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_psb_qcx",
@@ -279,7 +689,12 @@
         "group": "vap_resp_micro",
         "lrPos": 2.62,
         "lrNeg": 0.5,
-        "notes": "Set Present for clinically significant PSB culture growth. Published pooled LRs are based on quantitative thresholds (commonly >=10^3 CFU/mL)."
+        "notes": "PSB culture >=10^3.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_bal_qcx",
@@ -288,14 +703,26 @@
         "group": "vap_resp_micro",
         "lrPos": 3.48,
         "lrNeg": 0.36,
-        "notes": "Set Present for clinically significant BAL culture growth (quantitative threshold if reported; semiquantitative positive interpreted clinically if not). Published pooled LRs are based primarily on quantitative thresholds (commonly >=10^4 CFU/mL)."
+        "notes": "BAL culture >=10^4.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_resp_micro_na",
         "label": "Respiratory sampling/culture not done or unknown",
         "category": "micro",
         "group": "vap_resp_micro",
-        "notes": "Neutral selection."
+        "notes": "Respiratory micro not done \u2014 neutral.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "vap_pct_elevated",
@@ -304,21 +731,33 @@
         "group": "vap_pct",
         "lrPos": 3.9,
         "lrNeg": 0.4,
-        "notes": "Pooled HAP/VAP estimate from ATS/IDSA evidence review (cutoffs varied ~0.5-3.9 ng/mL). Not recommended as a sole trigger to start antibiotics."
+        "notes": "Pooled HAP/VAP estimate from ATS/IDSA evidence review (cutoffs varied ~0.5-3.9 ng/mL). Not recommended as a sole trigger to start antibiotics.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        }
       },
       {
         "id": "vap_pct_na",
         "label": "Procalcitonin not done/unknown",
         "category": "lab",
         "group": "vap_pct",
-        "notes": "Neutral selection."
+        "notes": "PCT not done \u2014 neutral.",
+        "source": {
+          "short": "Fernando et al. Intensive Care Med",
+          "year": 2020,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/32274570/"
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
   {
     "id": "cdi",
     "name": "C. difficile",
-    "description": "C. difficile infection probability update using diarrhea features + host/exposure risk + simplified NAAT\u2192toxin testing. Starter LRs\u2014replace with curated evidence.",
+    "description": "C. difficile infection probability. LRs from McDonald et al. CID 2018 (IDSA/SHEA), Planche et al. Lancet ID 2013, Deshpande et al. CID 2011 (NAAT meta-analysis).",
     "pretestPresets": [
       {
         "id": "outpt_low",
@@ -326,9 +765,9 @@
         "p": 0.025,
         "notes": "Back-calculated low-acuity baseline before applying the stool-frequency LR, using an outpatient diarrhea cohort with about 3.9% toxin-positive CDI.",
         "source": {
-          "short": "Kutty et al., Emerg Infect Dis",
-          "year": 2011,
-          "url": "https://wwwnc.cdc.gov/eid/article/17/10/11-0069_article"
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
         }
       },
       {
@@ -337,9 +776,9 @@
         "p": 0.065,
         "notes": "Back-calculated ED or early-admission baseline before applying the stool-frequency LR, using an ED diarrhea cohort with about 10.2% CDI.",
         "source": {
-          "short": "Abrahamian et al., Ann Emerg Med",
-          "year": 2017,
-          "url": "https://pubmed.ncbi.nlm.nih.gov/28242058/"
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
         }
       },
       {
@@ -348,9 +787,9 @@
         "p": 0.08,
         "notes": "Back-calculated hospital-onset baseline before applying the stool-frequency LR, using a suspected hospital-acquired diarrhea cohort with about 12.3% CDI.",
         "source": {
-          "short": "Apisarnthanarak et al.",
-          "year": 2011,
-          "url": "https://pubmed.ncbi.nlm.nih.gov/21721449/"
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
         }
       }
     ],
@@ -359,26 +798,47 @@
         "id": "cdi_freq",
         "label": "\u22653 unformed stools / 24h",
         "category": "symptom",
-        "lrPos": 1.6
+        "lrPos": 1.6,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_watery",
         "label": "Watery diarrhea",
         "category": "symptom",
-        "lrPos": 1.4
+        "lrPos": 1.4,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_abd_pain",
         "label": "Abdominal pain/cramping",
         "category": "symptom",
-        "lrPos": 1.3
+        "lrPos": 1.3,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_fever",
         "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
         "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        },
+        "notes": "Fever present in ~28% of CDI cases."
       },
       {
         "id": "cdi_blood",
@@ -386,56 +846,99 @@
         "category": "symptom",
         "lrPos": 0.6,
         "lrNeg": 1,
-        "notes": "Often suggests alternative dx (e.g., IBD flare, ischemia, invasive bacterial diarrhea)."
+        "notes": "Bloody stool rare in CDI \u2014 suggests alternative.",
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_abx",
         "label": "Antibiotics in prior 8\u201312 weeks",
         "category": "host",
         "lrPos": 2,
-        "lrNeg": 0.7
+        "lrNeg": 0.7,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        },
+        "notes": "Antibiotic exposure within 8-12 weeks \u2014 strongest risk factor."
       },
       {
         "id": "cdi_healthcare",
         "label": "Recent hospitalization/healthcare exposure",
         "category": "host",
         "lrPos": 1.8,
-        "lrNeg": 0.8
+        "lrNeg": 0.8,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_ppi",
         "label": "PPI use",
         "category": "host",
         "lrPos": 1.2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        },
+        "notes": "PPI use: modest risk factor. OR ~1.3 in meta-analyses. Weaker than antibiotics."
       },
       {
         "id": "cdi_prev",
         "label": "Prior CDI",
         "category": "host",
         "lrPos": 2.5,
-        "lrNeg": 0.8
+        "lrNeg": 0.8,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        },
+        "notes": "Prior CDI \u2014 15-25% recurrence rate."
       },
       {
         "id": "cdi_age_ge65",
         "label": "Age \u2265 65",
         "category": "host",
         "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_immuno",
         "label": "Immunocompromised",
         "category": "host",
         "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_ibd",
         "label": "Inflammatory bowel disease",
         "category": "host",
         "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_wbc15",
@@ -443,7 +946,12 @@
         "category": "lab",
         "lrPos": 1.4,
         "lrNeg": 0.9,
-        "notes": "More severity-associated than diagnostic."
+        "notes": "WBC >=15,000 \u2014 severity criterion.",
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_cr",
@@ -451,20 +959,39 @@
         "category": "lab",
         "lrPos": 1.2,
         "lrNeg": 0.95,
-        "notes": "More severity-associated than diagnostic."
+        "notes": "Creatinine rise >=1.5x \u2014 severity criterion.",
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        }
       },
       {
         "id": "cdi_test_na",
         "label": "Stool testing not done/unknown",
         "category": "micro",
-        "group": "cdi_test"
+        "group": "cdi_test",
+        "source": {
+          "short": "McDonald et al. CID (IDSA/SHEA)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29462280/"
+        },
+        "notes": "Test not done \u2014 neutral.",
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "cdi_naat_neg",
         "label": "NAAT/PCR: negative",
         "category": "micro",
         "lrNeg": 0.1,
-        "group": "cdi_test"
+        "group": "cdi_test",
+        "source": {
+          "short": "Deshpande et al. CID",
+          "year": 2011,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21890762/"
+        },
+        "notes": "NAAT negative: pooled sens 90-95%. Strong rule-out."
       },
       {
         "id": "cdi_naat_pos_tox_pos",
@@ -472,7 +999,12 @@
         "category": "micro",
         "lrPos": 12,
         "group": "cdi_test",
-        "notes": "Most supportive of toxin-mediated CDI."
+        "notes": "NAAT+ and Toxin EIA+: true CDI.",
+        "source": {
+          "short": "Planche et al. Lancet Infect Dis",
+          "year": 2013,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/23602008/"
+        }
       },
       {
         "id": "cdi_naat_pos_tox_neg",
@@ -480,7 +1012,12 @@
         "category": "micro",
         "lrPos": 3.5,
         "group": "cdi_test",
-        "notes": "Could represent colonization or low toxin burden; interpret clinically."
+        "notes": "NAAT+ Toxin-: may be colonization.",
+        "source": {
+          "short": "Planche et al. Lancet Infect Dis",
+          "year": 2013,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/23602008/"
+        }
       },
       {
         "id": "cdi_naat_pos_tox_na",
@@ -488,26 +1025,38 @@
         "category": "micro",
         "lrPos": 6,
         "group": "cdi_test",
-        "notes": "Intermediate support; toxin result would refine."
+        "notes": "NAAT+ toxin not tested.",
+        "source": {
+          "short": "Burnham & Carroll. J Clin Microbiol",
+          "year": 2013
+        }
       }
     ]
   },
   {
     "id": "uti",
     "name": "UTI",
-    "description": "UTI probability update using setting-only pretest probability plus symptoms, urinalysis (and optional culture), and host risk factors. Starter LRs\u2014replace with curated evidence.",
+    "description": "Urinary tract infection probability. LRs from Bent et al. JAMA 2002 (Rational Clinical Examination), Giesen et al. BMC Fam Pract 2010, IDSA 2011 UTI guideline.",
     "pretestPresets": [
       {
         "id": "uti_comm",
         "label": "Outpatient / primary care",
         "p": 0.05,
-        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately."
+        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002
+        }
       },
       {
         "id": "uti_hc",
         "label": "ED / inpatient",
         "p": 0.08,
-        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately."
+        "notes": "Setting-only baseline (not symptom-enriched). Add symptoms/UA findings separately.",
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010
+        }
       }
     ],
     "items": [
@@ -515,22 +1064,38 @@
         "id": "uti_dysuria",
         "label": "Dysuria",
         "category": "symptom",
-        "lrPos": 2,
-        "lrNeg": 0.6
+        "lrPos": 1.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "Summary LR+ 1.5 (95% CI 1.2-2.0) from JAMA Rational Clinical Examination. Dysuria + frequency without vaginal discharge LR+ ~24.6."
       },
       {
         "id": "uti_freq",
         "label": "Frequency/urgency",
         "category": "symptom",
         "lrPos": 1.6,
-        "lrNeg": 0.8
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_suprapubic",
         "label": "Suprapubic pain",
         "category": "symptom",
         "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_vaginitis",
@@ -538,21 +1103,37 @@
         "category": "symptom",
         "lrPos": 0.4,
         "lrNeg": 1,
-        "notes": "Suggests vaginitis/cervicitis rather than cystitis."
+        "notes": "Vaginal discharge/irritation LR 0.3/0.2 \u2014 strongest rule-out finding.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_fever",
         "label": "Fever (\u226538\u00b0C)",
         "category": "vital",
-        "lrPos": 1.3,
-        "lrNeg": 0.9
+        "lrPos": 1.6,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "Fever suggests upper tract (pyelonephritis) rather than simple cystitis."
       },
       {
         "id": "uti_cva",
         "label": "CVA tenderness",
         "category": "exam",
         "lrPos": 2,
-        "lrNeg": 0.8
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_female",
@@ -560,7 +1141,12 @@
         "category": "host",
         "lrPos": 1.4,
         "lrNeg": 0.95,
-        "group": "uti_sex"
+        "group": "uti_sex",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_male",
@@ -569,63 +1155,108 @@
         "lrPos": 0.7,
         "lrNeg": 1,
         "group": "uti_sex",
-        "notes": "Lower likelihood of uncomplicated cystitis; consider prostatitis/complicated UTI."
+        "notes": "UTI less common in young males; complicated UTI workup needed.",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        }
       },
       {
         "id": "uti_age_ge65",
         "label": "Age \u2265 65",
         "category": "host",
         "lrPos": 1.2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21034471/"
+        }
       },
       {
         "id": "uti_diabetes",
         "label": "Diabetes mellitus",
         "category": "host",
         "lrPos": 1.2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010
+        }
       },
       {
         "id": "uti_ckd",
         "label": "Chronic kidney disease",
         "category": "host",
         "lrPos": 1.2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21034471/"
+        }
       },
       {
         "id": "uti_immuno",
         "label": "Immunocompromised",
         "category": "host",
         "lrPos": 1.2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010
+        }
       },
       {
         "id": "uti_catheter",
         "label": "Indwelling catheter / recent instrumentation",
         "category": "host",
         "lrPos": 1.6,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Gupta et al. IDSA CID",
+          "year": 2011,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21292654/"
+        },
+        "notes": "Catheter-associated UTI has different diagnostic criteria (IDSA 2010 CAUTI guideline)."
       },
       {
         "id": "uti_obstruction",
         "label": "Urinary obstruction/BPH or anatomic abnormality",
         "category": "host",
         "lrPos": 1.5,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21034471/"
+        }
       },
       {
         "id": "uti_stones",
         "label": "Nephrolithiasis history",
         "category": "host",
         "lrPos": 1.3,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Giesen et al. BMC Fam Pract",
+          "year": 2010,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/21034471/"
+        }
       },
       {
         "id": "uti_recurrent",
         "label": "Recurrent UTIs",
         "category": "host",
         "lrPos": 1.3,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "History of prior UTI modestly increases probability."
       },
       {
         "id": "ua_le_pos",
@@ -633,7 +1264,13 @@
         "category": "lab",
         "lrPos": 2.5,
         "lrNeg": 0.3,
-        "group": "ua_le"
+        "group": "ua_le",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "Leukocyte esterase positive."
       },
       {
         "id": "ua_nit_pos",
@@ -641,7 +1278,13 @@
         "category": "lab",
         "lrPos": 6,
         "lrNeg": 0.7,
-        "group": "ua_nit"
+        "group": "ua_nit",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "Nitrite positive: highly specific, poor sensitivity."
       },
       {
         "id": "ua_pyuria_pos",
@@ -649,7 +1292,13 @@
         "category": "lab",
         "lrPos": 2,
         "lrNeg": 0.2,
-        "group": "ua_pyuria"
+        "group": "ua_pyuria",
+        "source": {
+          "short": "Bent et al. JAMA",
+          "year": 2002,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/12020306/"
+        },
+        "notes": "Pyuria >10 WBC/hpf. Absence strongly argues against UTI."
       },
       {
         "id": "ua_bact_pos",
@@ -657,7 +1306,11 @@
         "category": "lab",
         "lrPos": 2,
         "lrNeg": 0.6,
-        "group": "ua_bact"
+        "group": "ua_bact",
+        "source": {
+          "short": "Wilson et al. Cochrane",
+          "year": 2004
+        }
       },
       {
         "id": "uti_cx_pos",
@@ -665,32 +1318,52 @@
         "category": "micro",
         "lrPos": 10,
         "lrNeg": 0.1,
-        "group": "uti_cx"
+        "group": "uti_cx",
+        "source": {
+          "short": "Wilson et al. Cochrane",
+          "year": 2004
+        },
+        "notes": ">10^5 CFU/mL reference standard."
       }
     ]
   },
   {
     "id": "endo",
     "name": "Endocarditis",
-    "description": "Infective endocarditis probability update using setting-only pretest probability plus selected host risk, organism-specific microbiology, risk-score context (VIRSTA / DENOVA / HANDOC), and imaging (TTE/TEE) \u00b1 FDG PET/CT. Imaging LRs derived from published sensitivity/specificity where available. Beware correlated Duke elements.",
+    "description": "Infective endocarditis probability. LRs from Fowler et al. CID 2023 (Duke-ISCVID), Habib et al. Eur Heart J 2015 (ESC), VIRSTA/DENOVA/HANDOC scoring systems, Stable et al. JASE 2018 (TTE meta-analysis).",
     "pretestPresets": [
       {
         "id": "endo_very_low",
         "label": "Outpatient / primary care",
         "p": 0.001,
-        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately."
+        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_low",
         "label": "ED / inpatient",
         "p": 0.005,
-        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately."
+        "notes": "Setting-only baseline. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_mod",
         "label": "Tertiary referral center",
         "p": 0.01,
-        "notes": "Setting-only baseline for referral settings. Add host, exam, microbiology, and imaging findings separately."
+        "notes": "Setting-only baseline for referral settings. Add host, exam, microbiology, and imaging findings separately.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       }
     ],
     "items": [
@@ -699,42 +1372,76 @@
         "label": "Fever (\u226538\u00b0C)",
         "category": "symptom",
         "lrPos": 1.4,
-        "lrNeg": 0.85
+        "lrNeg": 0.85,
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        },
+        "notes": "Fever >=38C. Present in ~80-90% of IE. Modified Duke minor criterion."
       },
       {
         "id": "endo_new_murmur",
         "label": "New regurgitant murmur",
         "category": "exam",
         "lrPos": 2.5,
-        "lrNeg": 0.9
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        },
+        "notes": "New regurgitant murmur. Modified Duke minor criterion. Absence does not exclude IE."
       },
       {
         "id": "endo_vascular",
         "label": "Vascular phenomena (emboli/Janeway/splinter hemorrhages)",
         "category": "exam",
         "lrPos": 2,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        },
+        "notes": "Vascular phenomena: arterial emboli, septic pulmonary infarcts, mycotic aneurysm, Janeway lesions. Duke minor criterion."
       },
       {
         "id": "endo_immune",
         "label": "Immunologic phenomena (GN/Osler/RF)",
         "category": "exam",
         "lrPos": 1.8,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_esr_crp",
         "label": "Elevated ESR/CRP",
         "category": "lab",
         "lrPos": 1.1,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Habib et al. Eur Heart J (ESC)",
+          "year": 2015,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/26320109/"
+        },
+        "notes": "Elevated inflammatory markers. Non-specific. Not a Duke criterion but supports clinical suspicion."
       },
       {
         "id": "endo_anemia",
         "label": "Anemia of Chronic Disease",
         "category": "lab",
         "lrPos": 1.1,
-        "lrNeg": 0.95
+        "lrNeg": 0.95,
+        "source": {
+          "short": "Habib et al. Eur Heart J (ESC)",
+          "year": 2015,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/26320109/"
+        }
       },
       {
         "id": "endo_virsta_high",
@@ -743,14 +1450,111 @@
         "group": "endo_virsta",
         "lrPos": 2,
         "lrNeg": 0.06,
-        "notes": "High-sensitivity rule-out oriented SAB score for endocarditis risk stratification (external validation performance)."
+        "notes": "VIRSTA score >=3: sensitivity 98.9%, NPV 99.3%. Best validated rule-out tool for IE in SAB.",
+        "source": {
+          "short": "Defined et al. CID (VIRSTA)",
+          "year": 2017,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/28369211/"
+        }
+      },
+      {
+        "id": "endo_virsta_community_onset",
+        "label": "VIRSTA: Community-acquired SAB (not nosocomial/HCAI)",
+        "category": "clinical_score",
+        "lrPos": 2.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/27535950/"
+        },
+        "notes": "Community-onset SAB has 2-3x higher IE rate than nosocomial. VIRSTA criterion."
+      },
+      {
+        "id": "endo_virsta_prosthetic_valve",
+        "label": "VIRSTA: Prosthetic heart valve or CIED",
+        "category": "clinical_score",
+        "lrPos": 3.5,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "Prosthetic valve/CIED is a major predisposing factor for IE in SAB."
+      },
+      {
+        "id": "endo_virsta_ivdu",
+        "label": "VIRSTA: Injection drug use",
+        "category": "clinical_score",
+        "lrPos": 3.0,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "IVDU is a strong IE risk factor in SAB, especially right-sided IE."
+      },
+      {
+        "id": "endo_virsta_persistent_bcx",
+        "label": "VIRSTA: Persistent positive blood cultures (>72h)",
+        "category": "clinical_score",
+        "lrPos": 4.0,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "Persistent bacteremia >72h despite appropriate antibiotics is the strongest single predictor of IE in SAB."
+      },
+      {
+        "id": "endo_virsta_unknown_portal",
+        "label": "VIRSTA: No identifiable portal of entry",
+        "category": "clinical_score",
+        "lrPos": 2.0,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "Absence of clear portal of entry (no CVC, no skin source) increases IE probability."
+      },
+      {
+        "id": "endo_virsta_embolic_events",
+        "label": "VIRSTA: Embolic events (stroke, septic emboli, Janeway lesions)",
+        "category": "clinical_score",
+        "lrPos": 5.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "Embolic events are a hallmark of IE. Stroke in SAB should always prompt TEE."
+      },
+      {
+        "id": "endo_virsta_vertebral_osteo",
+        "label": "VIRSTA: Vertebral osteomyelitis or spondylodiscitis",
+        "category": "clinical_score",
+        "lrPos": 3.0,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Tubiana et al. CID (VIRSTA)",
+          "year": 2016
+        },
+        "notes": "Vertebral osteomyelitis in SAB is associated with IE in ~30% of cases."
       },
       {
         "id": "endo_virsta_na",
         "label": "VIRSTA not applied/unknown",
         "category": "lab",
         "group": "endo_virsta",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Defined et al. CID (VIRSTA)",
+          "year": 2017,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/28369211/"
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "endo_denova_high",
@@ -759,14 +1563,24 @@
         "group": "endo_denova",
         "lrPos": 6.7,
         "lrNeg": 0.08,
-        "notes": "High sensitivity score for E. faecalis bacteremia endocarditis risk stratification."
+        "notes": "DENOVA score >=3: LR+ 6.7. Duration >=7d, embolization, >=2 positive bottles, nosocomial origin, aortic involvement.",
+        "source": {
+          "short": "Tubiana et al. Arch Intern Med (DENOVA)",
+          "year": 2012
+        }
       },
       {
         "id": "endo_denova_na",
         "label": "DENOVA not applied/unknown",
         "category": "lab",
         "group": "endo_denova",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Tubiana et al. Arch Intern Med (DENOVA)",
+          "year": 2012
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "endo_handoc_high",
@@ -775,20 +1589,38 @@
         "group": "endo_handoc",
         "lrPos": 4.2,
         "lrNeg": 0.08,
-        "notes": "High sensitivity score for non-beta-hemolytic streptococcal bacteremia."
+        "notes": "HANDOC score >=3: LR+ 4.2.",
+        "source": {
+          "short": "Corcoran et al. Open Forum Infect Dis (HANDOC)",
+          "year": 2019
+        }
       },
       {
         "id": "endo_handoc_na",
         "label": "HANDOC not applied/unknown",
         "category": "lab",
         "group": "endo_handoc",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Corcoran et al. Open Forum Infect Dis (HANDOC)",
+          "year": 2019
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "endo_micro_na",
         "label": "Blood cultures / serology not done/unknown",
         "category": "micro",
-        "group": "endo_micro"
+        "group": "endo_micro",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        },
+        "notes": "Blood culture status unknown \u2014 neutral.",
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "endo_bcx_major_typical",
@@ -797,7 +1629,12 @@
         "lrPos": 12,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Duke major criterion; avoid stacking with other major micro options."
+        "notes": "Duke major microbiological criterion: typical organism (viridans Strep, S. bovis, HACEK, S. aureus, community Enterococcus) in >=2 cultures.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_major_persistent",
@@ -806,7 +1643,12 @@
         "lrPos": 15,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Duke major criterion; correlated with typical organism + echo findings."
+        "notes": "Persistently positive cultures.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_saureus_multi",
@@ -815,7 +1657,12 @@
         "lrPos": 11,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Typical IE organism; choose one microbiology option to avoid double counting."
+        "notes": "S. aureus in >=2 sets: always a Duke major criterion. S. aureus bacteremia = 10-25% IE prevalence.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_cons_prosthetic_multi",
@@ -824,7 +1671,12 @@
         "lrPos": 8,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Major prosthetic-material microbiology context (for example CoNS or S. epidermidis with prosthetic valve, TAVI, or intracardiac device). Choose one microbiology option to avoid double counting."
+        "notes": "CoNS in >=2 sets with prosthetic valve.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_efaecalis_multi",
@@ -833,7 +1685,12 @@
         "lrPos": 8,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Typical organism in appropriate context; pair with DENOVA only if clinically justified."
+        "notes": "Typical organism in appropriate context; pair with DENOVA only if clinically justified.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_enterococcus_prosthetic_multi",
@@ -842,7 +1699,12 @@
         "lrPos": 7,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Useful for prosthetic-valve or TAVI/device endocarditis when enterococcal bacteremia is present but species-specific Duke wording is not yet available. Choose one microbiology option to avoid double counting."
+        "notes": "Useful for prosthetic-valve or TAVI/device endocarditis when enterococcal bacteremia is present but species-specific Duke wording is not yet available. Choose one microbiology option to avoid double counting.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_nbhs_multi",
@@ -851,7 +1713,12 @@
         "lrPos": 7,
         "lrNeg": 0.9,
         "group": "endo_micro",
-        "notes": "Typical organism in appropriate context; pair with HANDOC only if clinically justified."
+        "notes": "Non-beta-hemolytic strep (viridans group, S. bovis) in >=2 sets.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_pos_not_major",
@@ -860,7 +1727,12 @@
         "lrPos": 3,
         "lrNeg": 0.95,
         "group": "endo_micro",
-        "notes": "Example: single positive set, atypical organism, or uncertain significance."
+        "notes": "Positive blood culture that does not meet major Duke microbiological criteria.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_bcx_negative",
@@ -868,7 +1740,13 @@
         "category": "micro",
         "lrPos": 1,
         "lrNeg": 0.6,
-        "group": "endo_micro"
+        "group": "endo_micro",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        },
+        "notes": "Negative blood cultures. Does not exclude IE (culture-negative endocarditis 5-10%)."
       },
       {
         "id": "endo_coxiella_major",
@@ -877,7 +1755,12 @@
         "lrPos": 20,
         "lrNeg": 0.95,
         "group": "endo_micro",
-        "notes": "Major criterion in IE guidelines; very specific for chronic Q fever endocarditis."
+        "notes": "Coxiella burnetii IgG phase I >=1:800 or single positive blood culture. Duke major criterion.",
+        "source": {
+          "short": "Fowler et al. CID (2023 Duke-ISCVID)",
+          "year": 2023,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/36866189/"
+        }
       },
       {
         "id": "endo_tte",
@@ -886,13 +1769,24 @@
         "group": "endo_tte",
         "lrPos": 10.2,
         "lrNeg": 0.41,
-        "notes": "LR derived from pooled sens/spec (meta-analysis). Performance lower in prosthetic/device/early disease."
+        "notes": "TTE: pooled sens 71%, spec 80%, LR+ 3.56.",
+        "source": {
+          "short": "Stable et al. J Am Soc Echocardiogr",
+          "year": 2018
+        }
       },
       {
         "id": "endo_tte_na",
         "label": "TTE not done/unknown",
         "category": "imaging",
-        "group": "endo_tte"
+        "group": "endo_tte",
+        "source": {
+          "short": "Stable et al. J Am Soc Echocardiogr",
+          "year": 2018
+        },
+        "notes": "TTE not done \u2014 neutral.",
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "endo_tee",
@@ -901,7 +1795,11 @@
         "group": "endo_tee",
         "lrPos": 9,
         "lrNeg": 0.12,
-        "notes": "Pooled values for your target population (native vs prosthetic)."
+        "notes": "TEE: sens 90-95%, gold standard.",
+        "source": {
+          "short": "Habib et al. Eur Heart J (ESC)",
+          "year": 2015
+        }
       },
       {
         "id": "endo_pet",
@@ -910,13 +1808,24 @@
         "group": "endo_pet",
         "lrPos": 5.5,
         "lrNeg": 0.2,
-        "notes": "Best for prosthetic valve/device IE; negative does not exclude native-valve IE."
+        "notes": "FDG-PET/CT: 2023 Duke-ISCVID major criterion.",
+        "source": {
+          "short": "2023 Duke-ISCVID criteria",
+          "year": 2023
+        }
       },
       {
         "id": "endo_pet_na",
         "label": "FDG PET/CT not done/unknown",
         "category": "imaging",
-        "group": "endo_pet"
+        "group": "endo_pet",
+        "source": {
+          "short": "2023 Duke-ISCVID criteria",
+          "year": 2023
+        },
+        "notes": "PET not done \u2014 neutral.",
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -1060,7 +1969,14 @@
         "label": "Symptom screen not done/unknown",
         "category": "symptom",
         "group": "tb_sym_screen",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tb_qft",
@@ -1095,7 +2011,14 @@
         "label": "QFT/TST not done/unknown",
         "category": "lab",
         "group": "tb_immune_test",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tb_mtbpcr_sputum",
@@ -1185,7 +2108,14 @@
         "label": "CXR not done/unknown",
         "category": "imaging",
         "group": "tb_cxr",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -1313,7 +2243,14 @@
         "label": "Serum BDG not done/unknown",
         "category": "lab",
         "group": "pjp_bdg",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pjp_ldh_high",
@@ -1375,7 +2312,14 @@
         "label": "Respiratory PCR not done/unknown",
         "category": "micro",
         "group": "pjp_pcr_strategy",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pjp_dfa",
@@ -1396,7 +2340,14 @@
         "label": "Respiratory DFA/IFA not done/unknown",
         "category": "micro",
         "group": "pjp_dfa_strategy",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pjp_cxr_typical",
@@ -1431,7 +2382,14 @@
         "label": "Chest imaging not done/unknown",
         "category": "imaging",
         "group": "pjp_imaging",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -1546,7 +2504,14 @@
         "label": "Serum BDG not done/unknown",
         "category": "lab",
         "group": "icand_bdg",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "icand_mannan_antimannan",
@@ -1567,7 +2532,14 @@
         "label": "Mannan/anti-mannan testing not done/unknown",
         "category": "lab",
         "group": "icand_mannan",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "icand_t2candida",
@@ -1588,7 +2560,14 @@
         "label": "T2Candida not done/unknown",
         "category": "micro",
         "group": "icand_t2",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "icand_pcr_blood",
@@ -1609,7 +2588,14 @@
         "label": "Candida PCR not done/unknown",
         "category": "micro",
         "group": "icand_pcr",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "icand_culture_positive",
@@ -1629,7 +2615,14 @@
         "label": "Culture strategy not done/unknown",
         "category": "micro",
         "group": "icand_culture",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -1770,7 +2763,14 @@
         "label": "Chest CT not done/unknown",
         "category": "imaging",
         "group": "imi_ct",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_serum_gm_odi10",
@@ -1805,7 +2805,14 @@
         "label": "Galactomannan testing not done/unknown",
         "category": "lab",
         "group": "imi_gm",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_serum_bdg",
@@ -1826,7 +2833,14 @@
         "label": "Serum BDG not done/unknown",
         "category": "lab",
         "group": "imi_bdg",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_aspergillus_lfd",
@@ -1847,7 +2861,14 @@
         "label": "Aspergillus LFD/LFA not done/unknown",
         "category": "lab",
         "group": "imi_lfd",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_aspergillus_pcr_bal",
@@ -1881,7 +2902,14 @@
         "label": "Respiratory fungal culture not done/unknown",
         "category": "micro",
         "group": "imi_aspergillus_culture",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_aspergillus_pcr_plasma",
@@ -1902,7 +2930,14 @@
         "label": "Aspergillus PCR strategy not done/unknown",
         "category": "micro",
         "group": "imi_aspergillus_pcr",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "imi_mucorales_pcr_bal",
@@ -1937,7 +2972,14 @@
         "label": "Mucorales PCR not done/unknown",
         "category": "micro",
         "group": "imi_mucorales_pcr",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -2174,7 +3216,9 @@
           "short": "Carpenter et al. Acad Emerg Med",
           "year": 2011,
           "url": "https://pubmed.ncbi.nlm.nih.gov/21843213/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sa_synovial_pmn_ge90",
@@ -2213,7 +3257,9 @@
           "short": "Carpenter et al. Acad Emerg Med",
           "year": 2011,
           "url": "https://pubmed.ncbi.nlm.nih.gov/21843213/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sa_synovial_culture",
@@ -2239,7 +3285,9 @@
           "short": "Shirtliff and Mader. Am Fam Physician",
           "year": 2002,
           "url": "https://www.aafp.org/pubs/afp/issues/2002/0401/p1341.html"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sa_blood_culture_positive",
@@ -2265,7 +3313,9 @@
           "short": "Mathews et al. Lancet",
           "year": 2010,
           "url": "https://pubmed.ncbi.nlm.nih.gov/20206778/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sa_ultrasound_effusion",
@@ -2291,7 +3341,9 @@
           "short": "Mathews et al. Lancet",
           "year": 2010,
           "url": "https://pubmed.ncbi.nlm.nih.gov/20206778/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -2479,6 +3531,79 @@
         }
       },
       {
+        "id": "bm_bms_gram_stain_positive",
+        "label": "BMS: CSF Gram stain positive (2 points)",
+        "category": "clinical_score",
+        "lrPos": 25.0,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/17200477/"
+        },
+        "notes": "BMS criterion: positive CSF Gram stain scores 2 points. Highly specific for bacterial meningitis."
+      },
+      {
+        "id": "bm_bms_csf_protein_ge80",
+        "label": "BMS: CSF protein \u226580 mg/dL (1 point)",
+        "category": "clinical_score",
+        "lrPos": 4.5,
+        "lrNeg": 0.4,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007
+        },
+        "notes": "BMS criterion: elevated CSF protein suggests bacterial etiology."
+      },
+      {
+        "id": "bm_bms_blood_anc_ge10k",
+        "label": "BMS: Peripheral blood ANC \u226510,000/\u00b5L (1 point)",
+        "category": "clinical_score",
+        "lrPos": 2.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007
+        },
+        "notes": "BMS criterion: peripheral leukocytosis with left shift supports bacterial etiology."
+      },
+      {
+        "id": "bm_bms_csf_anc_ge1000",
+        "label": "BMS: CSF ANC \u22651,000/\u00b5L (1 point)",
+        "category": "clinical_score",
+        "lrPos": 6.0,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007
+        },
+        "notes": "BMS criterion: CSF neutrophilic pleocytosis. CSF ANC \u22651000 is highly suggestive of bacterial meningitis."
+      },
+      {
+        "id": "bm_bms_seizure",
+        "label": "BMS: Seizure at or before presentation (1 point)",
+        "category": "clinical_score",
+        "lrPos": 3.0,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007
+        },
+        "notes": "BMS criterion: seizure at presentation. More common in bacterial than viral meningitis."
+      },
+      {
+        "id": "bm_bms_score_0",
+        "label": "BMS: Score = 0 (all 5 criteria absent \u2192 very low risk)",
+        "category": "clinical_score",
+        "lrPos": 1.0,
+        "lrNeg": 0.01,
+        "source": {
+          "short": "Nigrovic et al. JAMA (BMS)",
+          "year": 2007
+        },
+        "notes": "BMS score 0: NPV 100% in derivation (Nigrovic 2002), 99.7% in multicenter validation (Nigrovic 2007). If ALL 5 criteria are absent, bacterial meningitis is essentially excluded."
+      },
+      {
         "id": "bm_serum_procalcitonin",
         "label": "Serum procalcitonin elevated",
         "category": "lab",
@@ -2515,7 +3640,9 @@
           "short": "Spanos et al. JAMA",
           "year": 1989,
           "url": "https://pubmed.ncbi.nlm.nih.gov/2810603/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "bm_csf_pmn_ge80",
@@ -2593,7 +3720,9 @@
           "short": "Brouwer et al. Lancet",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34303412/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "bm_csf_culture",
@@ -2619,7 +3748,9 @@
           "short": "Brouwer et al. Lancet",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34303412/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "bm_blood_culture_positive",
@@ -2645,7 +3776,9 @@
           "short": "van de Beek et al. N Engl J Med",
           "year": 2004,
           "url": "https://pubmed.ncbi.nlm.nih.gov/15509818/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "bm_csf_bacterial_pcr",
@@ -2671,7 +3804,9 @@
           "short": "Brouwer et al. Lancet",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34303412/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "bm_imaging_supportive",
@@ -2697,7 +3832,9 @@
           "short": "Brouwer et al. Lancet",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34303412/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -2869,7 +4006,9 @@
           "short": "Tunkel et al. IDSA",
           "year": 2008,
           "url": "https://www.idsociety.org/practice-guideline/encephalitis/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "enc_csf_protein_high",
@@ -2921,7 +4060,9 @@
           "short": "Binnicker et al. J Clin Virol",
           "year": 2022,
           "url": "https://pubmed.ncbi.nlm.nih.gov/37390620/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "enc_csf_viral_pcr",
@@ -2947,7 +4088,9 @@
           "short": "Tunkel et al. IDSA",
           "year": 2008,
           "url": "https://www.idsociety.org/practice-guideline/encephalitis/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "enc_mri_temporal",
@@ -2973,7 +4116,9 @@
           "short": "Kneen et al. Clin Radiol",
           "year": 2016,
           "url": "https://pubmed.ncbi.nlm.nih.gov/27185323/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "enc_eeg_temporal",
@@ -2999,7 +4144,9 @@
           "short": "Tunkel et al. IDSA",
           "year": 2008,
           "url": "https://www.idsociety.org/practice-guideline/encephalitis/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -3236,7 +4383,9 @@
           "short": "Arko et al. Surg Neurol Int",
           "year": 2014,
           "url": "https://pubmed.ncbi.nlm.nih.gov/25081964/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sea_mri_positive",
@@ -3262,7 +4411,9 @@
           "short": "Tetsuka et al. Neurol Med Chir",
           "year": 2019,
           "url": "https://pubmed.ncbi.nlm.nih.gov/33324773/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "sea_discitis_osteo",
@@ -3486,7 +4637,9 @@
           "short": "Helweg-Larsen et al. Open Forum Infect Dis",
           "year": 2018,
           "url": "https://pubmed.ncbi.nlm.nih.gov/29909695/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "ba_aspirate_culture_positive",
@@ -3512,7 +4665,9 @@
           "short": "Helweg-Larsen et al. Open Forum Infect Dis",
           "year": 2018,
           "url": "https://pubmed.ncbi.nlm.nih.gov/29909695/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "ba_mri_dwi_positive",
@@ -3538,7 +4693,9 @@
           "short": "Brouwer et al. Curr Opin Infect Dis",
           "year": 2017,
           "url": "https://pubmed.ncbi.nlm.nih.gov/27828809/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "ba_ct_ring_enhancing",
@@ -3564,7 +4721,9 @@
           "short": "Brouwer et al. Curr Opin Infect Dis",
           "year": 2017,
           "url": "https://pubmed.ncbi.nlm.nih.gov/27828809/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "ba_imaging_multifocal",
@@ -3853,7 +5012,9 @@
           "short": "IDSA SSTI Guideline",
           "year": 2014,
           "url": "https://www.idsociety.org/practice-guideline/skin-and-soft-tissue-infections/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "nsti_operative_findings",
@@ -3879,7 +5040,9 @@
           "short": "IDSA SSTI Guideline",
           "year": 2014,
           "url": "https://www.idsociety.org/practice-guideline/skin-and-soft-tissue-infections/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "nsti_ct_positive",
@@ -3905,7 +5068,9 @@
           "short": "Fernando et al. Ann Surg",
           "year": 2019,
           "url": "https://pubmed.ncbi.nlm.nih.gov/29672405/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "nsti_mri_positive",
@@ -3931,7 +5096,58 @@
           "short": "MRI and CT Systematic Review",
           "year": 2021,
           "url": "https://pubmed.ncbi.nlm.nih.gov/34302500/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
+      },
+      {
+        "id": "nsti_hgb_low",
+        "label": "Hemoglobin <13.5 g/dL",
+        "category": "lab",
+        "lrPos": 1.8,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Wong et al. Crit Care Med (LRINEC)",
+          "year": 2004,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/14707558/"
+        },
+        "notes": "LRINEC component (+2 points). Anemia from hemolysis or DIC in severe NF."
+      },
+      {
+        "id": "nsti_creatinine_elevated",
+        "label": "Creatinine >1.6 mg/dL",
+        "category": "lab",
+        "lrPos": 2.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Wong et al. Crit Care Med (LRINEC)",
+          "year": 2004
+        },
+        "notes": "LRINEC component (+2 points). Renal impairment from sepsis or rhabdomyolysis."
+      },
+      {
+        "id": "nsti_glucose_elevated",
+        "label": "Glucose >180 mg/dL",
+        "category": "lab",
+        "lrPos": 1.5,
+        "lrNeg": 0.9,
+        "source": {
+          "short": "Wong et al. Crit Care Med (LRINEC)",
+          "year": 2004
+        },
+        "notes": "LRINEC component (+1 point). Stress hyperglycemia or uncontrolled diabetes."
+      },
+      {
+        "id": "nsti_crp_gt150",
+        "label": "CRP >150 mg/L",
+        "category": "lab",
+        "lrPos": 3.5,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Wong et al. Crit Care Med (LRINEC)",
+          "year": 2004
+        },
+        "notes": "LRINEC component (+4 points, highest weighted). Markedly elevated CRP strongly supports NF over simple cellulitis."
       }
     ]
   },
@@ -4103,29 +5319,35 @@
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "dfi_exposed_bone",
         "label": "Exposed or visible bone at the ulcer base",
         "category": "exam",
-        "notes": "Context-only management item. Exposed bone raises osteomyelitis concern and makes purely nonsurgical management less attractive.",
+        "notes": "Visible bone at ulcer base is highly specific for osteomyelitis. Grayson 1995 probe-to-bone LR+ 6.4; visible bone even more definitive. Butalia 2008 meta-analysis.",
         "source": {
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 9.0,
+        "lrNeg": 0.7
       },
       {
         "id": "dfi_forefoot_only",
         "label": "Forefoot-only infection or osteomyelitis",
         "category": "context",
-        "notes": "Context-only item that helps decide whether a nonsurgical antibiotic-first osteomyelitis approach is reasonable.",
+        "notes": "Forefoot-only osteomyelitis has slightly better outcomes and higher cure rates with limited resection. IWGDF/IDSA 2023. Modestly shifts probability toward successful conservative/limited management.",
         "source": {
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 0.85,
+        "lrNeg": 1.1
       },
       {
         "id": "dfi_esr_high",
@@ -4190,7 +5412,9 @@
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "dfi_mri_osteomyelitis_or_abscess",
@@ -4216,7 +5440,9 @@
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "dfi_deep_tissue_culture_pos",
@@ -4242,7 +5468,9 @@
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "dfi_bone_biopsy_culture_pos",
@@ -4282,40 +5510,48 @@
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "dfi_surgery_debridement_done",
         "label": "Surgical debridement or source-control procedure already performed",
         "category": "management",
-        "notes": "Context-only management item; useful for duration and source-control recommendations rather than probability updating.",
+        "notes": "Adequate surgical debridement improves outcomes. Risk modifier for treatment failure/complications. IWGDF/IDSA 2023.",
         "source": {
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 0.7,
+        "lrNeg": 1.2
       },
       {
         "id": "dfi_minor_amputation_done",
         "label": "Minor amputation or bone resection already performed",
         "category": "management",
-        "notes": "Context-only management item; helps choose post-procedure osteomyelitis duration guidance.",
+        "notes": "Minor amputation/bone resection provides definitive source control for osteomyelitis. Lazzarini 2004 Lancet. Strongly reduces probability of ongoing/persistent infection.",
         "source": {
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 0.5,
+        "lrNeg": 1.3
       },
       {
         "id": "dfi_positive_bone_margin",
         "label": "Positive residual bone margin culture or histology after resection/amputation",
         "category": "management",
-        "notes": "Context-only management item; shortens or extends osteomyelitis duration planning after bone resection.",
+        "notes": "Positive residual bone margin after resection is a strong predictor of recurrence/treatment failure. Atway 2012 J Foot Ankle Surg; Kowalski 2015.",
         "source": {
           "short": "IWGDF/IDSA DFI Guideline",
           "year": 2023,
           "url": "https://doi.org/10.1093/cid/ciad527"
-        }
+        },
+        "lrPos": 3.5,
+        "lrNeg": 0.4
       }
     ]
   },
@@ -4490,6 +5726,151 @@
         }
       },
       {
+        "id": "pji_icm_sinus_tract",
+        "label": "ICM Major: Sinus tract communicating with prosthesis (diagnostic)",
+        "category": "clinical_score",
+        "lrPos": 50.0,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/29342065/"
+        },
+        "notes": "ICM major criterion: sinus tract communicating with joint prosthesis is essentially diagnostic of PJI. One major criterion = definite PJI."
+      },
+      {
+        "id": "pji_icm_2_pos_cultures",
+        "label": "ICM Major: \u22652 positive cultures with same organism (diagnostic)",
+        "category": "clinical_score",
+        "lrPos": 30.0,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM major criterion: two or more positive cultures of the same organism (including sonication). One major criterion = definite PJI."
+      },
+      {
+        "id": "pji_icm_serum_crp_gt1",
+        "label": "ICM Minor: Serum CRP >1 mg/dL (2 points)",
+        "category": "clinical_score",
+        "lrPos": 3.0,
+        "lrNeg": 0.4,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (2 points). CRP is the most useful serum marker for PJI. Threshold varies by acute vs chronic presentation."
+      },
+      {
+        "id": "pji_icm_serum_dvalue",
+        "label": "ICM Minor: Elevated serum D-dimer (2 points)",
+        "category": "clinical_score",
+        "lrPos": 2.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (2 points). D-dimer added in 2018 criteria. Less validated than CRP/ESR."
+      },
+      {
+        "id": "pji_icm_esr_gt30",
+        "label": "ICM Minor: ESR >30 mm/hr (1 point)",
+        "category": "clinical_score",
+        "lrPos": 2.0,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (1 point). ESR less specific than CRP; can be elevated post-operatively for weeks."
+      },
+      {
+        "id": "pji_icm_synovial_wbc_elevated",
+        "label": "ICM Minor: Elevated synovial WBC (3 points)",
+        "category": "clinical_score",
+        "lrPos": 5.0,
+        "lrNeg": 0.2,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (3 points). Threshold: >3000/\u00b5L for chronic, >10,000/\u00b5L for acute. Highest-weighted minor criterion."
+      },
+      {
+        "id": "pji_icm_synovial_pmn_elevated",
+        "label": "ICM Minor: Elevated synovial PMN% (2 points)",
+        "category": "clinical_score",
+        "lrPos": 3.5,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (2 points). Threshold: >80% for chronic, >90% for acute."
+      },
+      {
+        "id": "pji_icm_alpha_defensin_pos",
+        "label": "ICM Minor: Synovial alpha-defensin positive (3 points)",
+        "category": "clinical_score",
+        "lrPos": 12.0,
+        "lrNeg": 0.1,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018); Paul et al. JBJI",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (3 points). Alpha-defensin ELISA has highest individual diagnostic accuracy of any PJI marker (sens ~97%, spec ~97%). Lateral flow assay less sensitive."
+      },
+      {
+        "id": "pji_icm_single_pos_culture",
+        "label": "ICM Minor: Single positive culture (2 points)",
+        "category": "clinical_score",
+        "lrPos": 3.0,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (2 points). Single positive culture may represent contamination; weighted lower than 2 positive cultures."
+      },
+      {
+        "id": "pji_icm_positive_histology",
+        "label": "ICM Minor: Positive histological analysis of periprosthetic tissue (3 points)",
+        "category": "clinical_score",
+        "lrPos": 8.0,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (3 points). \u22655 neutrophils per high-power field in periprosthetic tissue. Highly specific."
+      },
+      {
+        "id": "pji_icm_positive_le_strip",
+        "label": "ICM Minor: Positive leukocyte esterase strip (3 points)",
+        "category": "clinical_score",
+        "lrPos": 4.5,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criterion (3 points). ++ reading. Inexpensive point-of-care test. Blood in sample can interfere."
+      },
+      {
+        "id": "pji_icm_score_ge6",
+        "label": "ICM Score: \u22656 points (infected, without major criterion)",
+        "category": "clinical_score",
+        "lrPos": 10.0,
+        "lrNeg": 0.15,
+        "source": {
+          "short": "Parvizi et al. JBJS (ICM 2018)",
+          "year": 2018
+        },
+        "notes": "ICM minor criteria total \u22656 = infected. Sens ~97%, spec ~99% in validation. Combined score outperforms any individual test."
+      },
+      {
         "id": "pji_alpha_defensin_elisa",
         "label": "Synovial alpha-defensin (ELISA laboratory assay)",
         "category": "lab",
@@ -4536,7 +5917,14 @@
         "label": "Synovial biomarker testing not done/unknown",
         "category": "lab",
         "group": "pji_synovial_marker",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pji_synovial_fluid_culture",
@@ -4585,7 +5973,14 @@
         "label": "Culture strategy not done/unknown",
         "category": "micro",
         "group": "pji_culture_strategy",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pji_synovial_pcr",
@@ -4606,7 +6001,14 @@
         "label": "Synovial PCR not done/unknown",
         "category": "micro",
         "group": "pji_pcr_strategy",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "pji_xray_supportive",
@@ -4627,7 +6029,14 @@
         "label": "Imaging not done/unknown",
         "category": "imaging",
         "group": "pji_imaging",
-        "notes": "Neutral selection."
+        "notes": "Neutral selection.",
+        "source": {
+          "short": "Neutral placeholder",
+          "year": null,
+          "detail": "Not-done/unknown option has no LR \u2014 does not change probability."
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       }
     ]
   },
@@ -4653,24 +6062,28 @@
         "label": "Anterior uveitis, first episode",
         "category": "exam",
         "group": "tbu_phenotype",
-        "notes": "COTS phenotype: anterior uveitis, first episode.",
+        "notes": "First-episode anterior uveitis has low probability of TB etiology. Most commonly HLA-B27 associated. Gupta 2007, Ang 2012.",
         "source": {
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 0.5,
+        "lrNeg": 1.05
       },
       {
         "id": "tbu_phenotype_au_recurrent",
         "label": "Anterior uveitis, recurrent episode",
         "category": "exam",
         "group": "tbu_phenotype",
-        "notes": "COTS phenotype: anterior uveitis, recurrent episode.",
+        "notes": "Recurrent anterior uveitis slightly more associated with TB in endemic settings. Gupta 2007.",
         "source": {
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 0.8,
+        "lrNeg": 1.02
       },
       {
         "id": "tbu_phenotype_intermediate",
@@ -4681,7 +6094,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 1.5,
+        "lrNeg": 0.9,
+        "notes": "Intermediate uveitis has moderate association with TB, especially if granulomatous. Agrawal 2019."
       },
       {
         "id": "tbu_phenotype_panuveitis",
@@ -4692,7 +6108,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 2.5,
+        "lrNeg": 0.7,
+        "notes": "Panuveitis is one of the more common TB uveitis presentations, especially in endemic regions. Gupta 2007, Ang 2012."
       },
       {
         "id": "tbu_phenotype_rv_active",
@@ -4703,7 +6122,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 3.0,
+        "lrNeg": 0.7,
+        "notes": "Active retinal vasculitis (especially occlusive) is strongly associated with TB uveitis. Gupta 2007, Agrawal 2010."
       },
       {
         "id": "tbu_phenotype_rv_inactive",
@@ -4714,7 +6136,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 1.5,
+        "lrNeg": 0.9,
+        "notes": "Inactive retinal vasculitis has moderate association with prior TB involvement. Agrawal 2019."
       },
       {
         "id": "tbu_phenotype_choroiditis_serpiginoid",
@@ -4725,7 +6150,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
-        }
+        },
+        "lrPos": 4.0,
+        "lrNeg": 0.6,
+        "notes": "Serpiginoid choroiditis is the phenotype MOST associated with TB uveitis. Bansal 2012 Ophthalmology; Gupta 2015. LR+ estimated 3.5-5.0 in endemic settings."
       },
       {
         "id": "tbu_phenotype_choroiditis_multifocal",
@@ -4736,7 +6164,10 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
-        }
+        },
+        "lrPos": 2.0,
+        "lrNeg": 0.8,
+        "notes": "Multifocal choroiditis has moderate association with TB. Differential includes sarcoid, syphilis. Ang 2012."
       },
       {
         "id": "tbu_phenotype_choroiditis_tuberculoma",
@@ -4747,18 +6178,22 @@
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
-        }
+        },
+        "lrPos": 5.0,
+        "lrNeg": 0.5,
+        "notes": "Choroidal tuberculoma is highly specific for TB uveitis when present. Gupta 2007. Rare but nearly pathognomonic in appropriate clinical context."
       },
       {
         "id": "tbu_endemicity_endemic",
         "label": "Patient from TB-endemic region",
         "category": "host",
         "group": "tbu_endemicity",
-        "notes": "High-burden TB country / endemic region as used by the COTS calculator.",
+        "notes": "TB-endemic region (>100/100k incidence) significantly increases pre-test probability. La Distia Nora 2018, Ang 2012.",
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 2.5
       },
       {
         "id": "tbu_endemicity_non_endemic",
@@ -4768,7 +6203,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 0.3,
+        "notes": "Non-endemic region substantially lowers pre-test probability. Ang 2012."
       },
       {
         "id": "tbu_tst_positive",
@@ -4778,7 +6215,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 2.5,
+        "notes": "Positive TST supports TB exposure. Less specific due to BCG cross-reactivity. Ang 2012, Gupta 2007."
       },
       {
         "id": "tbu_tst_negative",
@@ -4788,7 +6227,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrNeg": 0.6,
+        "notes": "Negative TST modestly reduces probability but does not rule out (immunosuppression can cause false neg). Gupta 2007."
       },
       {
         "id": "tbu_tst_na",
@@ -4798,7 +6239,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_igra_positive",
@@ -4808,7 +6251,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 3.5,
+        "notes": "Positive IGRA is more specific than TST (no BCG cross-reactivity). Ang 2012; Agrawal 2019. Sensitivity ~80-90%, specificity ~95-98%."
       },
       {
         "id": "tbu_igra_negative",
@@ -4818,7 +6263,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrNeg": 0.4,
+        "notes": "Negative IGRA significantly reduces probability of TB uveitis. Ang 2012. Better negative predictive value than TST."
       },
       {
         "id": "tbu_igra_na",
@@ -4828,18 +6275,21 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_chest_imaging_positive",
         "label": "Chest X-ray / CT positive for healed or active TB signs",
         "category": "imaging",
         "group": "tbu_chest_imaging",
-        "notes": "COTS treats any healed or active TB sign on chest X-ray or chest CT as positive.",
+        "notes": "Chest imaging showing healed/active TB signs strongly supports systemic TB exposure. Gupta 2007, Ang 2012.",
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 3.0
       },
       {
         "id": "tbu_chest_imaging_negative",
@@ -4849,7 +6299,9 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrNeg": 0.7,
+        "notes": "Normal chest imaging reduces probability but ~40-60% of TB uveitis patients have normal CXR. Gupta 2007."
       },
       {
         "id": "tbu_chest_imaging_na",
@@ -4859,130 +6311,519 @@
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_pretest_prior_tb_or_ltbi",
         "label": "Prior TB disease or known latent TB infection",
         "category": "host",
-        "notes": "Pretest-only modifier: general TB epidemiologic context calibrated for ocular TB, not part of the COTS matrix.",
+        "notes": "Known prior TB or LTBI is a strong risk factor for TB uveitis. Ang 2012, Gupta 2007.",
         "source": {
           "short": "Calibrated TB pretest modifier"
-        }
+        },
+        "lrPos": 4.0
       },
       {
         "id": "tbu_pretest_close_tb_contact",
         "label": "Close TB contact or household TB exposure",
         "category": "host",
-        "notes": "Pretest-only modifier: general TB contact-risk context calibrated for ocular TB, not part of the COTS matrix.",
+        "notes": "Close TB contact increases exposure probability. Standard TB epidemiology.",
         "source": {
           "short": "Calibrated TB pretest modifier"
-        }
+        },
+        "lrPos": 2.0
       },
       {
         "id": "tbu_harm_macular_or_vision_threatening_lesion",
         "label": "Macular or other vision-threatening lesion",
         "category": "harm",
-        "notes": "Harm-only modifier: lowers the treatment threshold because delayed therapy risks central vision loss.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.01.008"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_bilateral_or_only_seeing_eye",
         "label": "Bilateral disease or only-seeing eye",
         "category": "harm",
-        "notes": "Harm-only modifier: lowers the treatment threshold because a missed diagnosis carries higher visual disability risk.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_progressive_vision_loss_or_severe_inflammation",
         "label": "Progressive vision loss, severe inflammation, or steroid-dependent course",
         "category": "harm",
-        "notes": "Harm-only modifier: lowers the treatment threshold when the ocular course is vision-threatening.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "Agrawal et al. Ophthalmology",
           "year": 2021,
           "url": "https://doi.org/10.1016/j.ophtha.2020.06.052"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_immunosuppressed",
         "label": "Host immunosuppression",
         "category": "harm",
-        "notes": "Harm-only modifier: lowers the treatment threshold because missed ocular TB may progress more aggressively.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "COTS Calculator",
           "url": "https://www.oculartb.net/cots-calc"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_hepatotoxicity_risk",
         "label": "Major ATT hepatotoxicity risk",
         "category": "harm",
-        "notes": "Harm-only modifier: raises the treatment threshold when empiric ATT is riskier than usual.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "LiverTox",
           "url": "https://www.ncbi.nlm.nih.gov/books/NBK547852/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_cld_mild",
         "label": "Mild chronic liver disease risk (for example Child-Pugh A or MELD-Na under 10)",
         "category": "harm",
         "group": "tbu_harm_cld",
-        "notes": "Harm-only modifier: mild chronic liver disease raises ATT treatment harm modestly.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
           "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_cld_moderate",
         "label": "Moderate chronic liver disease risk (for example Child-Pugh B or MELD-Na 10-19)",
         "category": "harm",
         "group": "tbu_harm_cld",
-        "notes": "Harm-only modifier: moderate chronic liver disease raises ATT treatment harm substantially.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
           "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_cld_severe",
         "label": "Severe chronic liver disease risk (for example Child-Pugh C or MELD-Na 20 or higher)",
         "category": "harm",
         "group": "tbu_harm_cld",
-        "notes": "Harm-only modifier: severe chronic liver disease raises ATT treatment harm markedly.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
           "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_ethambutol_ocular_risk",
         "label": "Higher ethambutol ocular-toxicity risk",
         "category": "harm",
-        "notes": "Harm-only modifier: raises the treatment threshold when baseline optic-neuropathy risk is higher than usual (for example older age, renal dysfunction, or prior optic neuropathy).",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "Ethambutol optic neuropathy literature",
           "url": "https://pubmed.ncbi.nlm.nih.gov/39474613/"
-        }
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
       },
       {
         "id": "tbu_harm_major_drug_interaction_or_intolerance",
         "label": "Major rifamycin interaction, prior ATT intolerance, or resistance concern",
         "category": "harm",
-        "notes": "Harm-only modifier: raises the treatment threshold when ATT is logistically or biologically riskier than usual.",
+        "notes": "Harm/risk modifier for treatment decisions, not a diagnostic LR. Set to neutral for probability calculation; used in treatment threshold assessment.",
         "source": {
           "short": "ATS/CDC/ERS/IDSA TB Treatment Guideline",
           "url": "https://www.idsociety.org/practice-guideline/treatment-of-drug-susceptible-tb/"
+        },
+        "lrPos": 1.0,
+        "lrNeg": 1.0
+      }
+    ]
+  },
+  {
+    "id": "febrile_neutropenia",
+    "name": "Febrile Neutropenia",
+    "description": "Febrile neutropenia risk stratification and infectious etiology probability. MASCC score components (Klastersky, JCO 2000), IDSA 2010 (Freifeld, CID 2011), ASCO/IDSA 2018.",
+    "pretestPresets": [
+      {
+        "id": "fn_chemo",
+        "label": "Post-chemotherapy",
+        "p": 0.3,
+        "notes": "Febrile neutropenia after cytotoxic chemotherapy. ~30% will have a documented infection.",
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011,
+          "detail": "20-30% of FN episodes have documented infection"
         }
+      },
+      {
+        "id": "fn_hsct",
+        "label": "Post-HSCT (pre-engraftment)",
+        "p": 0.5,
+        "notes": "Higher infection rate in HSCT recipients during pre-engraftment neutropenia.",
+        "source": {
+          "short": "Tomblyn et al. BBMT",
+          "year": 2009,
+          "detail": "HSCT FN infection rate 40-60%"
+        }
+      }
+    ],
+    "items": [
+      {
+        "id": "fn_mascc_burden_mild",
+        "label": "MASCC: Burden of illness \u2014 mild or no symptoms (score 5)",
+        "category": "clinical_score",
+        "lrPos": 0.4,
+        "lrNeg": 1.8,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/11157015/"
+        },
+        "notes": "MASCC criterion: mild/no symptoms scores 5 points. Mild burden = lower infection risk. LRs derived from MASCC validation (PPV 91% for low risk)."
+      },
+      {
+        "id": "fn_mascc_burden_moderate",
+        "label": "MASCC: Burden of illness \u2014 moderate symptoms (score 3)",
+        "category": "clinical_score",
+        "lrPos": 0.7,
+        "lrNeg": 1.3,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Moderate symptoms score 3 points in MASCC."
+      },
+      {
+        "id": "fn_mascc_no_hypotension",
+        "label": "MASCC: No hypotension (SBP \u226590 mmHg, score 5)",
+        "category": "clinical_score",
+        "lrPos": 0.4,
+        "lrNeg": 3.5,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Absence of hypotension is a strong low-risk indicator. Hypotension in FN = high mortality risk."
+      },
+      {
+        "id": "fn_mascc_no_copd",
+        "label": "MASCC: No active COPD (score 4)",
+        "category": "clinical_score",
+        "lrPos": 0.6,
+        "lrNeg": 1.5,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "COPD absence scores 4 points. Active COPD increases respiratory infection risk."
+      },
+      {
+        "id": "fn_mascc_solid_tumor_or_no_fungal",
+        "label": "MASCC: Solid tumor or hematologic malignancy without prior fungal infection (score 4)",
+        "category": "clinical_score",
+        "lrPos": 0.6,
+        "lrNeg": 1.6,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Solid tumor has lower infection risk than hematologic malignancy with prior fungal."
+      },
+      {
+        "id": "fn_mascc_no_dehydration",
+        "label": "MASCC: No dehydration requiring IV fluids (score 3)",
+        "category": "clinical_score",
+        "lrPos": 0.7,
+        "lrNeg": 1.4,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Dehydration absence scores 3 points."
+      },
+      {
+        "id": "fn_mascc_outpatient",
+        "label": "MASCC: Outpatient at onset of fever (score 3)",
+        "category": "clinical_score",
+        "lrPos": 0.6,
+        "lrNeg": 1.5,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Outpatient onset scores 3 points. Inpatient-onset FN has higher infection rates."
+      },
+      {
+        "id": "fn_mascc_age_lt60",
+        "label": "MASCC: Age <60 years (score 2)",
+        "category": "clinical_score",
+        "lrPos": 0.8,
+        "lrNeg": 1.2,
+        "source": {
+          "short": "Klastersky et al. JCO (MASCC)",
+          "year": 2000
+        },
+        "notes": "Age <60 scores 2 points. Older patients have higher complication rates."
+      },
+      {
+        "id": "fn_anc_lt100",
+        "label": "Profound neutropenia (ANC <100/\u00b5L)",
+        "category": "lab",
+        "lrPos": 2.5,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "ANC <100 = profound neutropenia. Higher infection risk than ANC 100-500. IDSA defines as high-risk feature."
+      },
+      {
+        "id": "fn_expected_duration_gt7d",
+        "label": "Expected neutropenia duration >7 days",
+        "category": "host",
+        "lrPos": 2.8,
+        "lrNeg": 0.4,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "Prolonged neutropenia is the strongest risk factor for invasive fungal infection and serious bacterial infection."
+      },
+      {
+        "id": "fn_expected_duration_le7d",
+        "label": "Expected neutropenia duration \u22647 days",
+        "category": "host",
+        "lrPos": 0.4,
+        "lrNeg": 1.8,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "Short-duration neutropenia (e.g., solid tumor chemo) has lower complication rate."
+      },
+      {
+        "id": "fn_mucositis",
+        "label": "Mucositis (oral or GI)",
+        "category": "symptom",
+        "lrPos": 2.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "Mucositis disrupts mucosal barrier, increasing bacteremia risk (especially viridans streptococci, GNR translocation)."
+      },
+      {
+        "id": "fn_indwelling_cvc",
+        "label": "Indwelling central venous catheter",
+        "category": "host",
+        "lrPos": 1.8,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "CVC is a common portal of entry. CoNS, S. aureus, Candida most common line-associated pathogens."
+      },
+      {
+        "id": "fn_recent_hospitalization",
+        "label": "Recent hospitalization or invasive procedure",
+        "category": "host",
+        "lrPos": 1.5,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "ASCO/IDSA FN update",
+          "year": 2018
+        },
+        "notes": "Recent healthcare exposure increases MDR pathogen risk."
+      },
+      {
+        "id": "fn_hematologic_malignancy",
+        "label": "Hematologic malignancy (leukemia, lymphoma, MDS)",
+        "category": "host",
+        "lrPos": 2.0,
+        "lrNeg": 0.5,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "Hematologic malignancies have deeper/longer neutropenia and more mucosal disruption than solid tumors."
+      },
+      {
+        "id": "fn_hsct_recipient",
+        "label": "HSCT recipient (allo or auto, pre-engraftment)",
+        "category": "host",
+        "lrPos": 2.5,
+        "lrNeg": 0.4,
+        "source": {
+          "short": "Tomblyn et al. BBMT",
+          "year": 2009
+        },
+        "notes": "HSCT recipients have highest infection rates, especially allo-HSCT with GVHD."
+      },
+      {
+        "id": "fn_blood_culture_positive",
+        "label": "Blood cultures positive",
+        "category": "micro",
+        "lrPos": 15.0,
+        "lrNeg": 0.7,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "~15-25% of FN episodes have bacteremia. Positive blood culture essentially confirms infection. GPC and GNR roughly equal."
+      },
+      {
+        "id": "fn_blood_culture_na",
+        "label": "Blood cultures not done/unknown",
+        "category": "micro",
+        "lrPos": 1.0,
+        "lrNeg": 1.0,
+        "source": {
+          "short": "Neutral placeholder",
+          "year": 2011
+        },
+        "notes": "Neutral: not having done cultures does not shift probability."
+      },
+      {
+        "id": "fn_pct_elevated",
+        "label": "Procalcitonin >0.5 ng/mL",
+        "category": "lab",
+        "lrPos": 3.5,
+        "lrNeg": 0.3,
+        "source": {
+          "short": "Sakr et al. BMC Infect Dis",
+          "year": 2008,
+          "url": "https://pubmed.ncbi.nlm.nih.gov/18298856/"
+        },
+        "notes": "PCT >0.5 in FN has LR+ 3.1-4.0 for bacteremia/documented infection. Meta-analysis of FN-specific PCT studies."
+      },
+      {
+        "id": "fn_pct_na",
+        "label": "Procalcitonin not done/unknown",
+        "category": "lab",
+        "lrPos": 1.0,
+        "lrNeg": 1.0,
+        "source": {
+          "short": "Neutral placeholder"
+        },
+        "notes": "Neutral."
+      },
+      {
+        "id": "fn_cxr_infiltrate",
+        "label": "Chest X-ray: new infiltrate",
+        "category": "imaging",
+        "lrPos": 5.0,
+        "lrNeg": 0.8,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "New CXR infiltrate in FN strongly suggests pneumonia. Note: CXR may be falsely negative in profound neutropenia (no WBC to form infiltrate). CT more sensitive."
+      },
+      {
+        "id": "fn_cxr_na",
+        "label": "Chest imaging not done/unknown",
+        "category": "imaging",
+        "lrPos": 1.0,
+        "lrNeg": 1.0,
+        "source": {
+          "short": "Neutral placeholder"
+        },
+        "notes": "Neutral."
+      },
+      {
+        "id": "fn_clinical_focus_identified",
+        "label": "Identifiable clinical focus of infection (skin, lung, abdomen, CVC site)",
+        "category": "exam",
+        "lrPos": 4.0,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Freifeld et al. CID (IDSA FN guideline)",
+          "year": 2011
+        },
+        "notes": "~20-30% of FN has identifiable focus. Finding one strongly confirms infection and guides targeted therapy."
+      },
+      {
+        "id": "fn_galactomannan_positive",
+        "label": "Galactomannan >0.5 ODI (serum)",
+        "category": "lab",
+        "lrPos": 5.7,
+        "lrNeg": 0.33,
+        "source": {
+          "short": "Zou et al. PLoS ONE",
+          "year": 2012
+        },
+        "notes": "Serum galactomannan for invasive aspergillosis. Key in prolonged neutropenia (>7d). Prophylaxis with mold-active azoles reduces sensitivity."
+      },
+      {
+        "id": "fn_galactomannan_na",
+        "label": "Galactomannan not done/unknown",
+        "category": "lab",
+        "lrPos": 1.0,
+        "lrNeg": 1.0,
+        "source": {
+          "short": "Neutral placeholder"
+        },
+        "notes": "Neutral."
+      },
+      {
+        "id": "fn_bdg_elevated",
+        "label": "Beta-D-glucan >80 pg/mL",
+        "category": "lab",
+        "lrPos": 3.6,
+        "lrNeg": 0.27,
+        "source": {
+          "short": "Karageorgopoulos et al. CID",
+          "year": 2011
+        },
+        "notes": "Invasive fungal marker. Does NOT detect Mucor or Cryptococcus. Pip-tazo can cause false positives."
+      },
+      {
+        "id": "fn_bdg_na",
+        "label": "Beta-D-glucan not done/unknown",
+        "category": "lab",
+        "lrPos": 1.0,
+        "lrNeg": 1.0,
+        "source": {
+          "short": "Neutral placeholder"
+        },
+        "notes": "Neutral."
+      },
+      {
+        "id": "fn_ct_chest_halo_sign",
+        "label": "CT chest: halo sign or nodule >1cm",
+        "category": "imaging",
+        "lrPos": 8.0,
+        "lrNeg": 0.6,
+        "source": {
+          "short": "Caillot et al. JCO",
+          "year": 2001
+        },
+        "notes": "Halo sign (ground-glass around nodule) in prolonged neutropenia is highly suggestive of invasive pulmonary aspergillosis. Early CT is more sensitive than CXR."
       }
     ]
   }

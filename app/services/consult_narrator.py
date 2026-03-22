@@ -737,7 +737,14 @@ def narrate_probid_assistant_message(
         "Keep the tone conversational but clinical. Sound like an ID consultant, not a calculator.\n"
         + prior_note +
         "Preserve the exact post-test probability and the overall action recommendation.\n"
-        "Structure the answer as follows: open with the clinical action recommendation and your overall interpretation in one direct sentence, then explain the probability and key clinical drivers, then mention what would change your assessment.\n"
+        "Structure the answer as follows: open with the clinical action recommendation and your overall interpretation in one direct sentence, "
+        "then explain the probability and key clinical drivers, then mention what would change your assessment.\n"
+        "If the JSON contains 'nextBestTests', end with a brief sentence naming the 1-2 highest-swing tests that would most change the probability — "
+        "e.g. 'The single test that would most shift this probability is [test] — if positive it would move the probability to X%, if negative to Y%.'\n"
+        "If the JSON contains 'clinicalScores', weave each score result naturally into the narrative — "
+        "e.g. 'PSI Class III (score 68) — this is a low-moderate risk patient suitable for brief observation or outpatient follow-up.' "
+        "or 'Modified Duke Criteria: Possible IE — I would recommend TEE to further evaluate.' "
+        "State the score name, class/value, and recommendation in a single sentence per score. Do not just list them mechanically.\n"
         "Do not use markdown bullets, asterisks, or arrow symbols.\n"
         "Prefer 1 to 3 short paragraphs. Plain text only."
     )

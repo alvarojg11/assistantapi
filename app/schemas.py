@@ -167,6 +167,18 @@ class AppliedFinding(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class NextBestTest(BaseModel):
+    id: str
+    label: str
+    category: Optional[str] = None
+    probability_if_positive: float = Field(alias="probabilityIfPositive")
+    probability_if_negative: float = Field(alias="probabilityIfNegative")
+    probability_swing: float = Field(alias="probabilitySwing")
+    source_short: Optional[str] = Field(default=None, alias="sourceShort")
+
+    model_config = {"populate_by_name": True}
+
+
 class DecisionThresholds(BaseModel):
     observe_probability: float = Field(alias="observeProbability")
     treat_probability: float = Field(alias="treatProbability")
@@ -178,6 +190,20 @@ class PretestSummary(BaseModel):
     base_probability: float = Field(alias="baseProbability")
     adjusted_probability: float = Field(alias="adjustedProbability")
     preset_id: Optional[str] = Field(default=None, alias="presetId")
+
+    model_config = {"populate_by_name": True}
+
+
+class ClinicalScoreResult(BaseModel):
+    """Result of a validated clinical prediction rule calculation."""
+    score_name: str = Field(alias="scoreName")
+    score_value: Optional[int] = Field(default=None, alias="scoreValue")
+    risk_class: Optional[str] = Field(default=None, alias="riskClass")
+    interpretation: str
+    recommendation: str
+    components_met: List[str] = Field(default_factory=list, alias="componentsMet")
+    components_not_met: List[str] = Field(default_factory=list, alias="componentsNotMet")
+    source: str
 
     model_config = {"populate_by_name": True}
 
@@ -200,6 +226,8 @@ class AnalyzeResponse(BaseModel):
     reasons: List[str]
     risk_flags: List[str] = Field(alias="riskFlags")
     explanation_for_user: Optional[str] = Field(default=None, alias="explanationForUser")
+    next_best_tests: List[NextBestTest] = Field(default_factory=list, alias="nextBestTests")
+    clinical_scores: List[ClinicalScoreResult] = Field(default_factory=list, alias="clinicalScores")
 
     model_config = {"populate_by_name": True}
 
@@ -220,6 +248,60 @@ class RegisterModulesRequest(BaseModel):
 class RegisterModulesResponse(BaseModel):
     registered: int
     ids: List[str]
+
+
+class CalibrationOutcome(BaseModel):
+    """A single outcome record for calibration tracking."""
+    module_id: str = Field(alias="moduleId")
+    module_name: str = Field(alias="moduleName")
+    predicted_probability: float = Field(alias="predictedProbability")
+    actual_outcome: bool = Field(alias="actualOutcome")  # True = syndrome confirmed, False = ruled out
+    clinical_scores: List[ClinicalScoreResult] = Field(default_factory=list, alias="clinicalScores")
+    preset_id: Optional[str] = Field(default=None, alias="presetId")
+    findings_snapshot: Optional[Dict[str, str]] = Field(default=None, alias="findingsSnapshot")
+    notes: Optional[str] = None
+    timestamp: Optional[str] = None  # ISO format, set by server
+
+    model_config = {"populate_by_name": True}
+
+
+class CalibrationBucket(BaseModel):
+    """A single bin in a calibration curve."""
+    bin_lower: float = Field(alias="binLower")
+    bin_upper: float = Field(alias="binUpper")
+    bin_midpoint: float = Field(alias="binMidpoint")
+    predicted_mean: float = Field(alias="predictedMean")
+    observed_rate: float = Field(alias="observedRate")
+    count: int
+    outcome_true: int = Field(alias="outcomeTrue")
+    outcome_false: int = Field(alias="outcomeFalse")
+
+    model_config = {"populate_by_name": True}
+
+
+class ModuleCalibrationStats(BaseModel):
+    """Calibration statistics for a single module."""
+    module_id: str = Field(alias="moduleId")
+    module_name: str = Field(alias="moduleName")
+    total_outcomes: int = Field(alias="totalOutcomes")
+    overall_accuracy: float = Field(alias="overallAccuracy")
+    brier_score: float = Field(alias="brierScore")
+    calibration_curve: List[CalibrationBucket] = Field(alias="calibrationCurve")
+    mean_predicted: float = Field(alias="meanPredicted")
+    mean_observed: float = Field(alias="meanObserved")
+    overconfidence_bias: float = Field(alias="overconfidenceBias")
+
+    model_config = {"populate_by_name": True}
+
+
+class CalibrationReport(BaseModel):
+    """Full calibration report across all modules."""
+    total_outcomes: int = Field(alias="totalOutcomes")
+    modules: List[ModuleCalibrationStats]
+    overall_brier_score: float = Field(alias="overallBrierScore")
+    generated_at: str = Field(alias="generatedAt")
+
+    model_config = {"populate_by_name": True}
 
 
 class TextAnalyzeRequest(BaseModel):
