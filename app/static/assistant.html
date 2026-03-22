@@ -401,33 +401,38 @@
       }
 
       .msg {
-        max-width: min(92%, 860px);
-        border-radius: 18px;
-        padding: 13px 14px;
-        border: 1px solid transparent;
+        max-width: min(78%, 680px);
+        padding: 8px 12px 6px;
+        border: none;
         animation: fadeUp 180ms ease-out both;
+        position: relative;
       }
       .msg.assistant {
         justify-self: start;
-        background: rgba(255, 255, 255, 0.88);
-        border-color: rgba(200, 190, 169, 0.9);
+        background: #ffffff;
+        border-radius: 2px 18px 18px 18px;
+        box-shadow: 0 1px 3px rgba(28, 24, 19, 0.08);
       }
       .msg.user {
         justify-self: end;
-        background: linear-gradient(180deg, rgba(14, 107, 91, 0.96), rgba(10, 92, 77, 0.96));
-        color: #f6fff9;
-        border-color: rgba(14, 107, 91, 0.55);
+        background: linear-gradient(180deg, #0e6b5b, #0a5c4d);
+        color: #f0fff6;
+        border-radius: 18px 2px 18px 18px;
+        box-shadow: 0 1px 3px rgba(14, 107, 91, 0.18);
       }
       .msg .role {
-        font-size: 11px;
+        font-size: 10px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        opacity: 0.7;
-        margin-bottom: 4px;
+        opacity: 0.55;
+        margin-bottom: 3px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
       .msg .text {
         white-space: pre-wrap;
-        line-height: 1.5;
+        line-height: 1.52;
         font-size: 14px;
       }
 
@@ -483,41 +488,72 @@
         white-space: nowrap;
       }
 
+      /* ── WhatsApp-style composer ── */
       .composer {
-        margin-top: 14px;
-        display: grid;
-        gap: 10px;
-        position: sticky;
-        bottom: 0;
-        padding-top: 8px;
-        background: linear-gradient(180deg, rgba(243, 239, 229, 0), rgba(243, 239, 229, 0.88) 28%, rgba(243, 239, 229, 0.98));
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 24px 12px;
+        border-top: 1px solid rgba(200, 190, 169, 0.3);
+        background: rgba(255, 252, 245, 0.6);
+        flex-shrink: 0;
+      }
+      .composer-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
       }
       .composer textarea {
-        min-height: 92px;
-        max-height: 220px;
+        flex: 1;
+        min-height: 40px;
+        max-height: 140px;
         resize: none;
+        border-radius: 20px;
+        padding: 9px 16px;
+        font-size: 14px;
+        line-height: 1.4;
+        border: 1px solid rgba(200, 190, 169, 0.8);
+        background: rgba(255, 255, 255, 0.92);
       }
-      .composer-actions {
-        display: grid;
-        gap: 10px;
+      .composer-icon-btn {
+        width: 40px; height: 40px; border-radius: 50%;
+        border: 1px solid rgba(200, 190, 169, 0.7);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--muted); cursor: pointer; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 130ms, color 130ms;
       }
-      .composer-meta {
+      .composer-icon-btn:hover { background: #fff; color: var(--ink); }
+      .composer-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+      .composer-send-btn {
+        width: 40px; height: 40px; border-radius: 50%;
+        border: none; flex-shrink: 0;
+        background: linear-gradient(180deg, #0f7664, #0b6555);
+        color: #effff8; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 2px 8px rgba(14, 107, 91, 0.25);
+        transition: transform 120ms, opacity 120ms;
+      }
+      .composer-send-btn:hover { transform: scale(1.05); }
+      .composer-send-btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+      .composer-hint-row {
         display: flex;
         justify-content: space-between;
-        gap: 12px;
         align-items: center;
-        flex-wrap: wrap;
+        padding: 0 4px;
       }
       .composer-hint {
         color: var(--muted);
-        font-size: 12px;
-      }
-      .composer-shortcut {
-        color: var(--muted);
         font-size: 11px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
       }
+      .composer-text-btn {
+        background: none; border: none; cursor: pointer;
+        color: var(--brand); font-size: 11px; font-weight: 600;
+        padding: 2px 6px; border-radius: 4px;
+        transition: background 130ms;
+      }
+      .composer-text-btn:hover { background: rgba(14, 107, 91, 0.08); }
+      .composer-text-btn:disabled { opacity: 0.4; cursor: not-allowed; }
       .btn-row {
         display: flex;
         flex-wrap: wrap;
@@ -728,10 +764,10 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        padding: 7px 11px;
-        background: rgba(255, 255, 255, 0.88);
-        border: 1px solid rgba(200, 190, 169, 0.9);
-        border-radius: 14px;
+        padding: 8px 14px;
+        background: #ffffff;
+        border-radius: 2px 14px 14px 14px;
+        box-shadow: 0 1px 3px rgba(28, 24, 19, 0.08);
         animation: fadeUp 180ms ease-out both;
       }
       .typing-indicator .tdot {
@@ -751,12 +787,12 @@
       .copy-btn {
         display: inline-flex;
         align-items: center;
-        padding: 3px 8px;
+        padding: 2px 6px;
         border-radius: 999px;
-        border: 1px solid rgba(200, 190, 169, 0.7);
-        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(200, 190, 169, 0.5);
+        background: rgba(245, 241, 232, 0.8);
         color: var(--muted);
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 500;
         cursor: pointer;
         opacity: 0;
@@ -766,7 +802,7 @@
       .copy-btn:hover { background: rgba(255, 255, 255, 0.92); color: var(--ink); }
 
       .patient-bar {
-        margin-bottom: 10px;
+        margin: 0 24px 0;
         padding: 8px 12px;
         border-radius: 12px;
         background: linear-gradient(90deg, rgba(14, 107, 91, 0.06), rgba(14, 107, 91, 0.02));
@@ -792,25 +828,21 @@
       .patient-bar .pb-v { font-weight: 600; }
 
       @media (max-width: 1024px) {
-        .topbar {
-          flex-direction: column;
-          align-items: stretch;
-        }
-        .desktop-nav {
-          justify-content: flex-start;
-        }
+        .workspace { grid-template-columns: 0px 1fr; }
+        .workspace .side-card { overflow: hidden; visibility: hidden; pointer-events: none; }
+        .panel-reopen-tab { display: flex; }
+        .topbar { flex-direction: column; align-items: stretch; }
+        .desktop-nav { justify-content: flex-start; }
         .mast { grid-template-columns: 1fr; }
         .launchpad { grid-template-columns: 1fr; }
-        .workspace { grid-template-columns: 1fr; }
         .chat-card, .side-card { min-height: auto; }
-        .progress-head { flex-direction: column; }
-        .progress-meta { max-width: none; text-align: left; }
-        .side-card { position: static; }
       }
       @media (max-width: 640px) {
-        .btn-row { width: 100%; }
-        .btn { flex: 1 1 calc(50% - 8px); }
-        .composer-meta { align-items: flex-start; }
+        .messages { padding: 12px 14px 8px; }
+        #optionTray { padding: 0 14px; }
+        .composer { padding: 8px 14px 10px; }
+        .chat-header { padding: 10px 14px; }
+        .msg { max-width: 90%; }
       }
       @media (prefers-reduced-motion: reduce) {
         * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
@@ -865,10 +897,10 @@
       }
       .btn-ghost:hover { background: #fff; border-color: rgba(14, 107, 91, 0.28); }
 
-      /* Override workspace and chat-card to fill remaining viewport */
+      /* ── WhatsApp Desktop layout ── */
       .workspace {
         display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.55fr);
+        grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
         grid-template-rows: minmax(0, 1fr);
         gap: 0;
         height: calc(100vh - 52px);
@@ -876,15 +908,43 @@
         overflow: hidden;
         align-items: stretch;
       }
+      /* Sidebar (details/analysis) on the LEFT */
+      .side-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow-y: auto;
+        padding: 0;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        border-right: 1px solid rgba(200, 190, 169, 0.45);
+        background: rgba(255, 252, 245, 0.95);
+        position: static;
+        min-height: unset;
+        order: -1;
+      }
+      .side-card .side-head {
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid rgba(200, 190, 169, 0.35);
+      }
+      .side-card .panel-tabs {
+        padding: 0 18px 12px;
+      }
+      .side-card .side-panels {
+        padding: 0 18px 18px;
+        flex: 1;
+        overflow-y: auto;
+      }
+      /* Chat area on the RIGHT */
       .chat-card {
         display: flex;
         flex-direction: column;
         height: 100%;
         min-height: 0;
-        padding: 14px 18px;
+        padding: 0;
         border-radius: 0;
         border: none;
-        border-right: 1px solid rgba(200, 190, 169, 0.45);
         box-shadow: none;
         background: transparent;
         backdrop-filter: none;
@@ -893,39 +953,57 @@
         flex: 1 1 0;
         min-height: 0;
         overflow-y: auto;
+        padding: 16px 24px 8px;
       }
       .composer { flex-shrink: 0; }
-      #optionTray { flex-shrink: 0; }
-      .side-card {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow-y: auto;
-        padding: 14px;
-        border-radius: 0;
-        box-shadow: none;
-        border: none;
-        background: rgba(255, 252, 245, 0.9);
-        position: static;
-        min-height: unset;
-      }
+      #optionTray { flex-shrink: 0; padding: 0 24px; }
 
-      /* ── Status line (replaces progress-strip) ── */
-      .status-line {
+      /* ── Chat header (WhatsApp-style) ── */
+      .chat-header {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding-bottom: 10px;
-        margin-bottom: 8px;
+        justify-content: space-between;
+        padding: 12px 24px;
         border-bottom: 1px solid rgba(200, 190, 169, 0.38);
-        font-size: 13px;
-        color: var(--muted);
+        background: rgba(255, 252, 245, 0.6);
         flex-shrink: 0;
       }
-      .sl-title { font-weight: 600; color: var(--ink); font-size: 13px; }
+      .chat-header-info { display: flex; flex-direction: column; gap: 2px; }
+      .chat-header-title {
+        font-family: "Fraunces", Georgia, serif;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--ink);
+      }
+      .chat-header-sub {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .chat-badge {
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: rgba(14, 107, 91, 0.08);
+        color: #0c5d4f;
+        border: 1px solid rgba(14, 107, 91, 0.15);
+      }
+      .chat-badge.warn { color: #8b4b13; border-color: rgba(209,122,47,.2); background: rgba(209,122,47,.06); }
+      .chat-badge.good { color: #0c5d4f; border-color: rgba(14,107,91,.2); background: rgba(14,107,91,.06); }
+      .chat-badge.bad { color: #8f2f22; border-color: rgba(170,62,42,.2); background: rgba(170,62,42,.06); }
+      .chat-header-actions { display: flex; gap: 6px; align-items: center; }
+      .chat-action-btn {
+        width: 36px; height: 36px; border-radius: 50%;
+        border: 1px solid rgba(200, 190, 169, 0.7);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--muted); cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 130ms, color 130ms;
+      }
+      .chat-action-btn:hover { background: #fff; color: var(--ink); }
       .sl-sep { color: rgba(102, 94, 82, 0.35); }
-      .sl-step { font-size: 12px; }
-      .sl-badges { margin-left: auto; display: flex; gap: 6px; }
 
       /* ── Quickstart overlay ── */
       .qs-overlay {
@@ -1004,7 +1082,7 @@
       .chat-card { position: relative; }
       .scroll-btn {
         position: absolute;
-        bottom: 140px; right: 20px; z-index: 10;
+        bottom: 120px; right: 28px; z-index: 10;
         width: 34px; height: 34px; border-radius: 50%;
         border: 1px solid rgba(200, 190, 169, 0.7);
         background: var(--panel-strong); color: var(--muted);
@@ -1016,16 +1094,16 @@
       .scroll-btn:hover { opacity: 1 !important; transform: translateY(-1px); }
       .scroll-btn.hidden { display: none; }
 
-      /* ── Collapsible side panel ── */
+      /* ── Collapsible side panel (LEFT sidebar) ── */
       .side-toggle {
         background: none; border: none; cursor: pointer;
-        font-size: 13px; color: var(--muted); padding: 2px 6px;
+        font-size: 15px; color: var(--muted); padding: 2px 6px;
         border-radius: 5px; line-height: 1; flex-shrink: 0;
         transition: background 130ms, color 130ms;
       }
       .side-toggle:hover { background: rgba(102, 94, 82, 0.1); color: var(--ink); }
       .workspace.panel-collapsed {
-        grid-template-columns: minmax(0, 1fr) 0px;
+        grid-template-columns: 0px minmax(0, 1fr);
       }
       .workspace.panel-collapsed .side-card {
         overflow: hidden; visibility: hidden; pointer-events: none;
@@ -1034,23 +1112,20 @@
       /* Floating reopen tab — visible only when panel is collapsed */
       .panel-reopen-tab {
         display: none;
-        position: fixed; right: 0; top: 50%;
+        position: fixed; left: 0; top: 50%;
         transform: translateY(-50%);
         writing-mode: vertical-rl; text-orientation: mixed;
         padding: 12px 6px; gap: 5px;
         background: var(--panel-strong);
         border: 1px solid rgba(200, 190, 169, 0.7);
-        border-right: none;
-        border-radius: 8px 0 0 8px;
+        border-left: none;
+        border-radius: 0 8px 8px 0;
         font-size: 12px; font-weight: 500; color: var(--muted);
         cursor: pointer; z-index: 15;
-        box-shadow: -2px 2px 8px rgba(28, 24, 19, 0.08);
+        box-shadow: 2px 2px 8px rgba(28, 24, 19, 0.08);
         transition: color 130ms, background 130ms;
       }
       .panel-reopen-tab:hover { color: var(--ink); background: #fff; }
-      .workspace.panel-collapsed ~ .panel-reopen-tab,
-      .workspace.panel-collapsed + * .panel-reopen-tab { display: flex; }
-      /* simpler: toggle visibility via JS class on the tab itself */
       .panel-reopen-tab.visible { display: flex; }
 
     </style>
@@ -1125,57 +1200,11 @@
 
     <div class="shell" style="padding:0; max-width:none;">
       <section class="workspace" aria-label="Assistant workspace">
-        <main class="chat-card">
-          <!-- Status line -->
-          <div class="status-line">
-            <span class="sl-title" id="statusTitle">ID Assistant</span>
-            <span class="sl-sep" id="statusSep" style="display:none">·</span>
-            <span class="sl-step" id="statusStep"></span>
-            <div class="sl-badges">
-              <span id="narrationBadge" class="badge">narrative: deterministic</span>
-              <span id="parserBadge" class="badge">parser: —</span>
-            </div>
-            <button type="button" class="side-toggle" id="sidePanelToggle" title="Collapse details panel">›</button>
-          </div>
-
-          <!-- Patient context bar (shows when demographics are known) -->
-          <div class="patient-bar hidden" id="patientBar" aria-label="Active patient context"></div>
-
-          <!-- Help banner (updated by JS, hidden when empty) -->
-          <div id="helpBanner" class="hidden"></div>
-
-          <div class="messages" id="messages" aria-live="polite"></div>
-          <button type="button" class="scroll-btn hidden" id="scrollBtn" aria-label="Scroll to bottom">↓</button>
-
-          <div id="optionTray" class="options" aria-label="Suggested options"></div>
-
-          <form class="composer" id="composerForm">
-            <label for="userInput" class="hidden">Your message</label>
-            <textarea
-              id="userInput"
-              placeholder="Ask an ID question or describe the case..."
-            ></textarea>
-            <div class="composer-actions">
-              <div class="composer-meta">
-                <div class="composer-hint" id="composerHint">Type naturally or use the options above.</div>
-                <div class="composer-shortcut">Enter sends · Shift+Enter new line</div>
-              </div>
-              <div class="btn-row">
-                <button type="button" class="btn" id="restartBtn">New consult</button>
-                <button type="button" class="btn accent" id="exampleBtn">Example</button>
-                <button type="button" class="btn" id="imageBtn">Upload AST image</button>
-                <input type="file" id="imageInput" class="hidden" accept="image/*" />
-                <button type="button" class="btn" id="antibiogramBtn">Upload antibiogram</button>
-                <input type="file" id="antibiogramInput" class="hidden" accept="image/*,application/pdf,.pdf" />
-                <button type="submit" class="btn primary" id="sendBtn">Send</button>
-              </div>
-            </div>
-          </form>
-        </main>
-
+        <!-- LEFT: Sidebar with details/analysis -->
         <aside class="side-card">
           <div class="side-head">
             <div class="side-title">Details</div>
+            <button type="button" class="side-toggle" id="sidePanelToggle" title="Hide details panel">‹</button>
           </div>
           <div class="panel-tabs" id="panelTabs" aria-label="Detail panels">
             <button type="button" class="panel-tab active" data-panel="analysis">Analysis</button>
@@ -1223,10 +1252,69 @@
           </section>
           </div>
         </aside>
+
+        <!-- RIGHT: Main chat area -->
+        <main class="chat-card">
+          <!-- Chat header bar -->
+          <div class="chat-header">
+            <div class="chat-header-info">
+              <div class="chat-header-title" id="statusTitle">ID Assistant</div>
+              <div class="chat-header-sub">
+                <span id="statusStep">Ready</span>
+                <span class="sl-sep" id="statusSep" style="display:none"> · </span>
+                <span id="narrationBadge" class="chat-badge">deterministic</span>
+                <span id="parserBadge" class="chat-badge">parser: —</span>
+              </div>
+            </div>
+            <div class="chat-header-actions">
+              <button type="button" class="chat-action-btn" id="imageBtn" title="Upload AST image">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+              </button>
+              <input type="file" id="imageInput" class="hidden" accept="image/*" />
+              <button type="button" class="chat-action-btn" id="antibiogramBtn" title="Upload antibiogram">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </button>
+              <input type="file" id="antibiogramInput" class="hidden" accept="image/*,application/pdf,.pdf" />
+            </div>
+          </div>
+
+          <!-- Patient context bar (shows when demographics are known) -->
+          <div class="patient-bar hidden" id="patientBar" aria-label="Active patient context"></div>
+
+          <!-- Help banner (updated by JS, hidden when empty) -->
+          <div id="helpBanner" class="hidden"></div>
+
+          <div class="messages" id="messages" aria-live="polite"></div>
+          <button type="button" class="scroll-btn hidden" id="scrollBtn" aria-label="Scroll to bottom">↓</button>
+
+          <div id="optionTray" class="options" aria-label="Suggested options"></div>
+
+          <!-- WhatsApp-style composer -->
+          <form class="composer" id="composerForm">
+            <label for="userInput" class="hidden">Your message</label>
+            <div class="composer-row">
+              <button type="button" class="composer-icon-btn" id="exampleBtn" title="Load example">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+              </button>
+              <textarea
+                id="userInput"
+                placeholder="Ask an ID question or describe the case..."
+                rows="1"
+              ></textarea>
+              <button type="submit" class="composer-send-btn" id="sendBtn" title="Send message">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            </div>
+            <div class="composer-hint-row">
+              <span class="composer-hint" id="composerHint">Type naturally or use the options above.</span>
+              <button type="button" class="composer-text-btn" id="restartBtn">New consult</button>
+            </div>
+          </form>
+        </main>
       </section>
     </div><!-- /.shell -->
     <!-- Floating reopen tab for collapsed side panel -->
-    <button type="button" class="panel-reopen-tab" id="panelReopenTab" aria-label="Show details panel">Analysis ›</button>
+    <button type="button" class="panel-reopen-tab" id="panelReopenTab" aria-label="Show details panel">‹ Details</button>
 
     <script>
       const state = {
@@ -1467,7 +1555,7 @@
 
       function resizeComposer() {
         els.userInput.style.height = "auto";
-        const nextHeight = Math.min(Math.max(els.userInput.scrollHeight, 92), 220);
+        const nextHeight = Math.min(Math.max(els.userInput.scrollHeight, 40), 140);
         els.userInput.style.height = `${nextHeight}px`;
       }
 
@@ -1507,11 +1595,6 @@
 
       function syncComposerContext(assistantState = {}, suggestedPlaceholder = null) {
         els.userInput.placeholder = suggestedPlaceholder || placeholderForState(assistantState);
-        const label = sendButtonLabelForState(assistantState);
-        if (!state.busy) {
-          els.sendBtn.textContent = label;
-        }
-        state.sendButtonLabel = label;
         resizeComposer();
       }
 
@@ -1526,7 +1609,6 @@
         state.hiddenCaseOptions.clear();
         state.showUsedCaseOptions = false;
         state.caseInsertMode = "present";
-        state.sendButtonLabel = "Start";
         els.userInput.value = "";
         resizeComposer();
         els.rawResponse.textContent = "No response yet.";
@@ -1549,8 +1631,7 @@
         els.imageBtn.disabled = next;
         els.antibiogramBtn.disabled = next;
         els.userInput.disabled = next;
-        if (next) els.sendBtn.textContent = "Sending...";
-        else els.sendBtn.textContent = state.sendButtonLabel || "Send";
+        els.sendBtn.style.opacity = next ? "0.45" : "";
       }
 
       function renderMarkdown(text) {
@@ -1961,8 +2042,8 @@
 
       function renderAnalysis(resp) {
         const narrationRefined = !!resp?.assistantNarrationRefined;
-        els.narrationBadge.textContent = narrationRefined ? "narrative: gpt-4.1-mini" : "narrative: deterministic";
-        els.narrationBadge.className = `badge ${narrationRefined ? "good" : "warn"}`;
+        els.narrationBadge.textContent = narrationRefined ? "gpt-4.1-mini" : "deterministic";
+        els.narrationBadge.className = `chat-badge ${narrationRefined ? "good" : "warn"}`;
 
         const immunoidResult = resp?.immunoidAnalysis;
         if (immunoidResult) {
@@ -1974,7 +2055,7 @@
           const warnings = immunoidResult.warnings || [];
           const riskFlags = immunoidResult.riskFlags || [];
           els.parserBadge.textContent = "rules: deterministic";
-          els.parserBadge.className = `badge ${(warnings.length || followUps.length) ? "warn" : "good"}`;
+          els.parserBadge.className = `chat-badge ${(warnings.length || followUps.length) ? "warn" : "good"}`;
 
           const recommendationItems = recommendations
             .map((item) => `<li><strong>${escapeHtml(item.title)}</strong><br />${escapeHtml(item.summary)}</li>`)
@@ -2068,7 +2149,7 @@
             ["CrCl", formatPatientMetric(context.crclMlMin || context.crcl_ml_min, "mL/min")],
           ].map(([label, value]) => `<div class="k">${escapeHtml(label)}</div><div class="v">${escapeHtml(String(value))}</div>`).join("");
           els.parserBadge.textContent = "dose: deterministic";
-          els.parserBadge.className = `badge ${(warnings.length || assumptions.length) ? "warn" : "good"}`;
+          els.parserBadge.className = `chat-badge ${(warnings.length || assumptions.length) ? "warn" : "good"}`;
 
           els.analysisSummary.innerHTML = `
             <h3>Analysis</h3>
@@ -2111,7 +2192,7 @@
           const parserLabel = mechidResult.parser || "—";
           const fallback = !!mechidResult.parserFallbackUsed;
           els.parserBadge.textContent = fallback ? `${parserLabel} (fallback)` : `parser: ${parserLabel}`;
-          els.parserBadge.className = `badge ${(warnings.length || fallback) ? "warn" : "good"}`;
+          els.parserBadge.className = `chat-badge ${(warnings.length || fallback) ? "warn" : "good"}`;
 
           if (analysis) {
             const mechanisms = (analysis.mechanisms || []).map((item) => `<li>${escapeHtml(cleanMechidDisplayText(item))}</li>`).join("");
@@ -2203,7 +2284,7 @@
         const parserLabel = textResult?.parser || "—";
         const fallback = !!textResult?.parserFallbackUsed;
         els.parserBadge.textContent = fallback ? `${parserLabel} (fallback)` : `parser: ${parserLabel}`;
-        els.parserBadge.className = `badge ${fallback ? "warn" : "good"}`;
+        els.parserBadge.className = `chat-badge ${fallback ? "warn" : "good"}`;
 
         if (analysis) {
           const postPct = Math.round((analysis.posttestProbability || 0) * 100);
@@ -2561,7 +2642,7 @@
           appendMessage("assistant", `I hit an error: ${err.message}`);
           els.composerHint.textContent = "Check your server logs and try again.";
           els.parserBadge.textContent = "parser: error";
-          els.parserBadge.className = "badge bad";
+          els.parserBadge.className = "chat-badge bad";
         } finally {
           setBusy(false);
           els.userInput.focus();
@@ -2588,7 +2669,7 @@
         } catch {
           els.composerHint.textContent = "Backend unavailable. Start the API server and refresh.";
           els.parserBadge.textContent = "parser: offline";
-          els.parserBadge.className = "badge bad";
+          els.parserBadge.className = "chat-badge bad";
           return false;
         }
       }
@@ -2672,7 +2753,7 @@
         panelCollapsed = collapsed;
         els.workspace.classList.toggle("panel-collapsed", collapsed);
         els.sidePanelToggle.textContent = collapsed ? "›" : "‹";
-        els.sidePanelToggle.title = collapsed ? "Show analysis panel" : "Hide analysis panel";
+        els.sidePanelToggle.title = collapsed ? "Show details panel" : "Hide details panel";
         panelReopenTab.classList.toggle("visible", collapsed);
       }
       els.sidePanelToggle.addEventListener("click", () => setPanelCollapsed(!panelCollapsed));
